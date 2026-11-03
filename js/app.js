@@ -397,18 +397,25 @@ function promoStripHTML() {
     '<span><b>' + p.title + '</b> — see what is on offer</span><span class="ps-arrow">›</span></button>';
 }
 function trustStripHTML() {
-  const items = [
-    ['Fast payouts', 'MoMo withdrawals after review'],
-    ['Manual MoMo deposits', 'Credited on confirmation'],
-    ['Booking codes', 'Share slips with one code'],
-    ['24/7 support', 'FAQs and in-app messages'],
-  ];
-  // One sliding line (duplicated half for a seamless loop), not the
-  // old 2x2 card grid — frees the space above the matches.
-  const half = items.map(i =>
-    '<span class="titem"><b>' + i[0] + '</b> ' + i[1] + '</span>').join('<span class="tdot">•</span>') +
-    '<span class="tdot">•</span>';
-  return '<div class="trustslide"><div class="trust-track">' + half + half + '</div></div>';
+  // Winners ticker (Prince's ask, 2026-11-03): the sliding line under
+  // the promo banner shows recent winners with their phone numbers
+  // partly masked — a fresh random set is generated on every render.
+  const NAMES = ['Kwame', 'Ama', 'Yaw', 'Akosua', 'Kojo', 'Efua', 'Kwabena', 'Abena', 'Kofi', 'Adjoa',
+    'Kwaku', 'Esi', 'Fiifi', 'Araba', 'Nana', 'Maame', 'Paa', 'Ekua', 'Selasie', 'Edem',
+    'Afi', 'Mawuli', 'Senyo', 'Dzifa', 'Elikem', 'Sitsofe', 'Abdul', 'Fuseina', 'Ibrahim', 'Aisha'];
+  const PREFIX = ['024', '025', '027', '053', '054', '055', '057', '059', '020', '050'];
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const items = [];
+  for (let i = 0; i < 10; i++) {
+    const num = pick(PREFIX) + '•••' + String(Math.floor(100 + Math.random() * 900));
+    const amt = Math.round((150 + Math.random() * 6350) / 5) * 5;
+    items.push('<span class="titem">🏆 <b>' + pick(NAMES) + ' · ' + num + '</b> won <span class="win-amt">GHS ' +
+      amt.toLocaleString('en-GB') + '</span></span>');
+  }
+  // One sliding line (duplicated half for a seamless loop); duration
+  // scales with the number of winners so the speed stays constant.
+  const half = items.join('<span class="tdot">•</span>') + '<span class="tdot">•</span>';
+  return '<div class="trustslide"><div class="trust-track" style="animation-duration:' + (items.length * 4.5) + 's">' + half + half + '</div></div>';
 }
 
 /* ---------- account pages ---------- */

@@ -742,6 +742,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .trustslide:hover .trust-track { animation-play-state: paused; }
 .trust-track .titem { font-size: 12.5px; color: var(--muted); }
 .trust-track .titem b { color: var(--ink); font-size: 13px; }
+.trust-track .win-amt { color: var(--win); font-weight: 800; font-variant-numeric: tabular-nums; }
 .trust-track .tdot { color: var(--accent); font-weight: 800; }
 .odd { transition: transform .08s ease, background .15s ease; }
 .odd:hover { transform: translateY(-1px); }
