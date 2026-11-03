@@ -107,10 +107,19 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   border-radius: var(--radius);
   overflow: hidden;
   position: relative;
-  min-height: 240px;
+  min-height: 320px;
   display: flex;
   align-items: flex-end;
   background: linear-gradient(120deg, #14161f 0%, #23263a 55%, #3a2f10 100%);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(78deg, rgba(5, 6, 10, 0.88) 22%, rgba(5, 6, 10, 0.45) 55%, rgba(5, 6, 10, 0.05) 82%),
+    linear-gradient(to top, rgba(5, 6, 10, 0.75), rgba(5, 6, 10, 0) 46%);
+  pointer-events: none;
 }
 .hero img.bg {
   position: absolute;
@@ -118,21 +127,69 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.72;
+  opacity: 0.9;
+  animation: heroZoom 9s ease-in-out infinite alternate;
 }
+@keyframes heroZoom { from { transform: scale(1); } to { transform: scale(1.09); } }
+@media (prefers-reduced-motion: reduce) { .hero img.bg { animation: none; } }
 .hero-in {
   position: relative;
-  padding: 26px;
+  z-index: 1;
+  padding: 30px 28px 34px;
   color: var(--header-ink);
-  max-width: 560px;
+  max-width: 600px;
 }
-.hero .kicker { color: var(--accent); font-weight: 700; font-size: 12px; letter-spacing: 1px; margin: 0 0 8px; }
-.hero h1 { margin: 0 0 6px; font-size: 34px; line-height: 1.15; }
-.hero p { margin: 0 0 14px; opacity: 0.92; }
-.hero-dots { position: absolute; right: 18px; bottom: 14px; display: flex; gap: 6px; }
-.hero-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: block; }
-.hero-dots i.on { background: var(--accent); }
-.hero-count { position: absolute; right: 18px; top: 12px; color: var(--header-ink); font-size: 12px; opacity: 0.85; }
+.hero .kicker {
+  display: inline-block;
+  color: var(--accent);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(245, 197, 24, 0.45);
+  border-radius: 999px;
+  padding: 4px 11px;
+  backdrop-filter: blur(4px);
+  font-weight: 700; font-size: 11.5px; letter-spacing: 1.4px; margin: 0 0 12px;
+}
+.hero h1 { margin: 0 0 8px; font-size: 40px; line-height: 1.1; letter-spacing: -0.5px; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55); }
+.hero p { margin: 0 0 16px; opacity: 0.94; font-size: 15.5px; }
+.hero .btn.gold { box-shadow: 0 8px 26px rgba(245, 197, 24, 0.4); }
+.hero-dots { position: absolute; z-index: 1; right: 18px; bottom: 16px; display: flex; gap: 6px; }
+.hero-dots i { width: 8px; height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.4); display: block; transition: width 0.35s ease, background 0.35s ease; }
+.hero-dots i.on { background: var(--accent); width: 26px; }
+.hero-count {
+  position: absolute; z-index: 1; right: 18px; top: 14px;
+  color: var(--header-ink); font-size: 11.5px; font-weight: 600;
+  background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 3px 10px; border-radius: 999px; backdrop-filter: blur(4px);
+}
+@media (max-width: 640px) {
+  .hero { min-height: 262px; }
+  .hero h1 { font-size: 29px; }
+  .hero-in { padding: 22px 18px 28px; }
+}
+
+/* mid-page visual banner band (Aviator / Promos) */
+.bannerband { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0 6px; }
+.bbanner {
+  position: relative; overflow: hidden; border-radius: var(--radius);
+  min-height: 168px; display: flex; align-items: flex-end; text-align: left;
+  border: 1px solid var(--line); cursor: pointer; padding: 0; background: #10131c;
+  font: inherit; color: var(--header-ink); width: 100%;
+}
+.bbanner img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.82; transition: transform 0.6s ease; }
+.bbanner:hover img { transform: scale(1.05); }
+.bbanner::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(80deg, rgba(5, 6, 10, 0.87) 25%, rgba(5, 6, 10, 0.35) 65%, rgba(5, 6, 10, 0) 90%);
+}
+.bbanner .bb-in { position: relative; z-index: 1; padding: 18px; }
+.bbanner .bb-k { color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: 1.3px; margin: 0 0 5px; }
+.bbanner h3 { margin: 0 0 4px; font-size: 21px; line-height: 1.15; }
+.bbanner .bb-sub { margin: 0 0 10px; font-size: 13px; opacity: 0.92; }
+.bbanner .bb-cta {
+  display: inline-block; background: var(--accent); color: #141414; font-weight: 700;
+  font-size: 13px; padding: 7px 14px; border-radius: 8px;
+}
+@media (max-width: 640px) { .bannerband { grid-template-columns: 1fr; } .bbanner { min-height: 148px; } }
 
 /* quick actions: icon tile row under the hero */
 .quickrow { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 4px; }

@@ -375,6 +375,19 @@ function quickHTML() {
       '<span class="qicon">' + art + '</span><span>' + label + '</span></button>';
   }).join('') + '</div>';
 }
+// Mid-page visual banners: big tappable hero-style cards under the
+// match list, reusing the hero photos (decoded URLs when available).
+function bannerBandHTML() {
+  const bg = p => heroUrls[p] || p;
+  return '<div class="bannerband">' +
+    '<button class="bbanner" data-nav="games"><img src="' + bg('assets/hero-plane.jpg') + '" alt=""><span class="bb-in">' +
+    '<p class="bb-k">AVIATOR — HOT</p><h3>Fly high, cash out in time</h3>' +
+    '<p class="bb-sub">The crash game everyone is playing.</p><span class="bb-cta">Play in Games</span></span></button>' +
+    '<button class="bbanner" data-nav="promos"><img src="' + bg('assets/hero-keeper.jpg') + '" alt=""><span class="bb-in">' +
+    '<p class="bb-k">PROMOTIONS</p><h3>Bonuses, cashback &amp; more</h3>' +
+    '<p class="bb-sub">See what is running on Oddaroa today.</p><span class="bb-cta">View Promos</span></span></button>' +
+    '</div>';
+}
 function promoStripHTML() {
   const p = PROMOS[0];
   return '<button class="promostrip" data-nav="promos"><span class="gtag">' + p.tag + '</span>' +
@@ -694,7 +707,7 @@ function viewHTML() {
     case 'virtual':
       return filtersHTML() + matchListHTML();
     default:
-      return heroHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML();
+      return heroHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
   }
 }
 function render() {
