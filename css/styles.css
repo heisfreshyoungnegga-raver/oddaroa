@@ -1,15 +1,19 @@
 /* Oddaroa design system v3 — betting-feed layout.
-   Deep indigo night theme, lime accent, dense match rows grouped by
-   league on flat panels (no per-match cards), slim app bar, quick-link
-   strip, and a fixed bottom nav on mobile. All colours and fonts flow
-   from the tokens below. */
+   Dense match rows grouped by league on flat panels (no per-match
+   cards), slim app bar, quick-link strip, and a fixed bottom nav on
+   mobile. Colours are the original Oddaroa palette (deep green-black
+   + gold) per Prince's instruction. All colours and fonts flow from
+   the tokens below. */
 :root{
-  --bg:#0d0b1c; --panel:#17142c; --panel2:#201c3f; --panel3:#2a2450;
-  --line:#2c2752; --line-soft:#241f45;
-  --text:#ffffff; --muted:#a8a3c7; --faint:#7c76a3;
-  --lime:#b7e332; --lime-bright:#cdf463; --lime-ink:#141a04;
-  --gold:#b7e332; --gold-ink:#141a04;
-  --green:#b7e332; --red:#ff5064; --live:#ff5064;
+  /* Prince's call (2026-11-03): v3 layout, ORIGINAL Oddaroa colours —
+     deep green-black surfaces with the gold accent from v2. The accent
+     token is still named --lime internally; its value is the gold. */
+  --bg:#0b0f0c; --panel:#131a15; --panel2:#182219; --panel3:#223028;
+  --line:#223028; --line-soft:#1b261f;
+  --text:#eef4ef; --muted:#9db3a4; --faint:#6f8577;
+  --lime:#f5c518; --lime-bright:#ffd83d; --lime-ink:#0b0f0c;
+  --gold:#f5c518; --gold-ink:#0b0f0c;
+  --green:#22c55e; --red:#ef4444; --live:#ef4444;
   --radius:12px; --radius-s:9px;
   --font:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
 }
@@ -22,7 +26,7 @@ a{color:inherit}
 ::selection{background:var(--lime);color:var(--lime-ink)}
 
 /* ---- app bar ---- */
-header.site{position:sticky;top:0;z-index:40;background:#0a0817;border-bottom:1px solid var(--line-soft)}
+header.site{position:sticky;top:0;z-index:40;background:#0f1511;border-bottom:1px solid var(--line-soft)}
 .header-in{display:flex;align-items:center;gap:10px;padding:10px 0}
 .logo{font-size:21px;font-weight:800;letter-spacing:-.5px;text-decoration:none;color:var(--text)}
 .logo span{color:var(--lime)}
@@ -130,7 +134,7 @@ p.lede{color:var(--muted);line-height:1.6;margin:0 0 8px;max-width:680px;font-si
 .tip{background:var(--panel);border:1px solid var(--line-soft);border-radius:var(--radius);padding:14px;margin-bottom:10px}
 .tip .pick{font-size:16px;font-weight:800}
 .conf{height:7px;background:var(--panel3);border-radius:999px;margin-top:10px;overflow:hidden}
-.conf i{display:block;height:100%;background:var(--lime)}
+.conf i{display:block;height:100%;background:var(--green)}
 .lock{border:1px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;color:var(--muted);background:var(--panel)}
 
 /* ---- results rows ---- */
@@ -155,7 +159,7 @@ p.lede{color:var(--muted);line-height:1.6;margin:0 0 8px;max-width:680px;font-si
   border-radius:8px;padding:8px 10px;font-size:15px;font-family:var(--font)}
 
 /* drawer + fab */
-#scrim{position:fixed;inset:0;background:rgba(4,2,12,.6);z-index:50}
+#scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50}
 #scrim[hidden]{display:none}
 #slipDrawer{position:fixed;top:0;right:0;height:100dvh;width:min(380px,92vw);background:var(--panel);
   border-left:1px solid var(--line);z-index:51;padding:18px;overflow:auto;transform:translateX(105%);transition:transform 200ms ease}
@@ -195,7 +199,7 @@ article.prose h3{margin:20px 0 4px}
 .acca-leg:last-child{border-bottom:0}
 
 /* ---- footer ---- */
-footer.site{border-top:1px solid var(--line-soft);margin-top:30px;padding:20px 0 96px;color:var(--muted);font-size:12.5px;line-height:1.7;background:#0a0817}
+footer.site{border-top:1px solid var(--line-soft);margin-top:30px;padding:20px 0 96px;color:var(--muted);font-size:12.5px;line-height:1.7;background:#0f1511}
 .foot-links{display:flex;gap:6px 14px;flex-wrap:wrap;margin-bottom:12px}
 .foot-links a{color:var(--muted);text-decoration:none;font-weight:600;font-size:13px}
 .foot-links a:hover{color:var(--lime)}
@@ -203,7 +207,7 @@ footer.site{border-top:1px solid var(--line-soft);margin-top:30px;padding:20px 0
 /* ---- bottom nav (mobile app bar) ---- */
 .bottom-nav{display:none}
 @media (max-width:820px){
-  .bottom-nav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:46;background:#080614;
+  .bottom-nav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:46;background:#0a0d0a;
     border-top:1px solid var(--line-soft);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
   .bottom-nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px 0 3px;
     color:var(--muted);text-decoration:none;font-size:10.5px;font-weight:700;position:relative}

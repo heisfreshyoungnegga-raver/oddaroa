@@ -4,9 +4,12 @@
 At Prince's direction the public UI was rebuilt in the layout language of
 football.com's mobile app (structure inspiration only; all code and brand
 are Oddaroa's own):
-- Tokens: deep indigo night (--bg #0d0b1c, panels #17142c/#201c3f), lime
-  accent (--lime #b7e332) for odds, active states and CTAs; live red
-  #ff5064. --gold is aliased to the lime so older markup follows.
+- Tokens: the layout first shipped with an indigo + lime scheme, but
+  Prince asked the same evening to keep the ORIGINAL Oddaroa colours —
+  so the palette is deep green-black (--bg #0b0f0c, panels
+  #131a15/#182219) with the v2 gold accent (#f5c518) for odds, active
+  states and CTAs; live red #ef4444, confidence green #22c55e. The
+  accent token is still named --lime internally; its value is the gold.
 - App bar: slim near-black bar, wordmark with lime dot, Go VIP pill +
   Slip button with count; below it a horizontally scrolling quick-link
   pill strip (replaces the wrapping nav).
