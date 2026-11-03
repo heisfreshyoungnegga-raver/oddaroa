@@ -12,7 +12,8 @@ const PORT = process.env.PORT || 8080;
 const groupRouters = {
   auth: require('./api/auth/[action]'),
   admin: require('./api/admin/[action]'),
-  tips: require('./api/tips/[action]')
+  tips: require('./api/tips/[action]'),
+  payments: require('./api/payments/[action]')
 };
 
 const MIME = {

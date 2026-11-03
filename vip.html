@@ -39,7 +39,8 @@
         <li>Accumulator of the day</li>
         <li>WhatsApp delivery</li>
       </ul>
-      <a class="btn gold" style="width:100%;margin-top:16px" href="https://wa.me/233539037677?text=Hi%20Oddaroa%2C%20I%20want%20VIP%20Weekly" target="_blank" rel="noopener">Join Weekly on WhatsApp</a>
+      <button class="btn gold" style="width:100%;margin-top:16px" onclick="openPay('weekly')">Pay with MoMo</button>
+      <a class="btn" style="width:100%;margin-top:10px" href="https://wa.me/233539037677?text=Hi%20Oddaroa%2C%20I%20want%20VIP%20Weekly" target="_blank" rel="noopener">Join Weekly on WhatsApp</a>
     </div>
     <div class="card">
       <h3>Monthly</h3>
@@ -50,9 +51,47 @@
         <li>Weekend mega accumulator</li>
         <li>Priority WhatsApp support</li>
       </ul>
-      <a class="btn gold" style="width:100%;margin-top:16px" href="https://wa.me/233539037677?text=Hi%20Oddaroa%2C%20I%20want%20VIP%20Monthly" target="_blank" rel="noopener">Join Monthly on WhatsApp</a>
+      <button class="btn gold" style="width:100%;margin-top:16px" onclick="openPay('monthly')">Pay with MoMo</button>
+      <a class="btn" style="width:100%;margin-top:10px" href="https://wa.me/233539037677?text=Hi%20Oddaroa%2C%20I%20want%20VIP%20Monthly" target="_blank" rel="noopener">Join Monthly on WhatsApp</a>
     </div>
   </div>
+
+  <section class="block" id="payPanel" hidden>
+    <h2 class="sec">Pay with Mobile Money</h2>
+    <div class="card">
+      <div id="authBox">
+        <p style="margin-top:0;color:var(--muted)">You need an Oddaroa account so the VIP lands on the right person. Log in, or create one in seconds — it is free, and it is how the site knows the VIP is yours.</p>
+        <input class="field" id="aPhone" inputmode="tel" placeholder="Phone number, e.g. 0539037677" style="width:100%;margin-bottom:10px">
+        <input class="field" id="aPass" type="password" placeholder="Password (6+ characters)" style="width:100%">
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn gold" id="loginBtn">Log in</button>
+          <button class="btn" id="registerBtn">Create account</button>
+        </div>
+        <p id="authMsg" style="margin:12px 0 0;color:var(--muted)"></p>
+      </div>
+      <div id="payBox" hidden>
+        <p id="accountLine" style="margin-top:0;color:var(--muted)"></p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn plan-btn" data-plan="weekly">Weekly — GH₵50</button>
+          <button class="btn plan-btn" data-plan="monthly">Monthly — GH₵150</button>
+        </div>
+        <input class="field" id="mPhone" inputmode="tel" placeholder="MoMo number, e.g. 0539037677" style="width:100%;margin-top:14px">
+        <select class="field" id="mNetwork" style="width:100%;margin-top:10px">
+          <option value="">Network — auto-detect from number</option>
+          <option value="MTN">MTN</option>
+          <option value="TELECEL">Telecel</option>
+          <option value="AIRTELTIGO">AirtelTigo</option>
+        </select>
+        <button class="btn gold" id="payBtn" style="width:100%;margin-top:14px">Send payment prompt</button>
+        <p style="color:var(--muted);font-size:13px;margin:10px 0 0">A prompt lands on your phone — approve it with your MoMo PIN. A 2.5% provider fee is added on top; the total shows on the prompt before you approve. VIP switches on by itself the moment payment confirms.</p>
+        <div id="otpBox" hidden style="margin-top:14px">
+          <input class="field" id="otpCode" inputmode="numeric" placeholder="Enter the OTP sent to your phone" style="width:100%">
+          <button class="btn" id="otpBtn" style="margin-top:10px">Confirm code</button>
+        </div>
+        <p id="payMsg" style="margin:12px 0 0"></p>
+      </div>
+    </div>
+  </section>
 
   <section class="block">
     <h2 class="sec">Straight talk</h2>
@@ -67,5 +106,102 @@
   Oddaroa — football odds &amp; predictions. Model odds are for information and slip-building only; always confirm the price with your bookmaker before placing a bet. 18+. Bet responsibly — betting involves risk and is not a way to make money.
 </div></footer>
 <script src="js/slip.js"></script>
+<script>
+// MoMo VIP checkout (ShinobiPay direct push). The browser never sees a
+// secret and never grants anything: it creates a payment attempt, then
+// polls its status. VIP switches on server-side in the webhook.
+const $ = id => document.getElementById(id);
+const token = () => localStorage.getItem('oddaroa-token') || '';
+let plan = 'weekly', currentRef = null, pollTimer = null, me = null;
+
+function openPay(p) {
+  plan = p; markPlan();
+  $('payPanel').hidden = false;
+  $('payPanel').scrollIntoView({ behavior: 'smooth' });
+  checkAuth();
+}
+function markPlan() {
+  document.querySelectorAll('.plan-btn').forEach(b => {
+    const on = b.dataset.plan === plan;
+    b.classList.toggle('gold', on);
+    b.onclick = () => { plan = b.dataset.plan; markPlan(); };
+  });
+  $('payBtn').textContent = plan === 'weekly' ? 'Send payment prompt — GH₵50' : 'Send payment prompt — GH₵150';
+}
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token(), ...(opts.headers || {}) } });
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, data };
+}
+async function checkAuth() {
+  if (!token()) { $('authBox').hidden = false; $('payBox').hidden = true; return; }
+  const { status, data } = await api('/api/auth/me');
+  if (status !== 200 || !data.user) { localStorage.removeItem('oddaroa-token'); $('authBox').hidden = false; $('payBox').hidden = true; return; }
+  me = data.user;
+  $('authBox').hidden = true; $('payBox').hidden = false;
+  $('mPhone').value = me.phone || '';
+  $('accountLine').innerHTML = me.vip
+    ? `Signed in as <b style="color:var(--text)">${me.phone}</b> — VIP active until <b style="color:var(--gold)">${new Date(me.vip_until).toLocaleDateString()}</b>. Paying again extends it. <a href="#" id="logoutLink" style="color:var(--gold)">Log out</a>`
+    : `Signed in as <b style="color:var(--text)">${me.phone}</b>. <a href="#" id="logoutLink" style="color:var(--gold)">Log out</a>`;
+  $('logoutLink').onclick = e => { e.preventDefault(); localStorage.removeItem('oddaroa-token'); location.reload(); };
+  markPlan();
+}
+async function authSubmit(path) {
+  const phone = $('aPhone').value.trim(), pw = $('aPass').value;
+  if (!phone || pw.length < 6) { $('authMsg').textContent = 'Enter your phone number and a password of 6+ characters.'; return; }
+  const { status, data } = await api(path, { method: 'POST', body: JSON.stringify({ phone, password: pw }) });
+  if ((status === 200 || status === 201) && data.token) { localStorage.setItem('oddaroa-token', data.token); $('authMsg').textContent = ''; checkAuth(); return; }
+  $('authMsg').textContent = data.error === 'phone_already_registered' ? 'That number already has an account — log in instead.'
+    : data.error === 'invalid_credentials' ? 'Phone or password not recognised.'
+    : (data.detail || 'Something went wrong — try again.');
+}
+$('loginBtn').onclick = () => authSubmit('/api/auth/login');
+$('registerBtn').onclick = () => authSubmit('/api/auth/register');
+
+function setPayMsg(t, gold) { const el = $('payMsg'); el.textContent = t; el.style.color = gold ? 'var(--gold)' : 'var(--muted)'; }
+function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+function startPoll() {
+  stopPoll();
+  let tries = 0;
+  pollTimer = setInterval(async () => {
+    tries++;
+    const { data } = await api('/api/payments/status?reference=' + encodeURIComponent(currentRef));
+    if (data.status === 'succeeded') {
+      stopPoll();
+      const until = data.vip && data.vip.vip_until ? new Date(data.vip.vip_until).toLocaleDateString() : null;
+      setPayMsg(until ? `Payment confirmed — VIP is active until ${until}. Enjoy the full list!` : 'Payment confirmed — VIP is active. Enjoy the full list!', true);
+      checkAuth();
+    } else if (data.status === 'failed') {
+      stopPoll(); setPayMsg('The payment did not go through. No charge was settled — you can try again.');
+    } else if (tries > 40) {
+      stopPoll(); setPayMsg('Still waiting on the network. If you approved the prompt, VIP switches on by itself once it confirms — refresh in a bit.');
+    }
+  }, 4000);
+}
+$('payBtn').onclick = async () => {
+  const phone = $('mPhone').value.trim();
+  if (!phone) { setPayMsg('Enter the MoMo number to charge.'); return; }
+  $('payBtn').disabled = true; setPayMsg('Sending the prompt…');
+  const { status, data } = await api('/api/payments/vip-buy', { method: 'POST', body: JSON.stringify({ plan, phone, network: $('mNetwork').value || undefined }) });
+  $('payBtn').disabled = false;
+  if (data.error) { setPayMsg(data.detail || data.error); return; }
+  currentRef = data.reference;
+  if (data.next_action && data.next_action.type === 'submit_otp') {
+    $('otpBox').hidden = false; setPayMsg('Your network sent a code — enter it above to continue.');
+  } else {
+    setPayMsg(`Prompt sent — approve GH₵${Number(data.charged_total_ghs || 0).toFixed(2)} on your phone with your MoMo PIN.`);
+  }
+  startPoll();
+};
+$('otpBtn').onclick = async () => {
+  const otp = $('otpCode').value.trim();
+  if (!otp || !currentRef) return;
+  const { data } = await api('/api/payments/otp', { method: 'POST', body: JSON.stringify({ reference: currentRef, otp }) });
+  if (data.error) { setPayMsg(data.detail || data.error); return; }
+  $('otpBox').hidden = true; setPayMsg('Code accepted — approve the prompt on your phone if it asks.');
+  startPoll();
+};
+markPlan();
+</script>
 </body>
 </html>

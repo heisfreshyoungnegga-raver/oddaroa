@@ -124,4 +124,96 @@ function publicUser(u) {
   };
 }
 
-module.exports = { sql, hashPassword, verifyPassword, issueToken, verifyToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser };
+// ---- ShinobiPay (direct MoMo push for VIP subscriptions) ------------
+// Same integration pattern as PrimeStake. The secret key lives ONLY in
+// server env (SHINOBIPAY_SECRET_KEY); the webhook signing secret is
+// SHINOBIPAY_WEBHOOK_SECRET. Without them the payment endpoints answer
+// 503 and the VIP page falls back to WhatsApp signup.
+function shinobiConfig() {
+  return {
+    apiBase: (process.env.SHINOBIPAY_API_BASE || 'https://akwapayapi.onrender.com/v1').replace(/\/$/, ''),
+    secretKey: process.env.SHINOBIPAY_SECRET_KEY || '',
+    webhookSecret: process.env.SHINOBIPAY_WEBHOOK_SECRET || ''
+  };
+}
+
+// One JSON call to the ShinobiPay API. Returns { status, data } and never
+// throws on an HTTP error status (callers branch on it); it throws only
+// when the network itself failed, which callers must treat as "unknown".
+async function shinobiFetch(path, { method = 'GET', body, idempotencyKey } = {}) {
+  const { apiBase, secretKey } = shinobiConfig();
+  const headers = { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' };
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  const res = await fetch(apiBase + path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, data };
+}
+
+// ShinobiPay intent status -> our attempt status vocabulary.
+function mapIntentStatus(s) {
+  switch (s) {
+    case 'succeeded': return 'succeeded';
+    case 'failed': return 'failed';
+    case 'processing': return 'processing';
+    case 'requires_action': return 'awaiting';
+    case 'unknown': return 'unknown';
+    default: return 'processing';
+  }
+}
+
+// Guess the MoMo network from a local Ghana number's prefix. Portability
+// means this is only a default the customer can override in the UI.
+function detectNetwork(localPhone) {
+  const p = String(localPhone || '').slice(0, 3);
+  if (['024', '025', '053', '054', '055', '059'].includes(p)) return 'MTN';
+  if (['020', '050'].includes(p)) return 'TELECEL';
+  if (['026', '027', '056', '057'].includes(p)) return 'AIRTELTIGO';
+  return null;
+}
+
+// Payment attempts + webhook idempotency tables. Created lazily so the
+// integration self-installs on first use; backend/schema.sql carries
+// the same definitions for the record. plan/plan_days record which VIP
+// subscription a payment buys; the webhook grants exactly that.
+let tablesReady = null;
+function ensurePaymentTables() {
+  if (!tablesReady) {
+    tablesReady = (async () => {
+      await sql(`create table if not exists payment_attempts (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid not null references users (id),
+        provider text not null default 'shinobipay',
+        reference text not null unique,
+        intent_id text,
+        client_secret text,
+        amount_ghs numeric(12, 2) not null,
+        amount_minor integer not null,
+        phone text,
+        network text,
+        plan text,
+        plan_days integer,
+        status text not null default 'created',
+        fail_reason text,
+        last_sequence integer not null default 0,
+        created_at timestamptz not null default now(),
+        settled_at timestamptz
+      )`);
+      await sql(`create table if not exists webhook_events (
+        event_id text primary key,
+        received_at timestamptz not null default now()
+      )`);
+    })().catch(e => { tablesReady = null; throw e; });
+  }
+  return tablesReady;
+}
+
+async function getSetting(key) {
+  const rows = await sql('select value from operator_settings where key = $1', [key]);
+  return rows.length ? rows[0].value : null;
+}
+
+module.exports = { sql, hashPassword, verifyPassword, issueToken, verifyToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, getSetting };
