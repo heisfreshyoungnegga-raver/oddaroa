@@ -539,7 +539,7 @@ function momoPanelHTML() {
   const m = state.momo;
   if (state.momoOff) {
     return '<div class="card"><h3>Mobile Money</h3>' +
-      '<p class="muted">Instant mobile money deposits are being switched on. Please use <b>Manual transfer</b> for now — it is confirmed and credited by our team.</p></div>';
+      '<p class="muted">Instant mobile money deposits are being switched on. Please check back shortly.</p></div>';
   }
   if (m && m.phase === 'wait') {
     return '<div class="card"><h3>Check your phone</h3>' +
@@ -584,25 +584,7 @@ function walletHTML() {
     '<div class="txrow"><div><b>' + esc(t.kind.replace('_', ' ')) + '</b><div class="muted">' + fmtDate(t.created_at) + ' · ' + esc(t.method || '') + '</div></div>' +
     '<div class="' + (t.amount_ghs >= 0 ? 'amt pos' : 'amt') + '">' + (t.amount_ghs >= 0 ? '+' : '−') + 'GHS ' + Math.abs(t.amount_ghs).toFixed(2) + '</div>' +
     statusChip(t.status) + '</div>').join('');
-  const md = w.manual_deposit;
-  const manual = state.walletTab === 'manual';
-  const depositPanel = manual
-    ? '<div class="card"><h3>Manual transfer — ' + esc(md.network) + '</h3>' +
-      '<div class="manualbox"><div class="muted">Send money to</div>' +
-      '<div class="mannum">' + esc(md.number.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3')) + '</div>' +
-      '<div class="manname">' + esc(md.name) + '</div>' +
-      '<button class="btn gold" data-copy="' + esc(md.number) + '">Copy Number</button></div>' +
-      '<ol class="steps"><li>Dial *170# and send the amount to the number above.</li>' +
-      '<li>Check the name on the confirmation screen shows <b>' + esc(md.name) + '</b> before you enter your PIN.</li>' +
-      '<li>Use your account phone number as the reference.</li>' +
-      '<li>Fill the confirmation below — your balance is credited once the payment is confirmed.</li></ol>' +
-      '<form id="manualDepForm" class="stack">' +
-      '<label>Amount sent (GHS) <input type="number" id="mdAmt" min="1" value="50" required></label>' +
-      '<label>Your MoMo number <input type="tel" id="mdPhone" placeholder="05X XXX XXXX" required></label>' +
-      '<label>Transaction ID / reference <input type="text" id="mdRef" placeholder="e.g. 12345678901" required></label>' +
-      '<label>Screenshot of the transaction (optional) <input type="file" id="mdProof" accept="image/*"></label>' +
-      '<button class="btn gold big" type="submit">I Have Sent It — Confirm Deposit</button></form></div>'
-    : momoPanelHTML();
+  const depositPanel = momoPanelHTML();
   // Deposit, Withdraw and History are separate views inside the wallet.
   const sec = state.walletSection;
   const sectionTabs = '<div class="wtabs">' +
@@ -610,8 +592,7 @@ function walletHTML() {
       '<button class="' + (sec === k ? 'on' : '') + '" data-wsec="' + k + '">' + label + '</button>').join('') + '</div>';
   let sectionBody = '';
   if (sec === 'deposit') {
-    sectionBody = '<div class="wtabs"><button class="' + (manual ? '' : 'on') + '" data-wtab="instant">Mobile Money</button>' +
-      '<button class="' + (manual ? 'on' : '') + '" data-wtab="manual">Manual transfer</button></div>' + depositPanel;
+    sectionBody = depositPanel;
   } else if (sec === 'withdraw') {
     sectionBody = withdrawCardHTML(w);
   } else {
@@ -792,11 +773,12 @@ function syncAuth() {
   $('#authSubmit').textContent = login ? 'Login' : 'Register';
   const nameRow = $('#authNameRow');
   if (nameRow) nameRow.style.display = login ? 'none' : '';
-  // Admin-invite registration gets the email field and an optional
-  // phone (either identifier works at login); login is labelled for both.
+  // Registration always shows the email field (optional for players —
+  // phone stays their main identifier; admin invites may register with
+  // email alone). Login is labelled for both identifiers.
   const hasInvite = !!localStorage.getItem('od_admin_invite');
   const emailRow = $('#authEmailRow');
-  if (emailRow) emailRow.style.display = (!login && hasInvite) ? '' : 'none';
+  if (emailRow) emailRow.style.display = login ? 'none' : '';
   const phoneInput = $('#authPhone');
   if (phoneInput) phoneInput.required = login || !hasInvite;
   const phoneLabel = $('#authPhoneLabel');
@@ -961,8 +943,6 @@ document.addEventListener('click', e => {
     toast('Slip code generated — share it to recreate this slip anywhere');
     return;
   }
-  const wt = e.target.closest('[data-wtab]');
-  if (wt) { state.walletTab = wt.dataset.wtab; render(); return; }
   const wsec = e.target.closest('[data-wsec]');
   if (wsec) { state.walletSection = wsec.dataset.wsec; render(); return; }
   if (e.target.closest('[data-momo-cancel]') || e.target.closest('[data-momo-reset]')) {
@@ -1023,7 +1003,7 @@ document.addEventListener('submit', async e => {
       if (err.code === 'provider_not_configured' || err.code === 'gateway_disabled') {
         state.momoOff = true;
         render();
-        toast('Instant deposits are switched off right now — please use Manual transfer.');
+        toast('Instant deposits are switched off right now — please try again shortly.');
       } else {
         state.momo = { phase: 'failed', message: err.detail || 'The payment could not be started. Nothing was charged.' };
         render();
@@ -1040,19 +1020,6 @@ document.addEventListener('submit', async e => {
       startMomoPoll();
       render();
     } catch (err) { toast(err.detail || 'That code was not accepted — check it and try again.'); }
-  } else if (id === 'manualDepForm') {
-    e.preventDefault();
-    try {
-      const body = { amount_ghs: parseFloat($('#mdAmt').value) || 0, sender_phone: $('#mdPhone').value.trim(), external_ref: $('#mdRef').value.trim() };
-      const pf = $('#mdProof');
-      if (pf && pf.files && pf.files[0]) {
-        const proof = await shrinkImage(pf.files[0]);
-        if (proof) body.proof_image = proof;
-      }
-      await api('/wallet/deposit-manual', { method: 'POST', body });
-      toast('Deposit confirmation received — your balance is credited once the payment is confirmed.');
-      loadWallet();
-    } catch (err) { errToast(err, 'Deposit confirmation failed.'); }
   } else if (id === 'withdrawForm') {
     e.preventDefault();
     try {
