@@ -1,4 +1,9 @@
 :root {
+  /* Motion tokens (emil-design-eng): ease-out for UI, drawer curve for
+     sheets; UI transitions stay under 300ms. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --bg: #f4f4f2;
   --surface: #ffffff;
   --ink: #141414;
@@ -333,7 +338,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   min-width: 58px;
   padding: 8px 6px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 160ms var(--ease-out), transform 120ms var(--ease-out);
 }
+.odd:active { transform: scale(0.95); }
 .odd small { display: block; font-size: 10px; color: var(--muted); }
 .odd.sel { background: var(--accent); font-weight: 800; }
 .odd.sel small { color: var(--accent-ink); }
@@ -428,7 +437,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   background: var(--surface);
   z-index: 60;
   transform: translateX(105%);
-  transition: transform 0.25s ease;
+  transition: transform 0.32s var(--ease-drawer);
   display: flex;
   flex-direction: column;
   box-shadow: -12px 0 32px rgba(0, 0, 0, 0.25);
@@ -530,6 +539,28 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   overflow-y: auto;
 }
 .modal h2 { margin: 0 0 4px; }
+.modalwrap.open .modal { animation: modalIn 200ms var(--ease-out); }
+@keyframes modalIn { from { opacity: 0; transform: scale(0.96) translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* press feedback + snappy state changes on pressables (emil-design-eng) */
+.btn, .chip, .qtile, .navbtn { transition: transform 120ms var(--ease-out), background 180ms var(--ease-out), color 180ms var(--ease-out); }
+.btn:active, .chip:active, .qtile:active { transform: scale(0.97); }
+.bbanner:active { transform: scale(0.99); }
+.balance, .userchip, .score, .hero-count { font-variant-numeric: tabular-nums; }
+
+/* match rows settle in with a short stagger (decorative, 40ms steps).
+   Scoped to home/sports: the live view auto-refreshes and must not
+   replay the animation every cycle. */
+@keyframes rowIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+[data-view="home"] .mrow, [data-view="sports"] .mrow { animation: rowIn 240ms var(--ease-out) backwards; }
+[data-view="home"] .mrow:nth-child(2), [data-view="sports"] .mrow:nth-child(2) { animation-delay: 40ms; }
+[data-view="home"] .mrow:nth-child(3), [data-view="sports"] .mrow:nth-child(3) { animation-delay: 80ms; }
+[data-view="home"] .mrow:nth-child(4), [data-view="sports"] .mrow:nth-child(4) { animation-delay: 120ms; }
+[data-view="home"] .mrow:nth-child(5), [data-view="sports"] .mrow:nth-child(5) { animation-delay: 160ms; }
+[data-view="home"] .mrow:nth-child(6), [data-view="sports"] .mrow:nth-child(6) { animation-delay: 200ms; }
+[data-view="home"] .mrow:nth-child(7), [data-view="sports"] .mrow:nth-child(7) { animation-delay: 240ms; }
+[data-view="home"] .mrow:nth-child(8), [data-view="sports"] .mrow:nth-child(8) { animation-delay: 280ms; }
+@media (prefers-reduced-motion: reduce) { .mrow, .modalwrap.open .modal { animation: none; } }
 .modal-sub { color: var(--muted); margin: 0 0 14px; }
 .modal-x { position: absolute; top: 10px; right: 12px; }
 .iconbtn { background: none; border: 0; font-size: 22px; line-height: 1; color: var(--muted); }

@@ -711,6 +711,7 @@ function viewHTML() {
   }
 }
 function render() {
+  root.dataset.view = state.view;
   root.innerHTML = viewHTML();
   document.querySelectorAll('.navlink').forEach(b =>
     b.classList.toggle('active', b.dataset.nav === state.view));
