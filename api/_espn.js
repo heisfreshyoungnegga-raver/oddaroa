@@ -211,13 +211,16 @@ async function syncLeagues(leagues, offsets) {
   return { report, imported, withOdds };
 }
 
-// Light refresh: yesterday + today for every league, all in parallel.
-// This is what turns matches live, moves their scores and minutes, and
-// retires finished ones — in seconds rather than a 99-call sweep.
+// Light refresh: yesterday + today + tomorrow for every league, all in
+// parallel. This is what turns matches live, moves their scores and
+// minutes, and retires finished ones — in seconds rather than a 99-call
+// sweep. Tomorrow is included so the list never runs dry overnight:
+// without it, once today's games finish the site shows an empty list
+// until someone presses the admin Sync button (seen live 2026-11-03).
 async function refreshToday() {
   const jobs = [];
   for (const slug of Object.keys(LEAGUES)) {
-    for (const offset of [-1, 0]) {
+    for (const offset of [-1, 0, 1]) {
       jobs.push(
         fetchDay(slug, ymdOf(offset))
           .then(async data => {
