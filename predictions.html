@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predictions — Oddaroa</title>
+<meta name="description" content="Oddaroa model predictions: free tips of the day with confidence ratings, plus VIP tips.">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="site"><div class="wrap header-in">
+  <a class="logo" href="index.html">Odd<span>aroa</span></a>
+  <nav class="main">
+    <a href="index.html">Matches</a>
+    <a href="live.html">Live</a>
+    <a href="predictions.html" class="active">Predictions</a>
+    <a href="accumulator.html">Acca</a>
+    <a href="leagues.html">Leagues</a>
+    <a href="results.html">Results</a>
+    <a href="guide.html">Guide</a>
+    <a href="vip.html">VIP</a>
+    <a href="slip.html">My Slip <span class="slip-count">0</span></a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Model <em>predictions</em></h1>
+    <p>Every match gets one model pick — the market the model rates most likely — with a confidence score. Free tips below are generated from today's live fixtures. Tap a tip's odd to add it straight to your slip.</p>
+  </section>
+
+  <h2 class="sec">Best bet of the day</h2>
+  <div id="bestBet"><p class="loading">Finding today's strongest pick…</p></div>
+
+  <h2 class="sec">Free tips</h2>
+  <div id="tipList"><p class="loading">Loading tips…</p></div>
+
+  <h2 class="sec">VIP tips</h2>
+  <div class="lock">
+    <p style="margin:0 0 6px"><b style="color:var(--text)">The full prediction list, the accumulator of the day, and VIP-only markets are for members.</b></p>
+    <p style="margin:0 0 14px">No invented win-rates or fake records — you see the same model, just all of it.</p>
+    <a class="btn gold" href="vip.html">See VIP plans</a>
+  </div>
+
+  <section class="block">
+    <h2 class="sec">How to read confidence</h2>
+    <p class="lede">Confidence is the model's own rating for that single pick, from 52% (a lean) to 88% (its strongest calls). It is not a guarantee — favourites lose every week. Use it to compare picks, not to size stakes you cannot afford to lose.</p>
+  </section>
+</main>
+
+<footer class="site"><div class="wrap">
+  <nav class="foot-links">
+    <a href="index.html">Matches</a><a href="live.html">Live</a><a href="predictions.html">Predictions</a><a href="accumulator.html">Accumulator</a><a href="leagues.html">Leagues</a><a href="results.html">Results</a><a href="upcoming.html">Upcoming</a><a href="guide.html">Guide</a><a href="faq.html">FAQ</a><a href="about.html">About</a><a href="vip.html">VIP</a><a href="slip.html">My Slip</a>
+  </nav>
+  Oddaroa — football odds &amp; predictions. Model odds are for information and slip-building only; always confirm the price with your bookmaker before placing a bet. 18+. Bet responsibly — betting involves risk and is not a way to make money.
+</div></footer>
+
+<script src="js/slip.js"></script>
+<script src="js/app.js"></script>
+<script>
+function tipCard(m, p, featured) {
+  const el = document.createElement("article"); el.className = "tip";
+  el.innerHTML = `
+    <div class="match-top"><span>${m.league}</span><span>${m.time}</span></div>
+    <div class="pick"></div>
+    <div class="pred-line" style="margin-top:4px">${p.market} · <b></b></div>
+    <div class="conf"><i style="width:${p.conf}%"></i></div>
+    <div class="pred-line">Model confidence: ${p.conf}%</div>`;
+  el.querySelector(".pick").textContent = `${m.home} vs ${m.away}`;
+  el.querySelector(".pred-line b").textContent = `${p.pick} @ ${p.odd.toFixed(2)}`;
+  const row = document.createElement("div"); row.className = "odds-row"; row.style.marginTop = "12px";
+  const label = p.market === "Match Result" ? (p.pick === m.home ? "1" : "2") : p.pick;
+  row.appendChild(oddsBtn(m, "tip", p.market, label, p.odd));
+  el.appendChild(row);
+  return el;
+}
+loadMatches().then(ms => {
+  const picks = ms.map(m => ({ m, p: modelPick(m) })).sort((a, b) => b.p.conf - a.p.conf);
+  const best = document.getElementById("bestBet"); best.innerHTML = "";
+  if (picks.length) best.appendChild(tipCard(picks[0].m, picks[0].p, true));
+  const list = document.getElementById("tipList"); list.innerHTML = "";
+  // Official tips published from the admin portal (backend) come first.
+  // If the backend is not configured yet this fails silently and the
+  // model tips below still render.
+  fetch("/api/tips", { headers: { Authorization: "Bearer " + (localStorage.getItem("oddaroa-token") || "") } })
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(({ tips }) => {
+      (tips || []).filter(t => t.result === "pending").reverse().forEach(t => {
+        const el = document.createElement("article"); el.className = "tip";
+        if (t.locked) {
+          el.innerHTML = `<div class="match-top"><span>VIP tip</span><span>Locked</span></div><div class="pick"></div>
+            <div class="pred-line">VIP members only — <a href="vip.html" style="color:var(--gold)">see VIP</a></div>`;
+        } else {
+          el.innerHTML = `<div class="match-top"><span>Official tip${t.tier === "vip" ? " · VIP" : ""}</span><span>${t.league || ""}</span></div><div class="pick"></div>
+            <div class="pred-line">${t.market} · <b>${t.pick} @ ${Number(t.odd).toFixed(2)}</b></div>`;
+        }
+        el.querySelector(".pick").textContent = t.match; list.prepend(el);
+      });
+    })
+    .catch(() => {});
+  picks.slice(1, 9).forEach(({ m, p }) => list.appendChild(tipCard(m, p)));
+  if (!picks.length) list.innerHTML = '<p class="empty">No tips right now — check back closer to kick-off.</p>';
+});
+</script>
+</body>
+</html>

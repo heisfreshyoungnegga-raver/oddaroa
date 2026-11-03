@@ -1,0 +1,1 @@
+{"description":"Oddaroa football odds & predictions - static site + zero-dependency Node API in one server for Railway; same handlers deploy as Vercel functions.","engines":{"node":">=18"},"name":"oddaroa","private":true,"scripts":{"start":"node server.js"},"version":"2.0.0"}

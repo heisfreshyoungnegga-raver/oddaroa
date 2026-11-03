@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Slip — Oddaroa</title>
+<meta name="description" content="Your Oddaroa bet slip: total odds, stake calculator and booking reference.">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="site"><div class="wrap header-in">
+  <a class="logo" href="index.html">Odd<span>aroa</span></a>
+  <nav class="main">
+    <a href="index.html">Matches</a>
+    <a href="live.html">Live</a>
+    <a href="predictions.html">Predictions</a>
+    <a href="accumulator.html">Acca</a>
+    <a href="leagues.html">Leagues</a>
+    <a href="results.html">Results</a>
+    <a href="guide.html">Guide</a>
+    <a href="vip.html">VIP</a>
+    <a href="slip.html" class="active">My Slip <span class="slip-count">0</span></a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>My <em>slip</em></h1>
+    <p>Your selections, total odds and potential return. Set a stake and the maths is done for you. Generate a booking reference to rebuild this slip with your bookmaker — Oddaroa does not take bets or money.</p>
+  </section>
+
+  <div id="items"></div>
+
+  <div class="totals" id="totals" hidden>
+    <div class="row"><span>Selections</span><b id="nSel">0</b></div>
+    <div class="row"><span>Total odds</span><b id="totOdds">—</b></div>
+    <div class="row"><span>Stake (GH₵)</span><input class="stake" id="stake" type="number" min="1" value="10"></div>
+    <div class="row"><span>Potential return</span><b id="ret">—</b></div>
+    <button class="btn gold" id="bookBtn" style="width:100%">Generate booking reference</button>
+    <p id="bookOut" class="pred-line" style="text-align:center"></p>
+    <button class="btn" id="shareBtn" style="width:100%;margin-top:8px">Copy slip as text</button>
+    <button class="btn danger" id="clearBtn" style="width:100%;margin-top:8px">Clear slip</button>
+  </div>
+  <p class="empty" id="emptyMsg">Your slip is empty. <a href="index.html" style="color:var(--gold)">Browse today's matches</a> and tap any odd to add it.</p>
+</main>
+
+<footer class="site"><div class="wrap">
+  <nav class="foot-links">
+    <a href="index.html">Matches</a><a href="live.html">Live</a><a href="predictions.html">Predictions</a><a href="accumulator.html">Accumulator</a><a href="leagues.html">Leagues</a><a href="results.html">Results</a><a href="upcoming.html">Upcoming</a><a href="guide.html">Guide</a><a href="faq.html">FAQ</a><a href="about.html">About</a><a href="vip.html">VIP</a><a href="slip.html">My Slip</a>
+  </nav>
+  Oddaroa — football odds &amp; predictions. Model odds are for information and slip-building only; always confirm the price with your bookmaker before placing a bet. 18+. Bet responsibly — betting involves risk and is not a way to make money.
+</div></footer>
+
+<script src="js/slip.js"></script>
+<script>
+function render() {
+  const s = OddSlip.all(), box = document.getElementById("items");
+  box.innerHTML = "";
+  document.getElementById("emptyMsg").hidden = s.length > 0;
+  document.getElementById("totals").hidden = !s.length;
+  s.forEach(sel => {
+    const d = document.createElement("div"); d.className = "slip-item";
+    d.innerHTML = `<div><div class="pick"></div><div class="sub"></div></div>
+      <div style="text-align:right"><div class="odd">${Number(sel.odd).toFixed(2)}</div>
+      <button class="x-btn" aria-label="Remove selection">×</button></div>`;
+    d.querySelector(".pick").textContent = sel.pick;
+    d.querySelector(".sub").textContent = sel.match + " · " + sel.market;
+    d.querySelector(".x-btn").onclick = () => { OddSlip.remove(sel.id); render(); };
+    box.appendChild(d);
+  });
+  document.getElementById("nSel").textContent = s.length;
+  const tot = OddSlip.total();
+  document.getElementById("totOdds").textContent = s.length ? tot.toFixed(2) : "—";
+  calc(tot);
+}
+function calc(tot) {
+  const stake = Number(document.getElementById("stake").value) || 0;
+  document.getElementById("ret").textContent = OddSlip.all().length ? "GH₵ " + (tot * stake).toFixed(2) : "—";
+}
+document.getElementById("stake").addEventListener("input", () => calc(OddSlip.total()));
+document.getElementById("clearBtn").onclick = () => { OddSlip.clear(); render(); };
+document.getElementById("bookBtn").onclick = () => {
+  const s = OddSlip.all(); if (!s.length) return;
+  let h = 0; const str = s.map(x => x.id).join("|");
+  for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) >>> 0;
+  document.getElementById("bookOut").textContent = "Booking reference: ODD-" + h.toString(36).toUpperCase().padStart(6, "0") + " · " + s.length + " selections @ " + OddSlip.total().toFixed(2);
+};
+document.getElementById("shareBtn").onclick = async () => {
+  const s = OddSlip.all();
+  const text = "My Oddaroa slip\n" + s.map(x => `${x.pick} (${x.match}, ${x.market}) @ ${Number(x.odd).toFixed(2)}`).join("\n") + `\nTotal odds: ${OddSlip.total().toFixed(2)}`;
+  try { await navigator.clipboard.writeText(text); document.getElementById("bookOut").textContent = "Slip copied — paste it anywhere."; }
+  catch { document.getElementById("bookOut").textContent = text; }
+};
+render();
+</script>
+</body>
+</html>

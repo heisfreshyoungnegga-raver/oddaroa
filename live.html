@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Scores — Oddaroa</title>
+<meta name="description" content="Football matches live right now across 11 leagues, with live scores, model odds and a bet slip builder. Auto-refreshes every minute.">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="site"><div class="wrap header-in">
+  <a class="logo" href="index.html">Odd<span>aroa</span></a>
+  <nav class="main">
+    <a href="index.html">Matches</a>
+    <a href="live.html" class="active">Live</a>
+    <a href="predictions.html">Predictions</a>
+    <a href="accumulator.html">Acca</a>
+    <a href="leagues.html">Leagues</a>
+    <a href="results.html">Results</a>
+    <a href="guide.html">Guide</a>
+    <a href="vip.html">VIP</a>
+    <a href="slip.html">My Slip <span class="slip-count">0</span></a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1><span class="pulse"></span>Live <em>scores</em></h1>
+    <p>Every match in play right now across the 11 leagues Oddaroa covers. Scores come live from ESPN and this page refreshes itself every 60 seconds — odds stay tappable, so a live game can still land on your slip.</p>
+  </section>
+
+  <div id="liveStatus" class="loading">Checking for live matches…</div>
+  <section id="liveList"></section>
+
+  <section class="block">
+    <h2 class="sec">Nothing live?</h2>
+    <p class="lede">Most European football kicks off in the evening (Africa/Accra time). Check <a href="upcoming.html" style="color:var(--gold)">Upcoming</a> for the next fixtures, or <a href="results.html" style="color:var(--gold)">Results</a> for games already finished.</p>
+  </section>
+</main>
+
+<footer class="site"><div class="wrap">
+  <nav class="foot-links">
+    <a href="index.html">Matches</a><a href="live.html">Live</a><a href="predictions.html">Predictions</a><a href="accumulator.html">Accumulator</a><a href="leagues.html">Leagues</a><a href="results.html">Results</a><a href="upcoming.html">Upcoming</a><a href="guide.html">Guide</a><a href="faq.html">FAQ</a><a href="about.html">About</a><a href="vip.html">VIP</a><a href="slip.html">My Slip</a>
+  </nav>
+  Oddaroa — football odds &amp; predictions. Model odds are for information and slip-building only; always confirm the price with your bookmaker before placing a bet. 18+. Bet responsibly — betting involves risk and is not a way to make money.
+</div></footer>
+
+<script src="js/slip.js"></script>
+<script src="js/app.js"></script>
+<script>
+async function refresh() {
+  const status = document.getElementById("liveStatus"), list = document.getElementById("liveList");
+  const ms = await loadMatches();
+  const live = ms.filter(m => m.state === "in");
+  list.innerHTML = "";
+  if (!live.length) {
+    status.textContent = "No matches are live right now.";
+    status.className = "pred-line";
+    return;
+  }
+  status.innerHTML = `<span class="live-dot">●</span> ${live.length} match${live.length > 1 ? "es" : ""} live now · updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+  status.className = "pred-line";
+  let lastLeague = "";
+  live.forEach(m => {
+    if (m.league !== lastLeague) { const h = document.createElement("div"); h.className = "day-label"; h.textContent = m.league; list.appendChild(h); lastLeague = m.league; }
+    list.appendChild(matchCard(m));
+  });
+}
+refresh();
+setInterval(refresh, 60000);
+</script>
+</body>
+</html>

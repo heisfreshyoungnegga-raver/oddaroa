@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create your account — Oddaroa</title>
+<meta name="description" content="Register on Oddaroa. With an invite link, your account is created with the role on the invite.">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="site"><div class="wrap header-in">
+  <a class="logo" href="index.html">Odd<span>aroa</span></a>
+  <nav class="main">
+    <a href="index.html">Matches</a>
+    <a href="predictions.html">Predictions</a>
+    <a href="vip.html">VIP</a>
+    <a href="slip.html">My Slip <span class="slip-count">0</span></a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Create your <em>account</em></h1>
+    <p id="inviteNote">Register with your phone number. If you arrived from an invite link, your account gets the role on that invite — the link works once and expires after 48 hours.</p>
+  </section>
+
+  <div class="card" style="max-width:480px">
+    <input class="field" id="rName" placeholder="Display name — e.g. Prince">
+    <input class="field" id="rPhone" placeholder="Phone — e.g. 0539037677" autocomplete="username">
+    <input class="field" id="rPass" type="password" placeholder="Password (6+ characters)" autocomplete="new-password">
+    <button class="btn gold" id="regBtn" style="width:100%">Create account</button>
+    <p class="pred-line" id="regMsg"></p>
+  </div>
+</main>
+
+<footer class="site"><div class="wrap">
+  Oddaroa — football odds &amp; predictions. 18+. Bet responsibly — betting involves risk and is not a way to make money.
+</div></footer>
+
+<script src="js/slip.js"></script>
+<script>
+const tokenParam = new URLSearchParams(location.search).get('token');
+if (tokenParam) document.getElementById('inviteNote').textContent = 'You have an invite link. Register below and your account is created with the invited role — this link can only be used once.';
+document.getElementById('regBtn').onclick = async () => {
+  const msg = document.getElementById('regMsg');
+  msg.textContent = 'Creating account…';
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: document.getElementById('rPhone').value.trim(), password: document.getElementById('rPass').value, display_name: document.getElementById('rName').value.trim(), inviteToken: tokenParam || undefined })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { msg.textContent = data.error === 'backend_not_configured' ? 'Backend not configured yet — try again once hosting setup is finished.' : 'Error: ' + (data.error || res.status); return; }
+    localStorage.setItem('oddaroa-token', data.token);
+    msg.innerHTML = data.user.role === 'user'
+      ? 'Account created. Welcome to Oddaroa — <a href="predictions.html" style="color:var(--gold)">see today\'s predictions</a>.'
+      : `Account created with role <b>${data.user.role.replace('_', ' ')}</b>. Go to your portal: <a href="${data.user.role === 'super_admin' ? 'super-admin.html' : 'admin.html'}" style="color:var(--gold)">${data.user.role === 'super_admin' ? 'Super Admin Portal' : 'Admin Portal'}</a>.`;
+  } catch { msg.textContent = 'Could not reach the server.'; }
+};
+</script>
+</body>
+</html>

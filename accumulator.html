@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accumulator of the Day — Oddaroa</title>
+<meta name="description" content="Today's auto-built accumulators from Oddaroa's highest-confidence model picks: a 4-leg Safe acca and a 6-leg Value acca, with combined odds and one-tap add to slip.">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="site"><div class="wrap header-in">
+  <a class="logo" href="index.html">Odd<span>aroa</span></a>
+  <nav class="main">
+    <a href="index.html">Matches</a>
+    <a href="live.html">Live</a>
+    <a href="predictions.html">Predictions</a>
+    <a href="accumulator.html" class="active">Acca</a>
+    <a href="leagues.html">Leagues</a>
+    <a href="results.html">Results</a>
+    <a href="guide.html">Guide</a>
+    <a href="vip.html">VIP</a>
+    <a href="slip.html">My Slip <span class="slip-count">0</span></a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Accumulator of the <em>day</em></h1>
+    <p>Built automatically from today's highest-confidence model picks — no hand-picked hype. One wrong leg kills an accumulator, so treat these as entertainment maths, not a plan. The full reasoning for every pick is on the <a href="predictions.html" style="color:var(--gold)">Predictions</a> page.</p>
+  </section>
+
+  <div id="accaStatus" class="loading">Building today's accumulators…</div>
+  <div id="accaBox"></div>
+
+  <section class="block">
+    <h2 class="sec">How the accas are built</h2>
+    <p class="lede"><b style="color:var(--text)">Safe (4 legs)</b> takes the four highest-confidence picks priced at 2.00 or under. <b style="color:var(--text)">Value (6 legs)</b> takes the six highest-confidence picks regardless of price. Both rebuild themselves every day from the live fixture feed — come back tomorrow and they will be different, because the matches are different.</p>
+    <p class="lede">Combined odds multiply: four legs at 1.50, 1.70, 1.80 and 1.60 combine to about 7.34. That also multiplies the risk — a 6-leg acca where every leg is a genuine 70% shot still lands less than 12% of the time. Stake accordingly: small, fixed, and never money you need.</p>
+  </section>
+</main>
+
+<footer class="site"><div class="wrap">
+  <nav class="foot-links">
+    <a href="index.html">Matches</a><a href="live.html">Live</a><a href="predictions.html">Predictions</a><a href="accumulator.html">Accumulator</a><a href="leagues.html">Leagues</a><a href="results.html">Results</a><a href="upcoming.html">Upcoming</a><a href="guide.html">Guide</a><a href="faq.html">FAQ</a><a href="about.html">About</a><a href="vip.html">VIP</a><a href="slip.html">My Slip</a>
+  </nav>
+  Oddaroa — football odds &amp; predictions. Model odds are for information and slip-building only; always confirm the price with your bookmaker before placing a bet. 18+. Bet responsibly — betting involves risk and is not a way to make money.
+</div></footer>
+
+<script src="js/slip.js"></script>
+<script src="js/app.js"></script>
+<script>
+function selFor(m, p) {
+  const label = p.market === "Match Result" ? (p.pick === m.home ? "1" : "2") : p.pick;
+  const id = `${m.home}-${m.away}-tip-${label}`.replace(/\s+/g, "_");
+  return { id, group: "tip", match: `${m.home} vs ${m.away}`, market: p.market, pick: `${label} — ${m.home} vs ${m.away}`, odd: p.odd };
+}
+function accaCard(title, legs, note) {
+  const total = legs.reduce((a, x) => a * x.p.odd, 1);
+  const card = document.createElement("div"); card.className = "card"; card.style.marginBottom = "14px";
+  card.innerHTML = `<h3>${title}</h3><p class="lede" style="margin-bottom:6px">${note}</p><div class="legs"></div>
+    <div class="totals" style="margin-top:12px">
+      <div class="row"><span>Legs</span><b>${legs.length}</b></div>
+      <div class="row"><span>Combined odds</span><b>${total.toFixed(2)}</b></div>
+      <div class="row"><span>Stake (GH₵)</span><input class="stake" type="number" min="1" value="10"></div>
+      <div class="row"><span>Potential return</span><b class="ret">GH₵ ${(total * 10).toFixed(2)}</b></div>
+      <button class="btn gold" style="width:100%">Add all legs to my slip</button>
+      <p class="pred-line msg" style="text-align:center"></p>
+    </div>`;
+  const box = card.querySelector(".legs");
+  legs.forEach(({ m, p }) => {
+    const d = document.createElement("div"); d.className = "acca-leg";
+    d.innerHTML = `<div><div class="pick" style="font-weight:700"></div><div class="sub" style="color:var(--muted);font-size:13px"></div></div><b style="color:var(--gold)">${p.odd.toFixed(2)}</b>`;
+    d.querySelector(".pick").textContent = `${m.home} vs ${m.away}`;
+    d.querySelector(".sub").textContent = `${p.market}: ${p.pick} · confidence ${p.conf}%`;
+    box.appendChild(d);
+  });
+  const stake = card.querySelector(".stake");
+  stake.addEventListener("input", () => { card.querySelector(".ret").textContent = "GH₵ " + (total * (Number(stake.value) || 0)).toFixed(2); });
+  card.querySelector(".btn.gold").onclick = () => {
+    legs.forEach(({ m, p }) => OddSlip.add(selFor(m, p)));
+    card.querySelector(".msg").textContent = `${legs.length} legs added — open My Slip to check the combined odds.`;
+  };
+  return card;
+}
+loadMatches().then(ms => {
+  const status = document.getElementById("accaStatus"), box = document.getElementById("accaBox");
+  const picks = ms.filter(m => m.state !== "post").map(m => ({ m, p: modelPick(m) })).sort((a, b) => b.p.conf - a.p.conf);
+  if (picks.length < 4) { status.textContent = "Not enough upcoming matches today to build an accumulator — try again closer to kick-off."; status.className = "pred-line"; return; }
+  status.hidden = true;
+  const safe = picks.filter(x => x.p.odd <= 2.0).slice(0, 4);
+  box.appendChild(accaCard("Safe acca — 4 legs", safe.length >= 4 ? safe : picks.slice(0, 4), "The model's calmest calls of the day."));
+  if (picks.length >= 6) box.appendChild(accaCard("Value acca — 6 legs", picks.slice(0, 6), "More legs, bigger price, much longer odds of landing. Small stakes only."));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upcoming Fixtures — Oddaroa</title>
+<meta name="description" content="Tomorrow's and the next day's football fixtures across 11 leagues, with model odds and model picks — plan your slip early.">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="site"><div class="wrap header-in">
+  <a class="logo" href="index.html">Odd<span>aroa</span></a>
+  <nav class="main">
+    <a href="index.html">Matches</a>
+    <a href="live.html">Live</a>
+    <a href="predictions.html">Predictions</a>
+    <a href="accumulator.html">Acca</a>
+    <a href="leagues.html">Leagues</a>
+    <a href="results.html">Results</a>
+    <a href="guide.html">Guide</a>
+    <a href="vip.html">VIP</a>
+    <a href="slip.html">My Slip <span class="slip-count">0</span></a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Upcoming <em>fixtures</em></h1>
+    <p>Look ahead. Tomorrow's and the next day's games across all 11 leagues, with the same model odds and picks as today's page — build your slip before the prices move in your head.</p>
+  </section>
+
+  <div class="controls">
+    <button class="chip active" id="btnT1">Tomorrow</button>
+    <button class="chip" id="btnT2">Day after</button>
+  </div>
+
+  <div id="upStatus" class="loading">Loading fixtures…</div>
+  <section id="upList"></section>
+</main>
+
+<footer class="site"><div class="wrap">
+  <nav class="foot-links">
+    <a href="index.html">Matches</a><a href="live.html">Live</a><a href="predictions.html">Predictions</a><a href="accumulator.html">Accumulator</a><a href="leagues.html">Leagues</a><a href="results.html">Results</a><a href="upcoming.html">Upcoming</a><a href="guide.html">Guide</a><a href="faq.html">FAQ</a><a href="about.html">About</a><a href="vip.html">VIP</a><a href="slip.html">My Slip</a>
+  </nav>
+  Oddaroa — football odds &amp; predictions. Model odds are for information and slip-building only; always confirm the price with your bookmaker before placing a bet. 18+. Bet responsibly — betting involves risk and is not a way to make money.
+</div></footer>
+
+<script src="js/slip.js"></script>
+<script src="js/app.js"></script>
+<script>
+async function show(offset) {
+  const status = document.getElementById("upStatus"), list = document.getElementById("upList");
+  status.textContent = "Loading fixtures…"; status.className = "loading"; list.innerHTML = "";
+  const d = new Date(); d.setDate(d.getDate() + offset);
+  const ms = await loadMatchesFor(ymd(d));
+  const games = ms.filter(m => m.state === "pre");
+  if (!games.length) { status.textContent = "No fixtures scheduled in the covered leagues for that day."; status.className = "pred-line"; return; }
+  status.textContent = `${games.length} fixture${games.length > 1 ? "s" : ""} · ${d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}`;
+  status.className = "pred-line";
+  let lastLeague = "";
+  games.forEach(m => {
+    if (m.league !== lastLeague) { const h = document.createElement("div"); h.className = "day-label"; h.textContent = m.league; list.appendChild(h); lastLeague = m.league; }
+    list.appendChild(matchCard(m));
+  });
+}
+const b1 = document.getElementById("btnT1"), b2 = document.getElementById("btnT2");
+b1.onclick = () => { b1.classList.add("active"); b2.classList.remove("active"); show(1); };
+b2.onclick = () => { b2.classList.add("active"); b1.classList.remove("active"); show(2); };
+show(1);
+</script>
+</body>
+</html>
