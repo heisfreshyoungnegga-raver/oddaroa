@@ -1,7 +1,11 @@
 // Router for /api/auth/* — one Vercel function for the whole group.
-const handlers = {};
-for (const name of ['register', 'login', 'me']) handlers[name] = require('../_handlers/auth/' + name);
-handlers['pass' + 'word'] = require('../_handlers/auth/change-' + 'pass' + 'word');
+const handlers = {
+  register: require('../_handlers/auth/register'),
+  login: require('../_handlers/auth/login'),
+  me: require('../_handlers/auth/me'),
+  referrals: require('../_handlers/auth/referrals'),
+  password: require('../_handlers/auth/password'),
+};
 module.exports = (req, res) => {
   const action = (req.query && req.query.action) || String(req.url || '').split('?')[0].split('/').pop();
   const handler = handlers[action];

@@ -1,107 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Super Admin Portal — Oddaroa</title>
-<meta name="description" content="Oddaroa Super Admin Portal: Platform Control — role changes, one-time invite links, settings and user deletion. Super admins only.">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oddaroa Super Admin</title>
+<meta name="robots" content="noindex, nofollow">
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<header class="site"><div class="wrap header-in">
-  <a class="logo" href="index.html">Odd<span>aroa</span></a>
-  <nav class="main">
-    <a href="index.html">Matches</a>
-    <a href="live.html">Live</a>
-    <a href="predictions.html">Predictions</a>
-    <a href="accumulator.html">Acca</a>
-    <a href="leagues.html">Leagues</a>
-    <a href="results.html">Results</a>
-    <a href="guide.html">Guide</a>
-    <a href="vip.html">VIP</a>
-    <a href="slip.html">My Slip <span class="slip-count">0</span></a>
-  </nav>
-</div></header>
-
-<main class="wrap">
-  <section class="hero">
-    <h1>Super Admin <em>Portal</em> <span class="slip-count" style="font-size:13px;vertical-align:middle">SUPER ADMIN</span></h1>
-    <p>Platform Control for Oddaroa: everything in the <a href="admin.html" style="color:var(--gold)">Admin Portal</a>, plus role changes, one-time invite links, platform settings and user deletion. Super admin accounts only — the API enforces this server-side, not just on this page.</p>
-  </section>
-
-  <div class="card" id="loginBox">
-    <h3 style="margin-top:0">Super Admin Login</h3>
-    <input class="field" id="lPhone" placeholder="Phone — e.g. 0539037677" autocomplete="username">
-    <input class="field" id="lPass" type="password" placeholder="Password" autocomplete="current-password">
-    <button class="btn gold" id="loginBtn" style="width:100%">Sign in</button>
-    <p class="pred-line" id="loginMsg"></p>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="logo" href="super-admin.html">ODD<span>AROA</span></a>
+    <span class="gtag">SUPER ADMIN</span>
+    <div class="headactions" id="adminHead"></div>
   </div>
+</header>
 
-  <div id="dashBox" hidden>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <p class="lede" id="whoami" style="margin:0"></p>
-      <button class="btn small" id="logoutBtn" style="margin-left:auto">Log out</button>
-    </div>
-    <p class="pred-line" id="dashMsg"></p>
+<main id="adminRoot" class="page"></main>
 
-    <div class="grid">
-      <div class="card stat"><b id="statUsers">—</b><span>Registered users</span></div>
-      <div class="card stat"><b id="statAdmins">—</b><span>Admins + super admins</span></div>
-      <div class="card stat"><b id="statVip">—</b><span>Active VIP members</span></div>
-      <div class="card stat"><b id="statTips">—</b><span>Tips published today</span></div>
-      <div class="card stat"><b id="statPending">—</b><span>Tips awaiting result</span></div>
-    </div>
+<div class="toast" id="toast" role="status"></div>
 
-    <h2 class="sec">Platform Control — invite links</h2>
-    <div class="card">
-      <p class="lede">The only way new admin accounts are created. Each link works once and expires in 48 hours.</p>
-      <button class="btn gold" id="invAdmin">Create admin invite link</button>
-      <button class="btn" id="invSuper">Create super-admin invite link</button>
-      <p class="pred-line" id="invMsg" style="word-break:break-all"></p>
-      <div style="overflow:auto;margin-top:8px">
-        <table><thead><tr><th>Role</th><th>Status</th><th>Expires</th></tr></thead><tbody id="inviteRows"></tbody></table>
-      </div>
-    </div>
-
-    <h2 class="sec">Tip manager</h2>
-    <div class="card">
-      <input class="field" id="tMatch" placeholder="Match — e.g. Arsenal vs Chelsea">
-      <input class="field" id="tLeague" placeholder="League — e.g. Premier League (optional)">
-      <input class="field" id="tMarket" placeholder="Market — e.g. Match Result">
-      <input class="field" id="tPick" placeholder="Pick — e.g. Arsenal win">
-      <input class="field" id="tOdd" type="number" step="0.01" min="1.01" placeholder="Odd — e.g. 1.85">
-      <select class="field" id="tTier"><option value="free">Free tip</option><option value="vip">VIP tip</option></select>
-      <button class="btn gold" id="addTip">Publish tip</button>
-      <p class="pred-line" id="tipMsg"></p>
-    </div>
-    <div style="overflow:auto;margin-top:12px">
-      <table><thead><tr><th>Match</th><th>Market</th><th>Pick</th><th>Odd</th><th>Tier</th><th>Result</th><th></th></tr></thead>
-      <tbody id="tipRows"></tbody></table>
-    </div>
-
-    <h2 class="sec">Users — roles, VIP, block, delete</h2>
-    <div style="overflow:auto">
-      <table><thead><tr><th>Name</th><th>Phone</th><th>Role</th><th>Status</th><th>VIP</th><th>Actions</th></tr></thead>
-      <tbody id="userRows"></tbody></table>
-    </div>
-
-    <h2 class="sec">Platform Control — settings</h2>
-    <div class="card">
-      <div id="settingsForm" style="display:grid;gap:12px"></div>
-      <p class="pred-line" id="setMsg"></p>
-    </div>
-  </div>
-</main>
-
-<footer class="site"><div class="wrap">
-  <nav class="foot-links">
-    <a href="index.html">Matches</a><a href="live.html">Live</a><a href="predictions.html">Predictions</a><a href="accumulator.html">Accumulator</a><a href="leagues.html">Leagues</a><a href="results.html">Results</a><a href="upcoming.html">Upcoming</a><a href="guide.html">Guide</a><a href="faq.html">FAQ</a><a href="about.html">About</a><a href="vip.html">VIP</a><a href="slip.html">My Slip</a>
-  </nav>
-  Oddaroa — football odds &amp; predictions. Model odds are for information and slip-building only; always confirm the price with your bookmaker before placing a bet. 18+. Bet responsibly — betting involves risk and is not a way to make money.
-</div></footer>
-
-<script src="js/slip.js"></script>
-<script>window.ODD_PORTAL = 'super';</script>
+<script>window.PS_PORTAL = 'super';</script>
 <script src="js/admin.js"></script>
 </body>
 </html>

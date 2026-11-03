@@ -1,14 +1,26 @@
 // Router for /api/admin/* — one Vercel function for the whole group.
 const handlers = {
   stats: require('../_handlers/admin/stats'),
-  tips: require('../_handlers/admin/tips'),
+  queue: require('../_handlers/admin/queue'),
+  confirm: require('../_handlers/admin/confirm'),
+  reject: require('../_handlers/admin/reject'),
   users: require('../_handlers/admin/users'),
   block: require('../_handlers/admin/block'),
-  vip: require('../_handlers/admin/vip'),
+  matches: require('../_handlers/admin/matches'),
+  settle: require('../_handlers/admin/settle'),
+  support: require('../_handlers/admin/support'),
+  'espn-sync': require('../_handlers/admin/espn-sync'),
   promote: require('../_handlers/admin/promote'),
-  invite: require('../_handlers/admin/invite'),
   settings: require('../_handlers/admin/settings'),
-  'delete-user': require('../_handlers/admin/delete-user')
+  'create-match': require('../_handlers/admin/create-match'),
+  'invite-admin': require('../_handlers/admin/invite-admin'),
+  'verify-admin': require('../_handlers/admin/verify-admin'),
+  'balance-edit': require('../_handlers/admin/balance-edit'),
+  bonus: require('../_handlers/admin/bonus'),
+  'my-dashboard': require('../_handlers/admin/my-dashboard'),
+  payout: require('../_handlers/admin/payout'),
+  'delete-user': require('../_handlers/admin/delete-user'),
+  'deposit-proof': require('../_handlers/admin/deposit-proof'),
 };
 module.exports = (req, res) => {
   const action = (req.query && req.query.action) || String(req.url || '').split('?')[0].split('/').pop();
