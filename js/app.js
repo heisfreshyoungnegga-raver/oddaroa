@@ -95,6 +95,9 @@ function errToast(e, fallback) {
     phone_already_registered: 'That phone number is already registered — log in instead.',
     password_too_short: 'Password must be at least 6 characters.',
     invalid_phone: 'Enter a valid phone number.',
+    email_required: 'An email address is required to create an account.',
+    invalid_email: 'Enter a valid email address.',
+    email_already_registered: 'That email is already registered — log in instead.',
     account_blocked: 'This account has been blocked. Contact support.',
     withdrawal_locked: 'Withdrawals are not available on your account yet — please contact support.',
     match_finished: 'One of those matches has already finished.',
@@ -773,9 +776,10 @@ function syncAuth() {
   $('#authSubmit').textContent = login ? 'Login' : 'Register';
   const nameRow = $('#authNameRow');
   if (nameRow) nameRow.style.display = login ? 'none' : '';
-  // Registration always shows the email field (optional for players —
-  // phone stays their main identifier; admin invites may register with
-  // email alone). Login is labelled for both identifiers.
+  // Registration always shows the email field, and email is compulsory
+  // for every sign-up (Prince's call, 2026-11-03). Players also need a
+  // phone; admin invites may register with email alone. Login is
+  // labelled for both identifiers.
   const hasInvite = !!localStorage.getItem('od_admin_invite');
   const emailRow = $('#authEmailRow');
   if (emailRow) emailRow.style.display = login ? 'none' : '';
@@ -1124,9 +1128,11 @@ $('#authForm').addEventListener('submit', async e => {
   const password = $('#authPass').value;
   const emailEl = $('#authEmail');
   const email = emailEl ? emailEl.value.trim() : '';
-  // An admin invite may register with email alone (no phone); every
-  // other path needs phone + password. Login takes either identifier.
+  // Registration always requires an email (compulsory) plus a password;
+  // players also need a phone, while an admin invite may register with
+  // email alone. Login takes either identifier.
   const inviteRegister = authMode === 'register' && !!localStorage.getItem('od_admin_invite');
+  if (authMode === 'register' && !email) { toast('An email address is required to create an account.'); return; }
   if (!password || (!phone && !(inviteRegister && email))) return;
   const btn = $('#authSubmit');
   btn.disabled = true;
@@ -1134,7 +1140,7 @@ $('#authForm').addEventListener('submit', async e => {
     const path = authMode === 'login' ? '/auth/login' : '/auth/register';
     const body = authMode === 'login' ? { identifier: phone, password } : { phone, password };
     if (authMode === 'register') {
-      if (email) body.email = email;
+      body.email = email;
       const nameEl = $('#authName');
       if (nameEl && nameEl.value.trim()) body.display_name = nameEl.value.trim();
     }
