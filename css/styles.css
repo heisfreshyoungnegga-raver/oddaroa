@@ -35,7 +35,10 @@ header.site{position:sticky;top:0;z-index:40;background:#0a0817;border-bottom:1p
 .slip-count{background:var(--lime);color:var(--lime-ink);border-radius:999px;padding:1px 7px;font-size:12px;font-weight:800;margin-left:2px}
 
 /* quick-link strip: horizontal scroll of dark pills (all pages) */
-nav.main{display:flex;gap:6px;overflow-x:auto;padding:8px 0 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+nav.main{display:flex;gap:6px;overflow-x:auto;padding:8px 0 10px;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  -webkit-mask-image:linear-gradient(to right,#000 92%,transparent);mask-image:linear-gradient(to right,#000 92%,transparent)}
+#leagueChips.controls{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+#leagueChips.controls::-webkit-scrollbar{display:none}
 nav.main::-webkit-scrollbar{display:none}
 nav.main a{flex:0 0 auto;padding:7px 13px;border-radius:999px;text-decoration:none;color:var(--muted);
   font-size:13px;font-weight:700;background:var(--panel);border:1px solid var(--line-soft);white-space:nowrap}
@@ -208,12 +211,19 @@ footer.site{border-top:1px solid var(--line-soft);margin-top:30px;padding:20px 0
   .bottom-nav a.active{color:var(--lime)}
   .bottom-nav a.active::before{content:"";position:absolute;top:-7px;left:22%;right:22%;height:3px;border-radius:99px;background:var(--lime)}
   .bottom-nav .bn-count{background:var(--lime);color:var(--lime-ink);border-radius:99px;font-size:10px;padding:0 6px;font-weight:800}
-  #fab{bottom:78px}
+  #fab{display:none}
   .hero h1{font-size:21px}
-  .m-odds{grid-template-columns:repeat(3,47px)}
-  .col-head .ch-odds{grid-template-columns:repeat(3,47px)}
-  .m-time{flex-basis:38px}
-  .team{font-size:13.5px}
+  .wrap{padding:0 8px}
+  .match{padding:10px 8px}
+  .m-main{gap:8px}
+  .m-odds{grid-template-columns:repeat(3,44px);gap:4px}
+  .col-head .ch-odds{grid-template-columns:repeat(3,44px);gap:4px}
+  .m-time{flex-basis:34px;padding-right:6px}
+  .teams{gap:6px}
+  .team{font-size:13px;gap:6px}
+  .team img{width:18px;height:18px}
+  .team .tname{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
+  .m-more{font-size:10.5px;padding:6px 0}
 }
 @media (min-width:821px){
   footer.site{padding-bottom:26px}
