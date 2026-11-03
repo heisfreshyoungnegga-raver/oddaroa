@@ -1,5 +1,24 @@
 # Oddaroa — Architecture & Design Contract (v2, 2026-11-03)
 
+## UI v3 (2026-11-03 evening) — betting-feed redesign
+At Prince's direction the public UI was rebuilt in the layout language of
+football.com's mobile app (structure inspiration only; all code and brand
+are Oddaroa's own):
+- Tokens: deep indigo night (--bg #0d0b1c, panels #17142c/#201c3f), lime
+  accent (--lime #b7e332) for odds, active states and CTAs; live red
+  #ff5064. --gold is aliased to the lime so older markup follows.
+- App bar: slim near-black bar, wordmark with lime dot, Go VIP pill +
+  Slip button with count; below it a horizontally scrolling quick-link
+  pill strip (replaces the wrapping nav).
+- Match feed: matches render as dense rows inside league-group panels —
+  league header bar + 1|X|2 column header, then rows of
+  time rail | stacked teams with per-team scores | three 1X2 odds pills |
+  "+6" expander revealing DC/O-U/BTTS markets and the model pick.
+  No per-match cards, thin dividers only.
+- Mobile: fixed bottom nav (Matches, Live, Tips, Acca, Slip with count),
+  lime underline on the active tab; the slip FAB lifts above it.
+- Admin portals keep their own headers; the shared CSS restyles them.
+
 ## What it is (product = first page)
 Oddaroa is a football odds & predictions site: today's matches with 1X2,
 Double Chance, Over/Under and BTTS odds, model predictions with confidence,

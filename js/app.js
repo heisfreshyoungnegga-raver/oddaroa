@@ -116,26 +116,62 @@ function oddsBtn(m, group, market, label, odd) {
   return b;
 }
 
+// One match as a dense feed row: time rail | teams + scores | 1X2 odds
+// pills | "+6" expander holding the extra markets and the model pick.
 function matchCard(m) {
   const el = document.createElement("article"); el.className = "match";
-  const score = m.hs !== null && m.hs !== undefined ? `<span class="score">${m.hs} – ${m.as}</span>` : `<span class="kickoff">${m.time}</span>`;
+  const hasScore = m.hs !== null && m.hs !== undefined && m.hs !== "";
+  const time = m.live
+    ? `<span class="live-min">${m.time}</span><span style="color:var(--live);font-weight:800">LIVE</span>`
+    : m.state === "post" ? `<span class="ft-lab">FT</span>` : `<span>${m.time}</span>`;
+  const winH = hasScore && Number(m.hs) > Number(m.as), winA = hasScore && Number(m.as) > Number(m.hs);
   el.innerHTML = `
-    <div class="match-top"><span>${m.league}</span>${m.live ? '<span class="live-dot">● LIVE ' + m.time + "</span>" : `<span>${m.time}</span>`}</div>
-    <div class="teams">
-      <div class="team">${m.hLogo ? `<img src="${m.hLogo}" alt="">` : ""}<span class="tname"></span>${score}</div>
-      <div class="team">${m.aLogo ? `<img src="${m.aLogo}" alt="">` : ""}<span class="tname"></span></div>
+    <div class="m-main">
+      <div class="m-time">${time}</div>
+      <div class="teams">
+        <div class="team${winH ? " win" : ""}">${m.hLogo ? `<img src="${m.hLogo}" alt="">` : ""}<span class="tname"></span>${hasScore ? `<span class="score">${m.hs}</span>` : ""}</div>
+        <div class="team${winA ? " win" : ""}">${m.aLogo ? `<img src="${m.aLogo}" alt="">` : ""}<span class="tname"></span>${hasScore ? `<span class="score">${m.as}</span>` : ""}</div>
+      </div>
+      <div class="m-odds"></div>
+      <button class="m-more" type="button" aria-label="More markets">+6</button>
+    </div>
+    <div class="m-extra" hidden>
+      <div class="markets"></div>
+      <div class="pred-line"></div>
     </div>`;
   el.querySelectorAll(".tname")[0].textContent = m.home;
   el.querySelectorAll(".tname")[1].textContent = m.away;
-  const row = document.createElement("div"); row.className = "odds-row";
-  row.append(oddsBtn(m, "1x2", "Match Result", "1", m.odds["1"]), oddsBtn(m, "1x2", "Match Result", "X", m.odds["X"]), oddsBtn(m, "1x2", "Match Result", "2", m.odds["2"]));
-  const mk = document.createElement("div"); mk.className = "markets";
-  mk.append(oddsBtn(m, "dc", "Double Chance", "1X", m.odds["1X"]), oddsBtn(m, "dc", "Double Chance", "12", m.odds["12"]), oddsBtn(m, "dc", "Double Chance", "X2", m.odds["X2"]),
-            oddsBtn(m, "ou", "Goals O/U 2.5", "Over 2.5", m.odds["O2.5"]), oddsBtn(m, "ou", "Goals O/U 2.5", "Under 2.5", m.odds["U2.5"]), oddsBtn(m, "btts", "Both Teams To Score", "BTTS Yes", m.odds["BTTS"]));
+  el.querySelector(".m-odds").append(
+    oddsBtn(m, "1x2", "Match Result", "1", m.odds["1"]),
+    oddsBtn(m, "1x2", "Match Result", "X", m.odds["X"]),
+    oddsBtn(m, "1x2", "Match Result", "2", m.odds["2"]));
+  el.querySelector(".markets").append(
+    oddsBtn(m, "dc", "Double Chance", "1X", m.odds["1X"]), oddsBtn(m, "dc", "Double Chance", "12", m.odds["12"]), oddsBtn(m, "dc", "Double Chance", "X2", m.odds["X2"]),
+    oddsBtn(m, "ou", "Goals O/U 2.5", "Over 2.5", m.odds["O2.5"]), oddsBtn(m, "ou", "Goals O/U 2.5", "Under 2.5", m.odds["U2.5"]), oddsBtn(m, "btts", "Both Teams To Score", "BTTS Yes", m.odds["BTTS"]));
   const p = modelPick(m);
-  const pl = document.createElement("div"); pl.className = "pred-line";
+  const pl = el.querySelector(".pred-line");
   pl.innerHTML = `Model pick: <b></b> · confidence ${p.conf}%`;
   pl.querySelector("b").textContent = `${p.pick} @ ${p.odd.toFixed(2)}`;
-  el.append(row, mk, pl);
+  const extra = el.querySelector(".m-extra"), more = el.querySelector(".m-more");
+  more.onclick = () => { extra.hidden = !extra.hidden; more.textContent = extra.hidden ? "+6" : "−"; };
   return el;
+}
+
+// Render matches grouped by league into flat panels: a league header
+// bar, a 1|X|2 column header, then the rows — the betting-feed layout.
+function renderGrouped(listEl, matches) {
+  listEl.innerHTML = "";
+  let group = null, lastLeague = null;
+  matches.forEach(m => {
+    if (m.league !== lastLeague) {
+      lastLeague = m.league;
+      group = document.createElement("section"); group.className = "league-group";
+      const count = matches.filter(x => x.league === m.league).length;
+      group.innerHTML = `<div class="league-head"><span class="lg-name"></span><span class="lg-count">${count} match${count > 1 ? "es" : ""}</span></div>
+        <div class="col-head"><span>Match</span><span class="ch-odds"><span>1</span><span>X</span><span>2</span></span></div>`;
+      group.querySelector(".lg-name").textContent = m.league;
+      listEl.appendChild(group);
+    }
+    group.appendChild(matchCard(m));
+  });
 }

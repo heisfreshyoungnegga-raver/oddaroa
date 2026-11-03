@@ -8,8 +8,14 @@
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<header class="site"><div class="wrap header-in">
-  <a class="logo" href="index.html">Odd<span>aroa</span></a>
+<header class="site"><div class="wrap">
+  <div class="header-in">
+    <a class="logo" href="index.html">Odd<span>aroa</span><i>.</i></a>
+    <div class="head-actions">
+      <a class="head-vip" href="vip.html">Go VIP</a>
+      <a class="head-slip" href="slip.html">Slip <span class="slip-count">0</span></a>
+    </div>
+  </div>
   <nav class="main">
     <a href="index.html">Matches</a>
     <a href="live.html">Live</a>
@@ -17,9 +23,12 @@
     <a href="accumulator.html">Acca</a>
     <a href="leagues.html">Leagues</a>
     <a href="results.html">Results</a>
+    <a href="upcoming.html">Upcoming</a>
     <a href="guide.html" class="active">Guide</a>
+    <a href="faq.html">FAQ</a>
+    <a href="about.html">About</a>
     <a href="vip.html">VIP</a>
-    <a href="slip.html">My Slip <span class="slip-count">0</span></a>
+    <a href="slip.html">My Slip</a>
   </nav>
 </div></header>
 
@@ -67,5 +76,13 @@
   Oddaroa — football odds &amp; predictions. Model odds are for information and slip-building only; always confirm the price with your bookmaker before placing a bet. 18+. Bet responsibly — betting involves risk and is not a way to make money.
 </div></footer>
 <script src="js/slip.js"></script>
+<nav class="bottom-nav" aria-label="Main">
+  <a href="index.html"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Matches</a>
+  <a href="live.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4"/></svg>Live</a>
+  <a href="predictions.html"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/></svg>Tips</a>
+  <a href="accumulator.html"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>Acca</a>
+  <a href="slip.html"><svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2.2a2.6 2.6 0 0 0 0 5.6V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1.2a2.6 2.6 0 0 0 0-5.6V8Z"/><path d="M13.5 7v2m0 3v2m0 3v.5"/></svg>Slip <span class="bn-count slip-count">0</span></a>
+</nav>
+<script>(function(){var f=location.pathname.split("/").pop()||"index.html";document.querySelectorAll(".bottom-nav a").forEach(function(a){if(a.getAttribute("href")===f)a.classList.add("active")})})();</script>
 </body>
 </html>
