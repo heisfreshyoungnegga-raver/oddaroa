@@ -32,6 +32,13 @@ const HERO_SLIDES = [
     cta: 'Bet Live',
     img: 'assets/hero-keeper.jpg',
   },
+  {
+    kicker: 'THE STARS ARE OUT',
+    title: 'Saka. Semenyo. Partey.',
+    sub: 'The biggest names, the biggest nights — all on Oddaroa.',
+    cta: 'Bet now',
+    img: 'assets/hero-saka.jpg',
+  },
 ];
 
 const PROMOS = [
@@ -41,7 +48,7 @@ const PROMOS = [
 ];
 
 const FAQS = [
-  { q: 'How do I deposit?', a: 'Open Wallet and choose Manual Deposit. Send the amount by MTN MoMo to the number shown, check the name on the confirmation screen matches before you enter your PIN, then submit the confirmation form with your transaction ID. Your balance is credited once the payment is confirmed.' },
+  { q: 'How do I deposit?', a: 'Open Wallet and choose Deposit. Enter the amount and your MoMo number, then approve the payment prompt on your phone. Your balance is credited as soon as the payment is confirmed.' },
   { q: 'When can I withdraw?', a: 'Withdrawal requests are reviewed and paid to your mobile money account. If a withdrawal is not available on your account yet, contact support and the team will help you.' },
   { q: 'How long do withdrawals take?', a: 'Requests are reviewed in the order they arrive. Once approved, mobile money payouts are sent to the number on your account.' },
   { q: 'What is a slip code?', a: 'A code that recreates a set of selections on another device or account. Generate one from your betslip, or load a code someone shared with you.' },

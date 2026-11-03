@@ -783,17 +783,20 @@ function syncAuth() {
   $('#authSubmit').textContent = login ? 'Login' : 'Register';
   const nameRow = $('#authNameRow');
   if (nameRow) nameRow.style.display = login ? 'none' : '';
-  // Registration always shows the email field, and email is compulsory
-  // for every sign-up (Prince's call, 2026-11-03). Players also need a
-  // phone; admin invites may register with email alone. Login is
-  // labelled for both identifiers.
+  // The email field shows on BOTH tabs (Prince's ask, 2026-11-03):
+  // compulsory on Register; on Login it is an alternative identifier —
+  // fill email OR phone, whichever the account uses. The row's label
+  // text is set from the form's first text node per mode.
   const hasInvite = !!localStorage.getItem('od_admin_invite');
   const emailRow = $('#authEmailRow');
-  if (emailRow) emailRow.style.display = login ? 'none' : '';
+  if (emailRow) {
+    emailRow.style.display = '';
+    if (emailRow.firstChild) emailRow.firstChild.textContent = login ? 'Email ' : 'Email * ';
+  }
   const phoneInput = $('#authPhone');
-  if (phoneInput) phoneInput.required = login || !hasInvite;
+  if (phoneInput) phoneInput.required = !login && !hasInvite;
   const phoneLabel = $('#authPhoneLabel');
-  if (phoneLabel) phoneLabel.textContent = login ? 'Phone number or email' : (hasInvite ? 'Phone number (optional if you gave an email)' : 'Phone number');
+  if (phoneLabel) phoneLabel.textContent = login ? 'Phone number' : (hasInvite ? 'Phone number (optional if you gave an email)' : 'Phone number');
   $('#authAlt').innerHTML = login
     ? 'Don\'t have an account? <a href="#" id="authAltLink">Register</a>'
     : 'Already have an account? <a href="#" id="authAltLink">Login</a>';
@@ -1140,12 +1143,16 @@ $('#authForm').addEventListener('submit', async e => {
   // email alone. Login takes either identifier.
   const inviteRegister = authMode === 'register' && !!localStorage.getItem('od_admin_invite');
   if (authMode === 'register' && !email) { toast('An email address is required to create an account.'); return; }
-  if (!password || (!phone && !(inviteRegister && email))) return;
+  if (!password) return;
+  if (authMode === 'login' && !phone && !email) return;
+  if (authMode === 'register' && !phone && !inviteRegister) return;
   const btn = $('#authSubmit');
   btn.disabled = true;
   try {
     const path = authMode === 'login' ? '/auth/login' : '/auth/register';
-    const body = authMode === 'login' ? { identifier: phone, password } : { phone, password };
+    // On login the email field, when filled, is the identifier;
+    // otherwise the phone field carries it (number or email typed there).
+    const body = authMode === 'login' ? { identifier: email || phone, password } : { phone, password };
     if (authMode === 'register') {
       body.email = email;
       const nameEl = $('#authName');
