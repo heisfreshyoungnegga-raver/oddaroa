@@ -237,15 +237,16 @@ async function refreshAfLive() {
       }
     }
   } catch (e) { /* live sweep is best-effort; the date sweep already ran */ }
-  // Odds pass: shown matches (live, or kicking off within 48h) that
-  // still lack a 1X2 line OR their full market book get one odds
-  // call each, live first. The same response carries both the flat
-  // classic markets and the bookmaker's whole whitelisted book, so
-  // the full coverage costs no extra quota.
+  // Odds pass: every shown match that still lacks a 1X2 line OR
+  // its full market book gets one odds call each, live first, then
+  // nearest kickoff. The window covers the whole fixture sweep
+  // (the API publishes odds up to 14 days ahead), so a match five
+  // days out is priced just like tonight's — Prince, 2026-11-04:
+  // a bare match page with no odds at all is not acceptable.
   const needy = await sql(
     `select id, external_ref, odds, odds_full from matches
      where external_ref like 'af:%' and status in ('live', 'upcoming')
-       and starts_at < now() + interval '48 hours'
+       and starts_at < now() + interval '6 days'
        and (not (odds ? 'o1') or odds_full is null)
      order by (status = 'live') desc, starts_at asc
      limit $1`,

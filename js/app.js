@@ -285,6 +285,12 @@ function matchDetailsHTML() {
   // on demand via loadMatchFull; until then the classic sections
   // above stand on their own.
   const book = state.fullBooks[m.id];
+  if (!html.includes('md-sec') && !Array.isArray(book)) {
+    // No prices published for this match yet (far-out fixtures wait
+    // for the bookmaker). Say so plainly instead of showing a bare
+    // page — sections appear here the moment prices land.
+    html += '<div class="card"><h3>Odds are on their way</h3><p class="muted">Prices for this match have not been published yet. They will appear here automatically as soon as they are out.</p></div>';
+  }
   if (Array.isArray(book)) {
     for (const b of book) {
       if (!b.values || !b.values.length) continue;
