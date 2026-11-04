@@ -786,8 +786,35 @@ function closeSlip() { $('#slipDrawer').classList.remove('open'); $('#scrim').cl
 let authMode = 'login';
 function openAuth(mode) {
   authMode = mode || 'login';
+  detectCountry();
   syncAuth();
   $('#authWrap').classList.add('open');
+}
+// Country detector (Prince's ask, 2026-11-04): preselect the country
+// on the auth forms from the visitor's own device — timezone first
+// (Africa/Accra, Africa/Lagos, Africa/Nairobi), then browser locale
+// (en-GH, en-NG, en-KE). It only ever sets the DEFAULT: the moment the
+// user changes the country themselves, their choice is never
+// overridden again.
+let countryTouched = false;
+function applyCountry(code) {
+  const sel = $('#authCountry');
+  if (sel) sel.value = code;
+  $('#authPrefix').textContent = code;
+  if (authMode === 'register') $('#authPhone').placeholder = COUNTRY_HINT[code] || '24 123 4567';
+}
+function detectCountry() {
+  if (countryTouched) return;
+  let code = null;
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    code = { 'Africa/Accra': '+233', 'Africa/Lagos': '+234', 'Africa/Nairobi': '+254' }[tz] || null;
+    if (!code && navigator.language) {
+      const region = navigator.language.split('-').pop().toUpperCase();
+      code = { GH: '+233', NG: '+234', KE: '+254' }[region] || null;
+    }
+  } catch (e) { /* detection is best-effort; Ghana stays the default */ }
+  if (code) applyCountry(code);
 }
 function closeAuth() { $('#authWrap').classList.remove('open'); }
 function syncAuth() {
@@ -800,6 +827,9 @@ function syncAuth() {
   $('#authTitle').textContent = login ? 'Welcome back' : 'Create your account';
   $('#authSubmit').textContent = login ? 'Login' : 'Register';
   const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? '' : 'none'; };
+  // The login form carries a welcome message under its title
+  // (Prince's ask, 2026-11-04); the register form does not.
+  show('#authSub', login);
   show('#authNameRow', !login);
   show('#authCountryRow', !login);
   show('#authEmailRow', !login);
@@ -1140,8 +1170,8 @@ $('#loginBtn').addEventListener('click', () => openAuth('login'));
 $('#registerBtn').addEventListener('click', () => openAuth('register'));
 $('#authClose').addEventListener('click', closeAuth);
 $('#authCountry').addEventListener('change', e => {
-  $('#authPrefix').textContent = e.target.value;
-  if (authMode === 'register') $('#authPhone').placeholder = COUNTRY_HINT[e.target.value] || '24 123 4567';
+  countryTouched = true;
+  applyCountry(e.target.value);
 });
 $('#forgotLink').addEventListener('click', e => {
   e.preventDefault();
