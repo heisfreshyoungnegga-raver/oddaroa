@@ -342,17 +342,6 @@ function popularHTML() {
     '<button class="chip' + (state.date === 'Today' && !state.pop ? ' on' : '') + '" data-chip="date" data-val="Today">Today\'s Football</button>' +
     leagueChips + '</div>';
 }
-// Instant join (idea borrowed from GoalsVault, 2026-11-04): a phone
-// number is all it takes to start — the full register form opens with
-// the number already filled in. Signed-out visitors on Home only.
-function joinHTML() {
-  if (state.user) return '';
-  return '<section class="join-card"><h3>Instant Registration</h3>' +
-    '<form id="joinForm" class="join-flex"><span class="phoneflex join-phone"><span class="prefix">+233</span>' +
-    '<input type="tel" id="joinPhone" placeholder="Mobile number" autocomplete="tel"></span>' +
-    '<button class="btn gold" type="submit">Join Now</button></form>' +
-    '<p class="muted">Make a deposit and start betting!</p></section>';
-}
 // Home quick-access tiles (the icon row under the hero): each tile is a
 // shortcut into a real view or filter. Icons are small inline SVGs drawn
 // for Oddaroa; the Aviator tile carries the same HOT tag as Games.
@@ -816,7 +805,7 @@ function viewHTML() {
     case 'virtual':
       return filtersHTML() + matchListHTML();
     default:
-      return heroHTML() + joinHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
+      return heroHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
   }
 }
 function render() {
@@ -1214,11 +1203,6 @@ document.addEventListener('submit', async e => {
       startMomoPoll();
       render();
     } catch (err) { toast(err.detail || 'That code was not accepted — check it and try again.'); }
-  } else if (id === 'joinForm') {
-    e.preventDefault();
-    const num = ($('#joinPhone').value || '').trim();
-    openAuth('register');
-    if (num) $('#authPhone').value = num;
   } else if (id === 'withdrawForm') {
     e.preventDefault();
     try {
