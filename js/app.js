@@ -837,6 +837,7 @@ function render() {
   document.querySelectorAll('.bn-item').forEach(b =>
     b.classList.toggle('on', b.dataset.nav === state.view));
   if ($('#mmFeeLine')) syncMomoFee();
+  syncSiteCountry();
 }
 
 /* ---------- betslip ---------- */
@@ -1433,19 +1434,15 @@ $('#authForm').addEventListener('submit', async e => {
 function initSiteCountry() {
   const sel = $('#siteCountry');
   if (!sel) return;
-  const stored = localStorage.getItem('od_country');
-  if (stored) sel.value = stored;
-  const label = $('#countryLabel');
-  const sync = () => { if (label) label.textContent = sel.options[sel.selectedIndex].text; };
-  sync();
   sel.addEventListener('change', () => {
     localStorage.setItem('od_country', sel.value);
     tickClock();
     countryTouched = true;
     applyCountry(sel.value);
     state.joinCountry = sel.value;
-    sync();
+    syncSiteCountry();
   });
+  syncSiteCountry();
 }
 initSiteCountry();
 // Header clock: GoalsVault shows a static "GMT+00:00" label at the
@@ -1454,18 +1451,48 @@ initSiteCountry();
 // five countries keeps its own offset, none of them observe DST:
 // Ghana GMT+0, Nigeria GMT+1, Kenya/Uganda/Tanzania GMT+3.
 const COUNTRY_TZ = {
-  '+233': { tz: 'Africa/Accra', gmt: 'GMT+00:00' },
-  '+234': { tz: 'Africa/Lagos', gmt: 'GMT+01:00' },
-  '+254': { tz: 'Africa/Nairobi', gmt: 'GMT+03:00' },
-  '+256': { tz: 'Africa/Kampala', gmt: 'GMT+03:00' },
-  '+255': { tz: 'Africa/Dar_es_Salaam', gmt: 'GMT+03:00' },
+  '+233': { name: 'Ghana', tz: 'Africa/Accra', gmt: 'GMT+00:00' },
+  '+234': { name: 'Nigeria', tz: 'Africa/Lagos', gmt: 'GMT+01:00' },
+  '+254': { name: 'Kenya', tz: 'Africa/Nairobi', gmt: 'GMT+03:00' },
+  '+256': { name: 'Uganda', tz: 'Africa/Kampala', gmt: 'GMT+03:00' },
+  '+255': { name: 'Tanzania', tz: 'Africa/Dar_es_Salaam', gmt: 'GMT+03:00' },
 };
+// The country the site is currently "in": a signed-in user's
+// account country (from their phone's dial code) beats everything;
+// otherwise the stored header choice; otherwise Ghana.
+function effectiveCountryCode() {
+  if (state.user && state.user.phone) {
+    const hit = Object.keys(COUNTRY_TZ).find(c => state.user.phone.startsWith(c));
+    if (hit) return hit;
+  }
+  return localStorage.getItem('od_country') || '+233';
+}
+// Header country display rules (Prince, 2026-11-04): signed-out
+// visitors can see and change the selector, and until they choose
+// it reads "Country" (not a country name). Once signed in, the
+// header shows the ACCOUNT's country and it cannot be changed.
+function syncSiteCountry() {
+  const sel = $('#siteCountry');
+  const label = $('#countryLabel');
+  if (!sel || !label) return;
+  if (state.user) {
+    sel.disabled = true;
+    label.textContent = COUNTRY_TZ[effectiveCountryCode()].name;
+  } else {
+    sel.disabled = false;
+    const stored = localStorage.getItem('od_country');
+    if (stored) {
+      sel.value = stored;
+      label.textContent = COUNTRY_TZ[stored] ? COUNTRY_TZ[stored].name : 'Country';
+    } else {
+      label.textContent = 'Country';
+    }
+  }
+}
 function tickClock() {
   const el = $('#tzClock');
   if (!el) return;
-  const sel = $('#siteCountry');
-  const code = (sel && sel.value) || localStorage.getItem('od_country') || '+233';
-  const info = COUNTRY_TZ[code] || COUNTRY_TZ['+233'];
+  const info = COUNTRY_TZ[effectiveCountryCode()] || COUNTRY_TZ['+233'];
   el.textContent = info.gmt + ' \u00B7 ' + new Date().toLocaleTimeString('en-GB', { timeZone: info.tz });
 }
 tickClock();
