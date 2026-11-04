@@ -16,6 +16,7 @@ const state = {
   query: '',
   filtersOpen: false,
   matchId: null, prevView: 'home',
+  fullBooks: {}, // matchId -> the match's full market book (fetched on demand)
   slip: new Map(), // key -> {matchId, matchLabel, league, market, pick, odd}
   user: null,
   token: localStorage.getItem('od_token') || '',
@@ -119,7 +120,7 @@ function normMatch(m) {
   return {
     id: m.id, league: m.league, home: m.home_team, away: m.away_team,
     status: m.status, minute: m.minute, sh: m.score_home, sa: m.score_away,
-    starts_at: m.starts_at, odds: m.odds || {},
+    starts_at: m.starts_at, odds: m.odds || {}, has_full: !!m.has_full,
     home_logo: m.home_logo || '', away_logo: m.away_logo || '',
   };
 }
@@ -136,6 +137,21 @@ async function loadMatches() {
   }
   state.lastSync = new Date();
   if (['home', 'live', 'sports', 'virtual', 'match'].includes(state.view)) render();
+}
+// The full market book for one match is too heavy for the list
+// payload, so the details page pulls it on open (matches whose row
+// carries has_full). Cached per match for the session.
+async function loadMatchFull(id) {
+  if (!id || state.fullBooks[id]) return;
+  const m = state.matches.find(x => x.id === id);
+  if (m && !m.has_full) return;
+  try {
+    const data = await api('/match?id=' + encodeURIComponent(id));
+    if (data.match && Array.isArray(data.match.odds_full)) {
+      state.fullBooks[id] = data.match.odds_full;
+      if (state.view === 'match' && state.matchId === id) render();
+    }
+  } catch (e) { /* the classic markets still render without the book */ }
 }
 function leagues() {
   return ['All', ...new Set(state.matches.map(m => m.league))];
@@ -255,6 +271,21 @@ function matchDetailsHTML() {
       const sel = state.slip.has(slipKey(m.id, market, o.label)) ? ' sel' : '';
       return '<button class="odd' + sel + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"><small>' + esc(o.label) + '</small>' + o.odd.toFixed(2) + '</button>';
     }).join('') + '</div></div>';
+  }
+  // Full market book: every remaining market the bookmaker offers
+  // for this match, in the same section style. The book arrives
+  // on demand via loadMatchFull; until then the classic sections
+  // above stand on their own.
+  const book = state.fullBooks[m.id];
+  if (Array.isArray(book)) {
+    for (const b of book) {
+      if (!b.values || !b.values.length) continue;
+      html += '<div class="card md-sec"><h3>' + esc(b.name) + '</h3><div class="md-odds">' + b.values.map(v => {
+        const label = String(v.value);
+        const sel = state.slip.has(slipKey(m.id, b.name, label)) ? ' sel' : '';
+        return '<button class="odd' + sel + '" data-odd="' + m.id + '" data-market="' + esc(b.name) + '" data-pick="' + esc(label) + '"><small>' + esc(label) + '</small>' + Number(v.odd).toFixed(2) + '</button>';
+      }).join('') + '</div></div>';
+    }
   }
   return html;
 }
@@ -1122,6 +1153,7 @@ document.addEventListener('click', e => {
     state.prevView = ['home', 'live', 'sports', 'virtual'].includes(state.view) ? state.view : 'home';
     state.matchId = mrow.dataset.match;
     state.view = 'match';
+    loadMatchFull(state.matchId);
     render();
     window.scrollTo(0, 0);
     return;

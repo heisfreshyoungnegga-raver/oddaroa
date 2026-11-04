@@ -12,6 +12,7 @@ const PORT = process.env.PORT || 8080;
 // API routes: exact files first, then the /api/<group>/<action> routers.
 const exactRoutes = {
   '/api/matches': require('./api/matches'),
+  '/api/match': require('./api/match'),
   '/api/support': require('./api/support'),
   '/api/wallet': require('./api/wallet'),
   '/api/payments/shinobipay-webhook': require('./api/payments/shinobipay-webhook'),

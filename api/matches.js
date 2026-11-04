@@ -80,7 +80,7 @@ module.exports = guard(async (req, res) => {
   await maybeRefreshLive().catch(() => {});
   const rows = await sql(
     `select id, league, home_team, away_team, starts_at, status, minute,
-            score_home, score_away, odds, home_logo, away_logo, external_ref, goal_events
+            score_home, score_away, odds, odds_full, home_logo, away_logo, external_ref, goal_events
      from matches
      where status in ('live', 'upcoming')
      order by (status = 'live') desc, starts_at asc
@@ -95,9 +95,9 @@ module.exports = guard(async (req, res) => {
     if (isCustomMatch(m)) {
       const st = customMatchState(m, now);
       if (st.status === 'finished' && now - new Date(m.starts_at) > (95 + 180) * 60000) continue;
-      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), status: st.status, minute: st.minute, score_home: st.score_home, score_away: st.score_away, goal_events: undefined } });
+      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), status: st.status, minute: st.minute, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.odds_full, odds_full: undefined } });
     } else {
-      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), goal_events: undefined } });
+      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.odds_full, odds_full: undefined } });
     }
   }
   // De-duplicate across feeds: an ESPN row that is the same real

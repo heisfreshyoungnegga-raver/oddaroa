@@ -181,6 +181,133 @@ function pickWon(market, pick, home, away) {
   }
 }
 
+// Settlement for the API-Football full-book markets. Every market
+// here is a pure function of the full-time score (H, A) and, for the
+// half markets, the half-time score (hH, hA); second-half goals are
+// the difference. Returns true/false, or null when the pick cannot
+// be decided yet (a half market whose half-time score is unknown,
+// or a pick format this evaluator does not recognise — those stay
+// pending rather than being guessed at).
+function afPickWon(market, pick, H, A, hH, hA) {
+  const p = String(pick);
+  const res = (h, a) => (h > a ? 'Home' : h < a ? 'Away' : 'Draw');
+  const ou = (total, pk) => {
+    const m = /^(Over|Under) ([\d.]+)$/.exec(pk);
+    if (!m) return null;
+    const line = parseFloat(m[2]);
+    return m[1] === 'Over' ? total > line : total < line;
+  };
+  const exactGoals = (n, pk) => {
+    if (/^\d+$/.test(pk)) return n === Number(pk);
+    const more = /^more (\d+)$/.exec(pk) || /^(\d+)\+$/.exec(pk);
+    if (more) return n >= Number(more[1]);
+    return null;
+  };
+  const handicap = (h, a, pk) => {
+    const m = /^(Home|Draw|Away) ([+-]?[\d.]+)$/.exec(pk);
+    if (!m) return null;
+    return res(h + parseFloat(m[2]), a) === m[1];
+  };
+  const needHt = [hH, hA].some(v => v === null || v === undefined);
+  const H2 = needHt ? null : { h: H - hH, a: A - hA };
+  switch (market) {
+    case 'Match Winner': return res(H, A) === p;
+    case 'Double Chance':
+      return p === 'Home/Draw' ? H >= A : p === 'Home/Away' ? H !== A : p === 'Draw/Away' ? A >= H : null;
+    case 'Both Teams Score': case 'Both Teams To Score':
+      return p === 'Yes' ? (H > 0 && A > 0) : p === 'No' ? (H === 0 || A === 0) : null;
+    case 'Goals Over/Under': return ou(H + A, p);
+    case 'Clean Sheet - Home': return p === 'Yes' ? A === 0 : p === 'No' ? A > 0 : null;
+    case 'Clean Sheet - Away': return p === 'Yes' ? H === 0 : p === 'No' ? H > 0 : null;
+    case 'Handicap Result': return handicap(H, A, p);
+    case 'Exact Score': {
+      const m = /^(\d+):(\d+)$/.exec(p);
+      return m ? (H === Number(m[1]) && A === Number(m[2])) : null;
+    }
+    case 'Total - Home': return ou(H, p);
+    case 'Total - Away': return ou(A, p);
+    case 'Win To Nil':
+      return p === 'Home' ? (H > A && A === 0) : p === 'Away' ? (A > H && H === 0) : null;
+    case 'Odd/Even': return p === 'Odd' ? (H + A) % 2 === 1 : p === 'Even' ? (H + A) % 2 === 0 : null;
+    case 'Home Odd/Even': return p === 'Odd' ? H % 2 === 1 : p === 'Even' ? H % 2 === 0 : null;
+    case 'Away Odd/Even': return p === 'Odd' ? A % 2 === 1 : p === 'Even' ? A % 2 === 0 : null;
+    case 'Exact Goals Number': return exactGoals(H + A, p);
+    case 'Home Team Exact Goals Number': return exactGoals(H, p);
+    case 'Away Team Exact Goals Number': return exactGoals(A, p);
+    case 'Winning Margin': {
+      if (p === 'Score Draw') return H === A && H > 0;
+      if (p === 'Draw') return H === 0 && A === 0;
+      const m = /^([12]) by (\d+)(\+?)$/.exec(p);
+      if (!m) return null;
+      const margin = m[1] === '1' ? H - A : A - H;
+      return m[3] === '+' ? margin >= Number(m[2]) : margin === Number(m[2]);
+    }
+    case 'Results/Both Teams Score': {
+      const m = /^(Home|Draw|Away)\/(Yes|No)$/.exec(p);
+      if (!m) return null;
+      const btts = H > 0 && A > 0;
+      return res(H, A) === m[1] && (m[2] === 'Yes' ? btts : !btts);
+    }
+    case 'Result/Total Goals': {
+      const m = /^(Home|Draw|Away)\/(Over|Under) ([\d.]+)$/.exec(p);
+      if (!m) return null;
+      return res(H, A) === m[1] && ou(H + A, m[2] + ' ' + m[3]);
+    }
+    case 'Total Goals/Both Teams To Score': {
+      const m = /^([ou])\/(yes|no) ([\d.]+)$/.exec(p);
+      if (!m) return null;
+      const over = H + A > parseFloat(m[3]);
+      const btts = H > 0 && A > 0;
+      return (m[1] === 'o' ? over : !over) && (m[2] === 'yes' ? btts : !btts);
+    }
+    case 'Number Of Goals In Match':
+      return p === 'Under 2 goals' ? H + A <= 1
+        : p === '2 or 3 goals' ? (H + A === 2 || H + A === 3)
+        : p === 'Over 3 goals' ? H + A >= 4 : null;
+  }
+  // Half markets: undecidable until the half-time score is known.
+  if (needHt) return null;
+  const htTotal = hH + hA, shTotal = H2.h + H2.a;
+  switch (market) {
+    case 'First Half Winner': return res(hH, hA) === p;
+    case 'Second Half Winner': return res(H2.h, H2.a) === p;
+    case 'Goals Over/Under First Half': return ou(htTotal, p);
+    case 'Goals Over/Under - Second Half': return ou(shTotal, p);
+    case 'HT/FT Double': {
+      const parts = p.split('/');
+      return parts.length === 2 && res(hH, hA) === parts[0] && res(H, A) === parts[1];
+    }
+    case 'Handicap Result - First Half': return handicap(hH, hA, p);
+    case 'Correct Score - First Half': {
+      const m = /^(\d+):(\d+)$/.exec(p);
+      return m ? (hH === Number(m[1]) && hA === Number(m[2])) : null;
+    }
+    case 'Double Chance - First Half':
+      return p === 'Home/Draw' ? hH >= hA : p === 'Home/Away' ? hH !== hA : p === 'Draw/Away' ? hA >= hH : null;
+    case 'Both Teams Score - First Half':
+      return p === 'Yes' ? (hH > 0 && hA > 0) : p === 'No' ? (hH === 0 || hA === 0) : null;
+    case 'Both Teams To Score - Second Half':
+      return p === 'Yes' ? (H2.h > 0 && H2.a > 0) : p === 'No' ? (H2.h === 0 || H2.a === 0) : null;
+    case 'Win Both Halves':
+      return p === 'Home' ? (hH > hA && H2.h > H2.a) : p === 'Away' ? (hA > hH && H2.a > H2.h) : null;
+    case 'To Win Either Half':
+      return p === 'Home' ? (hH > hA || H2.h > H2.a) : p === 'Away' ? (hA > hH || H2.a > H2.h) : null;
+    case 'To Score In Both Halves By Teams':
+      return p === 'Home' ? (hH > 0 && H2.h > 0) : p === 'Away' ? (hA > 0 && H2.a > 0) : null;
+    case 'Odd/Even - First Half': return p === 'Odd' ? htTotal % 2 === 1 : p === 'Even' ? htTotal % 2 === 0 : null;
+    case 'Odd/Even - Second Half': return p === 'Odd' ? shTotal % 2 === 1 : p === 'Even' ? shTotal % 2 === 0 : null;
+    case 'Exact Goals Number - First Half': return exactGoals(htTotal, p);
+    case 'Second Half Exact Goals Number': return exactGoals(shTotal, p);
+    case 'Highest Scoring Half':
+      return p === '1st Half' ? htTotal > shTotal : p === '2nd Half' ? shTotal > htTotal : p === 'Draw' ? htTotal === shTotal : null;
+    case 'Home Highest Scoring Half':
+      return p === '1st Half' ? hH > H2.h : p === '2nd Half' ? H2.h > hH : p === 'Draw' ? hH === H2.h : null;
+    case 'Away Highest Scoring Half':
+      return p === '1st Half' ? hA > H2.a : p === '2nd Half' ? H2.a > hA : p === 'Draw' ? hA === H2.a : null;
+    default: return null;
+  }
+}
+
 // ---- ShinobiPay (direct MoMo push deposits) --------------------------
 // The secret key lives ONLY in server env (SHINOBIPAY_SECRET_KEY); it is
 // never sent to the browser and never logged. The webhook signing secret
@@ -470,4 +597,4 @@ async function ensureInviteCode(userId) {
   return null;
 }
 
-module.exports = { sql, hashPassword, verifyPassword, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode };
+module.exports = { sql, hashPassword, verifyPassword, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode };

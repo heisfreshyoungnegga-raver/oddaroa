@@ -14,7 +14,7 @@ module.exports = guard(async (req, res) => {
   if (!(stake > 0)) return send(res, 400, { error: 'invalid_stake' });
 
   const ids = [...new Set(selections.map(s => String(s.match_id)))];
-  const matchRows = await sql('select id, status, odds, starts_at, external_ref, goal_events, score_home, score_away from matches where id = any($1::uuid[])', [ids]);
+  const matchRows = await sql('select id, status, odds, odds_full, starts_at, external_ref, goal_events, score_home, score_away from matches where id = any($1::uuid[])', [ids]);
   const byId = new Map(matchRows.map(m => [m.id, m]));
 
   let totalOdds = 1;
@@ -30,8 +30,15 @@ module.exports = guard(async (req, res) => {
     if (seenMatches.has(m.id)) return send(res, 400, { error: 'one_selection_per_match' });
     seenMatches.add(m.id);
     const key = keyFor(s.market, s.pick);
-    const odds = key ? Number(fillOdds(m.odds)[key]) : NaN;
-    if (!key || !(odds > 1)) return send(res, 400, { error: 'market_unavailable' });
+    let odds = key ? Number(fillOdds(m.odds)[key]) : NaN;
+    if (!(odds > 1)) {
+      // Full-book market (API-Football): the price lives in the
+      // stored book under the market's real name, not the flat map.
+      const book = Array.isArray(m.odds_full) ? m.odds_full.find(b => b.name === s.market) : null;
+      const v = book ? book.values.find(x => String(x.value) === String(s.pick)) : null;
+      odds = v ? Number(v.odd) : NaN;
+    }
+    if (!(odds > 1)) return send(res, 400, { error: 'market_unavailable' });
     totalOdds *= odds;
     clean.push({ match_id: m.id, market: s.market, pick: s.pick, odds });
   }

@@ -88,22 +88,28 @@ function mapFixture(fx, anyLeague) {
     minute: status === 'live' ? (fx.fixture.status.elapsed || null) : null,
     score_home: fx.goals.home || 0,
     score_away: fx.goals.away || 0,
+    // Half-time score feeds the half-market settlements. It stays
+    // null until the match reaches half time.
+    score_home_ht: fx.score && fx.score.halftime ? fx.score.halftime.home : null,
+    score_away_ht: fx.score && fx.score.halftime ? fx.score.halftime.away : null,
     odds: {},
   };
 }
 
 async function upsertMatch(m) {
   await sql(
-    `insert into matches (league, home_team, away_team, starts_at, status, minute, score_home, score_away, odds, external_ref, home_logo, away_logo)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12)
+    `insert into matches (league, home_team, away_team, starts_at, status, minute, score_home, score_away, odds, external_ref, home_logo, away_logo, score_home_ht, score_away_ht)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $13, $14)
      on conflict (external_ref) where external_ref is not null
      do update set league = excluded.league, home_team = excluded.home_team, away_team = excluded.away_team,
        starts_at = excluded.starts_at, status = excluded.status, minute = excluded.minute,
        score_home = excluded.score_home, score_away = excluded.score_away,
        home_logo = excluded.home_logo, away_logo = excluded.away_logo,
+       score_home_ht = coalesce(excluded.score_home_ht, matches.score_home_ht),
+       score_away_ht = coalesce(excluded.score_away_ht, matches.score_away_ht),
        odds = case when excluded.odds::text = '{}' then matches.odds else excluded.odds end`,
     [m.league, m.home_team, m.away_team, m.starts_at, m.status, m.minute, m.score_home, m.score_away,
-     JSON.stringify(m.odds), m.external_ref, m.home_logo, m.away_logo]
+     JSON.stringify(m.odds), m.external_ref, m.home_logo, m.away_logo, m.score_home_ht, m.score_away_ht]
   );
 }
 
@@ -116,11 +122,38 @@ async function upsertMatch(m) {
 // "Both Teams Score", not "Both Teams To Score". Names stay as a
 // fallback for feeds that omit ids.
 const BET = { WINNER: 1, OU: 5, BTTS: 8, DC: 12 };
-function oddsFromAf(bookmakers) {
-  if (!Array.isArray(bookmakers) || !bookmakers.length) return {};
+// The full-book markets the site offers beyond the classic four.
+// Every one of these settles from the full-time and half-time
+// scores alone (see afPickWon in api/_lib.js). Deliberately absent:
+// quarter-line Asian handicaps and Goal Line (split payouts the
+// engine cannot express), Draw No Bet (push refunds), and the
+// stat, event and player markets (corners, cards, scorers, shots),
+// which a score feed cannot settle.
+const FULL_IDS = new Set([3, 6, 7, 9, 10, 11, 13, 16, 17, 18, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+  31, 32, 34, 35, 36, 38, 39, 40, 41, 42, 46, 47, 48, 49, 60, 63, 192, 193, 349]);
+function pickBookmaker(bookmakers) {
+  if (!Array.isArray(bookmakers) || !bookmakers.length) return null;
   const usable = bookmakers.filter(b => (b.bets || []).some(x => x.id === BET.WINNER || x.name === 'Match Winner'));
-  if (!usable.length) return {};
-  const bm = usable.find(b => b.id === 8) || usable[0];
+  if (!usable.length) return null;
+  return usable.find(b => b.id === 8) || usable[0];
+}
+// The chosen bookmaker's complete offer for the whitelisted
+// markets: [{id, name, values: [{value, odd}]}], values as strings.
+function fullFromAf(bm) {
+  if (!bm) return [];
+  const full = [];
+  for (const bet of bm.bets || []) {
+    if (!FULL_IDS.has(bet.id)) continue;
+    const values = (bet.values || [])
+      .map(v => ({ value: String(v.value), odd: Math.round(Number(v.odd) * 100) / 100 }))
+      .filter(v => Number.isFinite(v.odd) && v.odd > 1);
+    if (values.length) full.push({ id: bet.id, name: bet.name, values });
+  }
+  return full;
+}
+function oddsFromAf(bookmakers) {
+  const bm = pickBookmaker(bookmakers);
+  if (!bm) return {};
   const odds = {};
   const put = (key, raw) => {
     const n = Number(raw);
@@ -196,14 +229,15 @@ async function refreshAf() {
     }
   } catch (e) { /* live sweep is best-effort; the date sweep already ran */ }
   // Odds pass: shown matches (live, or kicking off within 48h) that
-  // still have no 1X2 line get one odds call each, live first. The
-  // API publishes odds days ahead, so tomorrow's matches price as
-  // soon as they are imported rather than at the last minute.
+  // still lack a 1X2 line OR their full market book get one odds
+  // call each, live first. The same response carries both the flat
+  // classic markets and the bookmaker's whole whitelisted book, so
+  // the full coverage costs no extra quota.
   const needy = await sql(
-    `select id, external_ref, odds from matches
+    `select id, external_ref, odds, odds_full from matches
      where external_ref like 'af:%' and status in ('live', 'upcoming')
        and starts_at < now() + interval '48 hours'
-       and not (odds ? 'o1')
+       and (not (odds ? 'o1') or odds_full is null)
      order by (status = 'live') desc, starts_at asc
      limit $1`,
     [ODDS_CAP_PER_REFRESH]
@@ -213,10 +247,17 @@ async function refreshAf() {
     const fixtureId = row.external_ref.slice(3);
     let resp = [];
     try { resp = await afFetch('/odds?fixture=' + fixtureId); } catch (e) { continue; }
-    const fresh = oddsFromAf(resp[0] && resp[0].bookmakers);
-    if (!fresh.o1) continue;
+    const bookmakers = resp[0] && resp[0].bookmakers;
+    const bm = pickBookmaker(bookmakers);
+    if (!bm) continue;
+    const fresh = oddsFromAf(bookmakers);
+    const full = fullFromAf(bm);
+    if (!fresh.o1 && !full.length) continue;
     const merged = { ...(row.odds || {}), ...fresh };
-    await sql('update matches set odds = $1::jsonb where id = $2', [JSON.stringify(merged), row.id]);
+    await sql(
+      'update matches set odds = $1::jsonb, odds_full = coalesce($2::jsonb, odds_full) where id = $3',
+      [JSON.stringify(merged), full.length ? JSON.stringify(full) : null, row.id]
+    );
     priced++;
   }
   return { imported, priced, liveImported };
@@ -238,4 +279,4 @@ async function maybeRefreshAf() {
   return true;
 }
 
-module.exports = { afEnabled, maybeRefreshAf, refreshAf, mapFixture, oddsFromAf, LEAGUES };
+module.exports = { afEnabled, maybeRefreshAf, refreshAf, mapFixture, oddsFromAf, fullFromAf, pickBookmaker, FULL_IDS, LEAGUES };

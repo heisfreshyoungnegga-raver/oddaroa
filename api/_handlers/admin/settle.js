@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAdmin, pickWon, isCustomMatch, customMatchState } = require('../../_lib');
+const { sql, readBody, send, guard, requireAdmin, pickWon, afPickWon, keyFor, isCustomMatch, customMatchState } = require('../../_lib');
 
 // Settle a finished match: score every pending selection on it, then
 // settle any bet whose selections are now all decided. A fully-won bet
@@ -24,12 +24,25 @@ module.exports = guard(async (req, res) => {
 
   await sql("update matches set status = 'finished', score_home = $2, score_away = $3 where id = $1", [match_id, home, away]);
 
+  // Half-time score decides the full-book half markets; without it
+  // those selections stay pending instead of being guessed.
+  const htRow = await sql('select score_home_ht, score_away_ht from matches where id = $1', [match_id]);
+  const htH = htRow.length ? htRow[0].score_home_ht : null;
+  const htA = htRow.length ? htRow[0].score_away_ht : null;
+
   const sels = await sql(
     "select id, bet_id, market, pick from bet_selections where match_id = $1 and result = 'pending'",
     [match_id]
   );
   for (const s of sels) {
-    await sql('update bet_selections set result = $2 where id = $1', [s.id, pickWon(s.market, s.pick, home, away) ? 'won' : 'lost']);
+    let won;
+    if (keyFor(s.market, s.pick)) {
+      won = pickWon(s.market, s.pick, home, away);
+    } else {
+      won = afPickWon(s.market, s.pick, home, away, htH, htA);
+      if (won === null) continue; // undecidable yet — leave pending
+    }
+    await sql('update bet_selections set result = $2 where id = $1', [s.id, won ? 'won' : 'lost']);
   }
 
   const affected = [...new Set(sels.map(s => s.bet_id))];
