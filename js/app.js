@@ -1440,6 +1440,7 @@ function initSiteCountry() {
   sync();
   sel.addEventListener('change', () => {
     localStorage.setItem('od_country', sel.value);
+    tickClock();
     countryTouched = true;
     applyCountry(sel.value);
     state.joinCountry = sel.value;
@@ -1448,11 +1449,24 @@ function initSiteCountry() {
 }
 initSiteCountry();
 // Header clock: GoalsVault shows a static "GMT+00:00" label at the
-// end of its nav row; ours is a real ticking clock (Accra is GMT+0
-// all year, so the label stays honest).
+// end of its nav row; ours is a real ticking clock that follows the
+// country selected in the header (Prince, 2026-11-04) — each of the
+// five countries keeps its own offset, none of them observe DST:
+// Ghana GMT+0, Nigeria GMT+1, Kenya/Uganda/Tanzania GMT+3.
+const COUNTRY_TZ = {
+  '+233': { tz: 'Africa/Accra', gmt: 'GMT+00:00' },
+  '+234': { tz: 'Africa/Lagos', gmt: 'GMT+01:00' },
+  '+254': { tz: 'Africa/Nairobi', gmt: 'GMT+03:00' },
+  '+256': { tz: 'Africa/Kampala', gmt: 'GMT+03:00' },
+  '+255': { tz: 'Africa/Dar_es_Salaam', gmt: 'GMT+03:00' },
+};
 function tickClock() {
   const el = $('#tzClock');
-  if (el) el.textContent = 'GMT+00:00 \u00B7 ' + new Date().toLocaleTimeString('en-GB', { timeZone: 'Africa/Accra' });
+  if (!el) return;
+  const sel = $('#siteCountry');
+  const code = (sel && sel.value) || localStorage.getItem('od_country') || '+233';
+  const info = COUNTRY_TZ[code] || COUNTRY_TZ['+233'];
+  el.textContent = info.gmt + ' \u00B7 ' + new Date().toLocaleTimeString('en-GB', { timeZone: info.tz });
 }
 tickClock();
 setInterval(tickClock, 1000);
