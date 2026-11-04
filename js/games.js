@@ -292,10 +292,13 @@
           if (!S) return;
           const f = Math.min(1, (now - t0) / 520);
           draw(crashMs, crash, true, {
-            head: { x: base.x + f * 230, y: base.y - f * 92 },
-            alpha: 1 - f * 0.75,
+            head: { x: base.x + f * 300, y: base.y - f * 120 },
+            alpha: 1 - f,
           });
           if (f < 1) S.raf = requestAnimationFrame(escape);
+          // Leave a clean sky behind: without this the final frame
+          // froze a faint ghost plane mid-sky after low crashes.
+          else draw(crashMs, crash, true, { alpha: 0 });
         };
         S.raf = requestAnimationFrame(escape);
       }
