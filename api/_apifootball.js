@@ -54,13 +54,23 @@ function leagueLabel(lg) {
   if (lg.country === 'Ghana' && /premier/i.test(lg.name || '')) return 'Ghana Premier League';
   return null;
 }
+// Permissive label for the live sweep: any league in the world gets
+// a readable "Country League" name (Prince, 2026-11-04: every live
+// match belongs on the site, not just the core leagues).
+function leagueLabelAny(lg) {
+  const strict = leagueLabel(lg);
+  if (strict) return strict;
+  if (!lg || !lg.name) return null;
+  if (lg.country && lg.country !== 'World') return lg.country + ' ' + lg.name;
+  return lg.name;
+}
 
 const LIVE_CODES = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
 const DONE_CODES = ['FT', 'AET', 'PEN'];
 const SKIP_CODES = ['PST', 'CANC', 'ABD', 'AWD', 'WO'];
 
-function mapFixture(fx) {
-  const label = leagueLabel(fx.league);
+function mapFixture(fx, anyLeague) {
+  const label = anyLeague ? leagueLabelAny(fx.league) : leagueLabel(fx.league);
   if (!label) return null;
   const st = fx.fixture && fx.fixture.status && fx.fixture.status.short;
   if (SKIP_CODES.includes(st)) return null;
@@ -154,6 +164,37 @@ async function refreshAf() {
       imported++;
     }
   }
+  // Live sweep: EVERY match in play anywhere in the world joins the
+  // list while it is live, whatever its league (one call). Rows that
+  // were live but have dropped out of the live feed are reconciled
+  // with one batched id lookup so they finish properly instead of
+  // sitting at "live" forever (their bets need the final score).
+  let liveImported = 0;
+  try {
+    const live = await afFetch('/fixtures?live=all');
+    const liveIds = new Set();
+    for (const fx of live) {
+      if (fx.fixture && fx.fixture.id) liveIds.add('af:' + fx.fixture.id);
+      const m = mapFixture(fx, true);
+      if (!m) continue;
+      await upsertMatch(m);
+      liveImported++;
+    }
+    const stale = await sql(
+      `select external_ref from matches
+       where external_ref like 'af:%' and status = 'live'
+         and starts_at < now() - interval '10 minutes'
+       limit 20`
+    );
+    const missing = stale.filter(r => !liveIds.has(r.external_ref)).map(r => r.external_ref.slice(3));
+    if (missing.length) {
+      const final = await afFetch('/fixtures?ids=' + missing.join('-'));
+      for (const fx of final) {
+        const m = mapFixture(fx, true);
+        if (m) await upsertMatch(m);
+      }
+    }
+  } catch (e) { /* live sweep is best-effort; the date sweep already ran */ }
   // Odds pass: shown matches (live, or kicking off within 48h) that
   // still have no 1X2 line get one odds call each, live first. The
   // API publishes odds days ahead, so tomorrow's matches price as
@@ -178,7 +219,7 @@ async function refreshAf() {
     await sql('update matches set odds = $1::jsonb where id = $2', [JSON.stringify(merged), row.id]);
     priced++;
   }
-  return { imported, priced };
+  return { imported, priced, liveImported };
 }
 
 // Same anti-stampede gate as the ESPN refresh, separate clock.
