@@ -847,7 +847,8 @@ function syncAuth() {
   const phoneLabel = $('#authPhoneLabel');
   if (phoneLabel) phoneLabel.textContent = login ? 'Mobile number or email' : 'Mobile number';
   const phoneInput = $('#authPhone');
-  if (phoneInput) phoneInput.placeholder = login ? 'Mobile Number' : (COUNTRY_HINT[$('#authPrefix').textContent.trim()] || '24 123 4567');
+  if (phoneInput) phoneInput.placeholder = login ? 'Mobile number or email' : (COUNTRY_HINT[$('#authPrefix').textContent.trim()] || '24 123 4567');
+  syncLoginPrefix();
   $('#authAlt').innerHTML = login
     ? 'Need an account? <a href="#" id="authAltLink">Register</a>'
     : 'Already registered? <a href="#" id="authAltLink">Login</a>';
@@ -858,6 +859,17 @@ function syncAuth() {
   });
 }
 const COUNTRY_HINT = { '+233': '24 123 4567', '+234': '803 123 4567', '+254': '712 345 678' };
+// On the login form the identifier field also accepts an email, so
+// the dial-prefix box hides itself while an email is being typed and
+// comes back for phone numbers. Register always shows the prefix.
+function syncLoginPrefix() {
+  const input = $('#authPhone');
+  const prefix = $('#authPrefix');
+  if (!input || !prefix) return;
+  const isEmail = authMode === 'login' && input.value.includes('@');
+  prefix.style.display = isEmail ? 'none' : '';
+}
+$('#authPhone').addEventListener('input', syncLoginPrefix);
 function openMenu() { $('#drawerWrap').hidden = false; }
 function closeMenu() { const w = $('#drawerWrap'); if (w) w.hidden = true; }
 function syncHeader() {
