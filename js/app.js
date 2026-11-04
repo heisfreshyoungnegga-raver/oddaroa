@@ -455,13 +455,13 @@ function statusChip(s) {
 }
 function profileHTML() {
   if (!state.user) {
-    return '<div class="profile"><h2>ME Profile</h2>' +
+    return '<div class="profile"><h2>Me</h2>' +
       '<p class="modal-sub">Log in to see your account, bets and balance.</p>' +
       '<button class="btn gold big" data-open-auth>Login</button></div>';
   }
   return '<div class="profile"><h2>' + esc(state.user.phone || state.user.email || '') + '</h2>' +
     '<div>Balance</div><div class="bal">' + money(state.user.balance_ghs) + '</div>' +
-    '<button class="prow" data-nav="bets">My Bets <span>›</span></button>' +
+    '<button class="prow" data-nav="bets">Bets <span>›</span></button>' +
     '<button class="prow" data-nav="wallet">Wallet &amp; Transactions <span>›</span></button>' +
     '<button class="prow" data-nav="verify">Verify Bet <span>›</span></button>' +
     '<button class="prow" data-nav="booking">Booking Codes <span>›</span></button>' +
@@ -506,8 +506,8 @@ function betCardHTML(b) {
     '<div class="card-row"><span>Potential win</span><b>' + money(b.potential_ghs) + '</b></div></div>';
 }
 function betsHTML() {
-  if (!state.user) return gateHTML('My Bets');
-  return '<h2>My Bets</h2>' +
+  if (!state.user) return gateHTML('Bets');
+  return '<h2>Bets</h2>' +
     (state.myBets.length ? state.myBets.map(betCardHTML).join('') : '<p class="empty">No bets yet — add odds to your slip and place your first bet.</p>');
 }
 async function loadBets() {
@@ -877,7 +877,7 @@ function syncHeader() {
   if (state.user) {
     // Header shows the account balance plus a Deposit shortcut (Prince's
     // layout, 2026-11-03 — he first asked for the number here, then chose
-    // the balance instead; the number lives in ME Profile). The button's
+    // the balance instead; the number lives in Me). The button's
     // own listener primes the wallet on the deposit section before the
     // shared nav handler switches the view.
     ha.innerHTML = '<span class="userchip">' + money(state.user.balance_ghs) + '</span>' +
