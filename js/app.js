@@ -917,6 +917,10 @@ function applyCountry(code) {
 }
 function detectCountry() {
   if (countryTouched) return;
+  // A country picked in the header selector is the user's standing
+  // preference — it beats timezone detection every time.
+  const stored = localStorage.getItem('od_country');
+  if (stored) { applyCountry(stored); return; }
   // Ghana +233 is the site's default country code on both forms
   // (Prince, 2026-11-04). Detection may move it only on an exact
   // timezone match — the browser-language guess was dropped after
@@ -1422,6 +1426,36 @@ $('#authForm').addEventListener('submit', async e => {
   }
 });
 
+// Header country selector (borrowed from GoalsVault's header — but
+// theirs is decorative; this one WORKS): the choice is stored and
+// becomes the country the sign-up/login forms and the instant-join
+// block preselect, ahead of timezone detection. Ghana by default.
+function initSiteCountry() {
+  const sel = $('#siteCountry');
+  if (!sel) return;
+  const stored = localStorage.getItem('od_country');
+  if (stored) sel.value = stored;
+  const label = $('#countryLabel');
+  const sync = () => { if (label) label.textContent = sel.options[sel.selectedIndex].text; };
+  sync();
+  sel.addEventListener('change', () => {
+    localStorage.setItem('od_country', sel.value);
+    countryTouched = true;
+    applyCountry(sel.value);
+    state.joinCountry = sel.value;
+    sync();
+  });
+}
+initSiteCountry();
+// Header clock: GoalsVault shows a static "GMT+00:00" label at the
+// end of its nav row; ours is a real ticking clock (Accra is GMT+0
+// all year, so the label stays honest).
+function tickClock() {
+  const el = $('#tzClock');
+  if (el) el.textContent = 'GMT+00:00 \u00B7 ' + new Date().toLocaleTimeString('en-GB', { timeZone: 'Africa/Accra' });
+}
+tickClock();
+setInterval(tickClock, 1000);
 // hero auto-advance
 setInterval(() => {
   if (state.view !== 'home') return;
