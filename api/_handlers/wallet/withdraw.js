@@ -30,7 +30,17 @@ module.exports = guard(async (req, res) => {
     );
   } catch (e) {
     if (String(e.dbMessage || '').includes('withdrawal locked')) {
-      return send(res, 403, { error: 'withdrawal_locked', detail: e.dbMessage });
+      // The trigger reports "withdrawal locked: X of Y required
+      // deposits completed". The client receives only how many
+      // deposits are DONE — never the required total and never the
+      // raw trigger text (Prince, 2026-11-04: the verification
+      // prompt fills a progress bar per deposit without revealing
+      // the number needed).
+      const cm = /(\d+) of (\d+)/.exec(e.dbMessage || '');
+      return send(res, 403, {
+        error: 'withdrawal_locked',
+        deposits_done: cm ? Number(cm[1]) : 0,
+      });
     }
     throw e;
   }
