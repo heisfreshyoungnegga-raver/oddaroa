@@ -921,7 +921,9 @@ function syncAuth() {
   // (Prince's ask, 2026-11-04); the register form does not.
   show('#authSub', login);
   show('#authNameRow', !login);
-  show('#authCountryRow', !login);
+  // The country selector shows on BOTH forms (Prince, 2026-11-04):
+  // every user signs up AND logs in under their own country.
+  show('#authCountryRow', true);
   show('#authEmailRow', !login);
   show('#authRefRow', !login);
   show('#forgotLink', login);
@@ -1325,7 +1327,12 @@ $('#authForm').addEventListener('submit', async e => {
   // with email alone.
   const prefix = $('#authPrefix').textContent.trim();
   const national = rawPhone.replace(/\D/g, '').replace(/^0+/, '');
-  const composedPhone = national ? prefix + national : '';
+  // A number typed in full international form (+234..., +254...)
+  // is used exactly as typed — the prefix box is never stacked on
+  // top of it (Prince, 2026-11-04: login per country).
+  const composedPhone = rawPhone.trim().startsWith('+')
+    ? '+' + rawPhone.replace(/\D/g, '')
+    : (national ? prefix + national : '');
   const inviteRegister = authMode === 'register' && !!localStorage.getItem('od_admin_invite');
   if (!password) return;
   if (authMode === 'register') {
