@@ -3,16 +3,23 @@ const { maybeRefreshLive } = require('./_espn');
 const { afEnabled, maybeRefreshAf } = require('./_apifootball');
 
 // Cross-feed duplicate detection. The two feeds spell team names
-// differently (Stade Rennais vs Rennes, Olympiacos vs Olympiakos),
-// so names are normalised hard (accents, punctuation and club
-// filler words removed) and compared by equality, containment, or a
-// small edit distance for spelling variants.
-function normTeam(s) {
+// differently (Stade Rennais vs Rennes, Olympiacos vs Olympiakos
+// Piraeus), so names are compared token by token: accents and
+// punctuation stripped, club filler words and year numbers dropped,
+// and every token of the shorter name must have a near-twin in the
+// longer one (equality, prefix, or a small edit distance for
+// spelling variants). Manchester City vs Manchester United and
+// Real Madrid vs Real Betis correctly fail, because their second
+// tokens have no near-twin. Known accepted edge: Athletic Club and
+// Atletico Madrid are near-names token-wise, but a wrong merge also
+// needs the other team to match and kickoffs within 45 minutes.
+const TEAM_FILLER = new Set(['fc', 'afc', 'cf', 'sc', 'fk', 'ac', 'as', 'club', 'de', 'the', 'stade', 'us', 'cd', 'sd', 'bk']);
+function teamTokens(s) {
   return String(s || '').toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\b(fc|afc|cf|sc|fk|ac|as|club|de|the)\b/g, ' ')
-    .replace(/\s+/g, '');
+    .split(/\s+/)
+    .filter(t => t && !/^\d+$/.test(t) && !TEAM_FILLER.has(t));
 }
 function lev(a, b) {
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
@@ -24,11 +31,16 @@ function lev(a, b) {
   }
   return dp[a.length][b.length];
 }
+function tokenSimilar(a, b) {
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
+  return Math.abs(a.length - b.length) <= 2 && lev(a, b) <= 2;
+}
 function teamSimilar(a, b) {
-  const x = normTeam(a), y = normTeam(b);
-  if (!x || !y) return false;
-  if (x === y || x.includes(y) || y.includes(x)) return true;
-  return Math.abs(x.length - y.length) <= 2 && lev(x, y) <= 2;
+  const A = teamTokens(a), B = teamTokens(b);
+  if (!A.length || !B.length) return false;
+  const [short, long] = A.length <= B.length ? [A, B] : [B, A];
+  return short.every(t => long.some(u => tokenSimilar(t, u)));
 }
 function sameMatch(p, e) {
   const dt = Math.abs(new Date(p.starts_at) - new Date(e.starts_at));
