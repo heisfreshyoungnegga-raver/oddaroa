@@ -889,8 +889,14 @@ function viewHTML() {
   }
 }
 function render() {
+  // A background re-render (the 60s match refresh, a country sync)
+  // must not blow away a game in progress: the game screens own
+  // their DOM and their server rounds. Only a real view change
+  // rebuilds.
+  if (state.view === 'game' && root.dataset.view === 'game' && root.dataset.game === state.game) return;
   if (window.OddaroaGames) OddaroaGames.destroy();
   root.dataset.view = state.view;
+  root.dataset.game = state.view === 'game' ? state.game : '';
   root.innerHTML = viewHTML();
   document.querySelectorAll('.navlink').forEach(b =>
     b.classList.toggle('active', b.dataset.nav === state.view));

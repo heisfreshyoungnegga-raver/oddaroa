@@ -208,10 +208,12 @@ function publicRound(r, extra) {
     if (r.status !== 'open') { out.crash = st.crash; out.seed = st.seed; }
     if (r.status === 'open') out.started_at = st.started_at;
   }
-  if (r.game === 'shootout' && r.status === 'open') {
+  if (r.game === 'shootout') {
     out.kicks = st.kicks || 0; out.goals = st.goals || 0;
     out.ladder = SHOOTOUT_LADDER;
-    out.cashout_value = st.goals > 0 ? money2(Number(r.stake_ghs) * SHOOTOUT_LADDER[st.goals - 1]) : 0;
+    if (r.status === 'open') {
+      out.cashout_value = st.goals > 0 ? money2(Number(r.stake_ghs) * SHOOTOUT_LADDER[st.goals - 1]) : 0;
+    }
   }
   return out;
 }

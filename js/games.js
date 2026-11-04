@@ -609,7 +609,7 @@
     ball.style.transform = 'translate(' + t.x + 'px,' + t.y + 'px) scale(.5)';
     const k = aim(keeperZone, false);
     keeper.style.transition = 'transform .5s cubic-bezier(.2,.7,.3,1)';
-    keeper.style.transform = 'translate(' + (k.x - pr.width / 2) + 'px,' + (k.y - (pr.height - 150)) + 'px) rotate(' + (keeperZone % 3 === 0 ? -28 : keeperZone % 3 === 2 ? 28 : 0) + 'deg)';
+    keeper.style.transform = 'translate(' + (k.x - keeper.offsetLeft) + 'px,' + (k.y - keeper.offsetTop) + 'px) rotate(' + (keeperZone % 3 === 0 ? -28 : keeperZone % 3 === 2 ? 28 : 0) + 'deg)';
     return new Promise(r => setTimeout(r, 620));
   }
   function resetPitch() {
@@ -658,6 +658,12 @@
       $g('#soCash').hidden = true;
       $g('#soStart').hidden = false;
       $g('#soStartBtn').textContent = 'Play Again';
+      const kicks = round.kicks || (round.result && round.result.kicks) || 0;
+      $g('#soStatus').textContent = round.status === 'won'
+        ? 'Full time: five goals from five — a perfect shootout.'
+        : round.status === 'cashed'
+          ? 'You cashed out — the shootout is over.'
+          : 'Full time: the keeper ended it on kick ' + Math.max(1, kicks) + '. Start a new shootout when ready.';
       S.round = null;
       document.querySelectorAll('.rung').forEach(r => r.classList.remove('done', 'next'));
       loadHistory('shootout');
@@ -693,7 +699,8 @@
           S.round = d.round;
           banner(d.kick.goal ? 'win' : '', d.kick.goal ? 'Goal! The ladder climbs — cash out or go again.' : '');
           paint(d.round);
-          later(resetPitch, 500);
+          // Ball and keeper stay where the kick left them — the
+          // next kick's animation resets the scene itself.
         }
       } catch (e) { toast('That kick did not register — try again'); }
       S.busy = false;
@@ -738,7 +745,8 @@
       else banner('lose', 'MISSED! It flew wide of the post. <b>' + money(d.round.stake) + '</b> gone.');
       setBalance(d.balance);
       loadHistory('penalty');
-      later(resetPitch, 1100);
+      // The ball stays in the net (or the keeper's hands) until the
+      // next kick — its animation resets the scene itself.
       S.busy = false;
     }));
   }
