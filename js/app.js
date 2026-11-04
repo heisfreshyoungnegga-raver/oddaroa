@@ -61,6 +61,9 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('on'), 3600);
 }
 function esc(s) { return String(s == null ? '' : s).replace(/</g, '&lt;'); }
+// A drawn padlock (vector), not the emoji — same icon everywhere a
+// price is locked, styled by .lock-symbol in styles.css.
+const LOCK_ICON = '<span class="lock-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" focusable="false"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><rect x="5" y="10.5" width="14" height="9" rx="2" fill="currentColor"/><circle cx="12" cy="15" r="1.7" fill="#000" opacity="0.45"/></svg></span>';
 function fmtDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' · ' +
@@ -196,7 +199,7 @@ function oddsHTML(m) {
   return '<span class="mkt">' + state.market + '</span>' + opts.map(o => {
     const sel = state.slip.has(slipKey(m.id, state.market, o.label)) ? ' sel' : '';
     return '<button class="odd' + sel + (locked ? ' locked' : '') + '" data-odd="' + m.id + '" data-pick="' + esc(o.label) + '"' + (locked ? ' disabled' : '') + '>' +
-      '<small>' + esc(o.label) + '</small>' + (locked ? '<span class="lock-symbol" aria-hidden="true">🔒</span>' : o.odd.toFixed(2)) + '</button>';
+      '<small>' + esc(o.label) + '</small>' + (locked ? '' + LOCK_ICON + '' : o.odd.toFixed(2)) + '</button>';
   }).join('');
 }
 function rowHTML(m) {
@@ -255,8 +258,8 @@ function matchDetailsHTML() {
   const locked = m.status === 'live';
   const lkCls = locked ? ' locked' : '';
   const lkDis = locked ? ' disabled' : '';
-  if (locked) html += '<div class="md-lock">🔒 Live betting is locked on this match</div>';
-  const lkPrice = (odd) => locked ? '<span class="lock-symbol" aria-hidden="true">🔒</span>' : Number(odd).toFixed(2);
+  if (locked) html += '<div class="md-lock">' + LOCK_ICON + ' Live betting is locked on this match</div>';
+  const lkPrice = (odd) => locked ? '' + LOCK_ICON + '' : Number(odd).toFixed(2);
   for (const market of MARKET_LIST) {
     const opts = marketsForMarket(m, market);
     if (!opts.length) continue;
@@ -300,12 +303,12 @@ function matchDetailsHTML() {
     // No published prices yet: keep the familiar market layout on
     // screen, with a lock symbol in every odds cell (the GoalsVault
     // treatment Prince asked for) instead of a bare match page.
-    html += '<div class="md-lock">🔒 Odds locked until prices are published</div>';
+    html += '<div class="md-lock">' + LOCK_ICON + ' Odds locked until prices are published</div>';
     for (const market of MARKET_LIST) {
       const labels = (MARKET_KEYS[market] || []).map(([label]) => label);
       if (!labels.length) continue;
       html += '<div class="card md-sec"><h3>' + esc(market) + '</h3><div class="md-odds">' + labels.map(label =>
-        '<button class="odd locked" disabled aria-label="' + esc(market + ' ' + label) + ' locked"><small>' + esc(label) + '</small><span class="lock-symbol" aria-hidden="true">🔒</span></button>'
+        '<button class="odd locked" disabled aria-label="' + esc(market + ' ' + label) + ' locked"><small>' + esc(label) + '</small>' + LOCK_ICON + '</button>'
       ).join('') + '</div></div>';
     }
   }
