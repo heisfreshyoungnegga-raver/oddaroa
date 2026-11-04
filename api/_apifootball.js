@@ -55,7 +55,7 @@ function leagueLabel(lg) {
   return null;
 }
 
-const LIVE_CODES = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+const LIVE_CODES = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT', 'SUSP'];
 const DONE_CODES = ['FT', 'AET', 'PEN'];
 const SKIP_CODES = ['PST', 'CANC', 'ABD', 'AWD', 'WO'];
 
@@ -97,11 +97,18 @@ async function upsertMatch(m) {
   );
 }
 
-// Bookmaker odds -> the site's odds keys. Prefer Bet365 (id 8);
-// otherwise the first bookmaker that prices the match winner.
+// Bookmaker odds -> the site's odds keys. Prefer Bet365 (bookmaker
+// id 8, per the docs' bookmaker list); otherwise the first
+// bookmaker that prices the match winner. Markets are matched by
+// their DOCUMENTED bet ids — 1 Match Winner, 5 Goals Over/Under,
+// 12 Double Chance, 8 Both Teams Score — because the names are not
+// stable: the official spec's own odds example spells bet 8
+// "Both Teams Score", not "Both Teams To Score". Names stay as a
+// fallback for feeds that omit ids.
+const BET = { WINNER: 1, OU: 5, BTTS: 8, DC: 12 };
 function oddsFromAf(bookmakers) {
   if (!Array.isArray(bookmakers) || !bookmakers.length) return {};
-  const usable = bookmakers.filter(b => (b.bets || []).some(x => x.name === 'Match Winner'));
+  const usable = bookmakers.filter(b => (b.bets || []).some(x => x.id === BET.WINNER || x.name === 'Match Winner'));
   if (!usable.length) return {};
   const bm = usable.find(b => b.id === 8) || usable[0];
   const odds = {};
@@ -112,17 +119,17 @@ function oddsFromAf(bookmakers) {
   for (const bet of bm.bets || []) {
     const v = {};
     for (const val of bet.values || []) v[val.value] = val.odd;
-    if (bet.name === 'Match Winner') {
+    if (bet.id === BET.WINNER || bet.name === 'Match Winner') {
       put('o1', v.Home); put('ox', v.Draw); put('o2', v.Away);
-    } else if (bet.name === 'Goals Over/Under') {
+    } else if (bet.id === BET.OU || bet.name === 'Goals Over/Under') {
       for (const line of ['0.5', '1.5', '2.5', '3.5', '4.5']) {
         const suffix = line.replace('.', '');
         put('over' + suffix, v['Over ' + line]);
         put('under' + suffix, v['Under ' + line]);
       }
-    } else if (bet.name === 'Double Chance') {
+    } else if (bet.id === BET.DC || bet.name === 'Double Chance') {
       put('dc1x', v['Home/Draw']); put('dc12', v['Home/Away']); put('dcx2', v['Draw/Away']);
-    } else if (bet.name === 'Both Teams To Score') {
+    } else if (bet.id === BET.BTTS || /^both teams( to)? score$/i.test(bet.name || '')) {
       put('gg', v.Yes); put('ng', v.No);
     }
   }
