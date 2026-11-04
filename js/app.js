@@ -15,7 +15,7 @@ const state = {
   sport: 'Soccer',
   query: '',
   filtersOpen: false,
-  matchId: null, prevView: 'home',
+  matchId: null, prevView: 'home', game: null,
   fullBooks: {}, // matchId -> the match's full market book (fetched on demand)
   slip: new Map(), // key -> {matchId, matchLabel, league, market, pick, odd}
   user: null,
@@ -856,15 +856,18 @@ function gamesHTML() {
     return '<button class="gtile ' + g.cls + (cover ? ' has-cover' : '') + '" data-game="' + esc(g.name) + '">' +
     (cover ? '<img class="gcover" src="' + cover + '" alt="">' : '') +
     (g.tag ? '<span class="gtag">' + g.tag + '</span>' : '') +
-    '<span class="gname">' + esc(g.name) + '</span><span class="gnote">' + esc(g.note) + ' · Coming soon</span></button>';
+    '<span class="gname">' + esc(g.name) + '</span><span class="gnote">' + esc(g.note) + ' · Play now</span></button>';
   }).join('');
   return '<h2>Games</h2><div class="gamesgrid">' + tiles + '</div>' +
-    '<div class="howto"><h3>Coming soon</h3><p>Casino games launch with our game provider integration. Sports betting is open now — head to the match list to play.</p></div>';
+    '<div class="howto"><h3>Real rounds, fair rolls</h3><p>Every game is rolled on the server and settled to your wallet instantly. Aviator flights are fixed before takeoff — the seed is revealed after each flight so the crash point can be verified.</p></div>' +
+    '<div class="ghist card"><h3>Latest results</h3><div id="gamesRecent"><p class="empty">' +
+    (state.user ? 'Loading…' : 'Log in to play and see the latest results.') + '</p></div></div>';
 }
 
 function viewHTML() {
   switch (state.view) {
     case 'games': return gamesHTML();
+    case 'game': return window.OddaroaGames ? OddaroaGames.screenHTML(state.game) : gamesHTML();
     case 'profile': return profileHTML();
     case 'bets': return betsHTML();
     case 'wallet': return walletHTML();
@@ -883,6 +886,7 @@ function viewHTML() {
   }
 }
 function render() {
+  if (window.OddaroaGames) OddaroaGames.destroy();
   root.dataset.view = state.view;
   root.innerHTML = viewHTML();
   document.querySelectorAll('.navlink').forEach(b =>
@@ -891,6 +895,7 @@ function render() {
     b.classList.toggle('on', b.dataset.nav === state.view));
   if ($('#mmFeeLine')) syncMomoFee();
   syncSiteCountry();
+  if (window.OddaroaGames) OddaroaGames.afterRender();
 }
 
 /* ---------- betslip ---------- */
@@ -1202,7 +1207,14 @@ document.addEventListener('click', e => {
     return;
   }
   const game = e.target.closest('[data-game]');
-  if (game) { toast(game.dataset.game + ' launches soon with our games provider.'); return; }
+  if (game) {
+    if (!state.user) { openAuth('login'); toast('Log in to play ' + game.dataset.game); return; }
+    state.game = game.dataset.game;
+    state.view = 'game';
+    render();
+    window.scrollTo(0, 0);
+    return;
+  }
   if (e.target.closest('[data-hero-cta]')) {
     const cta = HERO_SLIDES[state.heroIdx].cta;
     if (cta === 'See Games') { state.view = 'games'; render(); }

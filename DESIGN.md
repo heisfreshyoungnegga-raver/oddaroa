@@ -83,3 +83,28 @@ no external artwork is used.
   site shows none publicly, so the clone shows none.
 - Don't fake working backends; demo actions end in a toast that
   says so.
+
+## Games addendum (2026-11-04)
+
+The Games tab becomes a real casino floor: six playable, wallet-integrated
+games, server-authoritative (the server rolls and pays; the client only
+animates). Files: `api/_games.js` (shared game brain on one `game_rounds`
+table), `api/games/[action].js` + `api/_handlers/games/*`, `js/games.js`
+(screens + animation), `css/games.css`. Lobby -> game screen -> stake ->
+play -> server settles -> balance/history update in place.
+
+- Aviator: crash flight, seed hash shown up front and revealed after;
+  manual + auto cash-out.
+- Plinko X: rows 8/12/16 x Low/Medium/High risk, server-pathed ball.
+- Lucky Dice: two dice, Under 7 / Lucky 7 / Over 7.
+- Coin Flip: Crest or Coin at 1.94x, CSS 3D coin.
+- Penalty Shootout: five-kick multiplier ladder vs the keeper, cash out
+  between kicks.
+- Football Penalty: one kick, six zones, zone-priced goals.
+
+Money rules: stake GHS 1-1,000; debit+round in one statement; a payout is
+credited exactly once in the statement that closes the round; payout tables
+return 95-99% and are unit-tested. Recent-results strips read real rounds
+from the database — no invented activity. The live theme tokens (dark
+green-black + gold) govern; this addendum supersedes the light-body tokens
+above wherever the current site CSS disagrees.

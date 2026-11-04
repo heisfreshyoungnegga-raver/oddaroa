@@ -20,6 +20,7 @@ const exactRoutes = {
 const groupRouters = {
   auth: require('./api/auth/[action]'),
   bets: require('./api/bets/[action]'),
+  games: require('./api/games/[action]'),
   wallet: require('./api/wallet/[action]'),
   admin: require('./api/admin/[action]'),
 };
