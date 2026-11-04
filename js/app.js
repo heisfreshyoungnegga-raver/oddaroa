@@ -443,13 +443,13 @@ const QICONS = {
 // Like the hero photos, the files in assets/ hold base64 text, so they
 // are decoded client-side; until a decode lands, the inline SVG shows.
 const TILE_IMGS = {
-  'Soccer': 'assets/icon-soccer.jpg',
-  'Today': 'assets/icon-today.jpg',
-  'Live': 'assets/icon-live.jpg',
-  'Aviator': 'assets/icon-aviator.jpg',
-  'Basketball': 'assets/icon-basketball.jpg',
-  'Verify Bet': 'assets/icon-verify.jpg',
-  'Booking Code': 'assets/icon-booking.jpg',
+  'Soccer': 'assets/icon-soccer.jpg?v=2',
+  'Today': 'assets/icon-today.jpg?v=2',
+  'Live': 'assets/icon-live.jpg?v=2',
+  'Aviator': 'assets/icon-aviator.jpg?v=2',
+  'Basketball': 'assets/icon-basketball.jpg?v=2',
+  'Verify Bet': 'assets/icon-verify.jpg?v=2',
+  'Booking Code': 'assets/icon-booking.jpg?v=2',
 };
 const tileUrls = {};
 function loadTileImages() {
