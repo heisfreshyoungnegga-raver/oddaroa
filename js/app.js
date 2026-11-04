@@ -791,37 +791,34 @@ function openAuth(mode) {
 }
 function closeAuth() { $('#authWrap').classList.remove('open'); }
 function syncAuth() {
+  // Form layout follows Prince's reference designs (2026-11-04):
+  // Register = full name, country, mobile (with dial-prefix box),
+  // email, password, referral code. Login = one "Mobile number or
+  // email" field (same prefix box) + password. No tabs — the bottom
+  // link switches modes.
   const login = authMode === 'login';
-  $('#authTitle').textContent = login ? 'Welcome Back' : 'Create Account';
-  $('#authSub').textContent = login ? 'Log in to your Oddaroa account' : 'Register a new Oddaroa account';
-  $('#tabLogin').classList.toggle('active', login);
-  $('#tabRegister').classList.toggle('active', !login);
+  $('#authTitle').textContent = login ? 'Welcome back' : 'Create your account';
   $('#authSubmit').textContent = login ? 'Login' : 'Register';
-  const nameRow = $('#authNameRow');
-  if (nameRow) nameRow.style.display = login ? 'none' : '';
-  // The email field shows on BOTH tabs (Prince's ask, 2026-11-03):
-  // compulsory on Register; on Login it is an alternative identifier —
-  // fill email OR phone, whichever the account uses. The row's label
-  // text is set from the form's first text node per mode.
-  const hasInvite = !!localStorage.getItem('od_admin_invite');
-  const emailRow = $('#authEmailRow');
-  if (emailRow) {
-    emailRow.style.display = '';
-    if (emailRow.firstChild) emailRow.firstChild.textContent = login ? 'Email ' : 'Email * ';
-  }
-  const phoneInput = $('#authPhone');
-  if (phoneInput) phoneInput.required = !login && !hasInvite;
+  const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? '' : 'none'; };
+  show('#authNameRow', !login);
+  show('#authCountryRow', !login);
+  show('#authEmailRow', !login);
+  show('#authRefRow', !login);
+  show('#forgotLink', login);
   const phoneLabel = $('#authPhoneLabel');
-  if (phoneLabel) phoneLabel.textContent = login ? 'Phone number' : (hasInvite ? 'Phone number (optional if you gave an email)' : 'Phone number');
+  if (phoneLabel) phoneLabel.textContent = login ? 'Mobile number or email' : 'Mobile number';
+  const phoneInput = $('#authPhone');
+  if (phoneInput) phoneInput.placeholder = login ? 'Mobile Number' : (COUNTRY_HINT[$('#authPrefix').textContent.trim()] || '24 123 4567');
   $('#authAlt').innerHTML = login
-    ? 'Don\'t have an account? <a href="#" id="authAltLink">Register</a>'
-    : 'Already have an account? <a href="#" id="authAltLink">Login</a>';
+    ? 'Need an account? <a href="#" id="authAltLink">Register</a>'
+    : 'Already registered? <a href="#" id="authAltLink">Login</a>';
   $('#authAltLink').addEventListener('click', e => {
     e.preventDefault();
     authMode = login ? 'register' : 'login';
     syncAuth();
   });
 }
+const COUNTRY_HINT = { '+233': '24 123 4567', '+234': '803 123 4567', '+254': '712 345 678' };
 function openMenu() { $('#drawerWrap').hidden = false; }
 function closeMenu() { const w = $('#drawerWrap'); if (w) w.hidden = true; }
 function syncHeader() {
@@ -1142,40 +1139,48 @@ $('#scrim').addEventListener('click', closeSlip);
 $('#loginBtn').addEventListener('click', () => openAuth('login'));
 $('#registerBtn').addEventListener('click', () => openAuth('register'));
 $('#authClose').addEventListener('click', closeAuth);
-$('#tabLogin').addEventListener('click', () => { authMode = 'login'; syncAuth(); });
-$('#tabRegister').addEventListener('click', () => { authMode = 'register'; syncAuth(); });
+$('#authCountry').addEventListener('change', e => {
+  $('#authPrefix').textContent = e.target.value;
+  if (authMode === 'register') $('#authPhone').placeholder = COUNTRY_HINT[e.target.value] || '24 123 4567';
+});
 $('#forgotLink').addEventListener('click', e => {
   e.preventDefault();
   toast('Password help: message Support with your phone number and we will help you back in.');
 });
 $('#authForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const phone = $('#authPhone').value.trim();
+  const rawPhone = $('#authPhone').value.trim();
   const password = $('#authPass').value;
-  const emailEl = $('#authEmail');
-  const email = emailEl ? emailEl.value.trim() : '';
-  // Registration always requires an email (compulsory) plus a password;
-  // players also need a phone, while an admin invite may register with
-  // email alone. Login takes either identifier.
+  const email = $('#authEmail').value.trim();
+  // The phone field carries a dial-prefix box (country select): the
+  // submitted number is prefix + national digits, leading zero dropped
+  // (024 123 4567 in Ghana becomes +233241234567). On the login form
+  // the same field accepts an email instead — anything with an @ is
+  // sent as-is. Registration always requires an email (compulsory);
+  // players also need a phone, while an admin invite may register
+  // with email alone.
+  const prefix = $('#authPrefix').textContent.trim();
+  const national = rawPhone.replace(/\D/g, '').replace(/^0+/, '');
+  const composedPhone = national ? prefix + national : '';
   const inviteRegister = authMode === 'register' && !!localStorage.getItem('od_admin_invite');
-  if (authMode === 'register' && !email) { toast('An email address is required to create an account.'); return; }
   if (!password) return;
-  if (authMode === 'login' && !phone && !email) return;
-  if (authMode === 'register' && !phone && !inviteRegister) return;
+  if (authMode === 'register') {
+    if (!email) { toast('An email address is required to create an account.'); return; }
+    if (!composedPhone && !inviteRegister) { toast('Enter your mobile number.'); return; }
+  } else if (!rawPhone) return;
   const btn = $('#authSubmit');
   btn.disabled = true;
   try {
     const path = authMode === 'login' ? '/auth/login' : '/auth/register';
-    // On login the email field, when filled, is the identifier;
-    // otherwise the phone field carries it (number or email typed there).
-    const body = authMode === 'login' ? { identifier: email || phone, password } : { phone, password };
+    const body = authMode === 'login'
+      ? { identifier: rawPhone.includes('@') ? rawPhone.replace(/\s+/g, '') : composedPhone, password }
+      : { phone: composedPhone, password };
     if (authMode === 'register') {
       body.email = email;
       const nameEl = $('#authName');
       if (nameEl && nameEl.value.trim()) body.display_name = nameEl.value.trim();
-    }
-    if (authMode === 'register') {
-      const ref = localStorage.getItem('od_ref');
+      const refField = $('#authRef').value.trim().toUpperCase();
+      const ref = refField || localStorage.getItem('od_ref');
       const inv = localStorage.getItem('od_admin_invite');
       if (ref) body.ref = ref;
       if (inv) body.admin_invite = inv;

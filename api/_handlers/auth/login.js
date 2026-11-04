@@ -4,9 +4,15 @@ module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const { phone, password, identifier } = await readBody(req);
   // Login accepts the phone number OR the account email (admin-tier
-  // accounts may be created with either — see auth/register).
+  // accounts may be created with either — see auth/register). Numbers
+  // are matched in every form a person might type or be stored in:
+  // international (+233…), trunk (0…) and bare country code (233…).
   const ident = String(identifier || phone || '').replace(/\s+/g, '');
-  const rows = await sql('select * from users where phone = $1 or lower(email) = lower($1)', [ident]);
+  const variants = [ident];
+  if (/^\+233\d{9}$/.test(ident)) variants.push('0' + ident.slice(4));
+  if (/^0\d{9}$/.test(ident)) variants.push('+233' + ident.slice(1));
+  if (/^233\d{9}$/.test(ident)) variants.push('+' + ident, '0' + ident.slice(3));
+  const rows = await sql('select * from users where phone = any($1) or lower(email) = lower($2)', [variants, ident]);
   if (!rows.length || !verifyPassword(String(password || ''), rows[0].password_hash)) {
     return send(res, 401, { error: 'wrong_phone_or_password' });
   }

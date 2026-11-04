@@ -69,29 +69,36 @@
 <div class="modalwrap" id="authWrap" aria-hidden="true">
   <div class="modal">
     <button class="iconbtn modal-x" id="authClose" aria-label="Close">&times;</button>
-    <h2 id="authTitle">Welcome Back</h2>
-    <p class="modal-sub" id="authSub">Log in to your Oddaroa account</p>
-    <div class="authtabs">
-      <button id="tabLogin" class="authtab active">Login</button>
-      <button id="tabRegister" class="authtab">Register</button>
-    </div>
+    <div class="auth-brand"><span class="logo">ODD<span>AROA</span></span></div>
+    <h2 id="authTitle">Welcome back</h2>
     <form id="authForm">
-      <label id="authNameRow" style="display:none">Display name (optional)
+      <label id="authNameRow" style="display:none">Full name
         <input type="text" id="authName" placeholder="Your name" autocomplete="name">
       </label>
-      <label id="authEmailRow">Email *
+      <label id="authCountryRow" style="display:none">Country
+        <select id="authCountry">
+          <option value="+233" selected>Ghana</option>
+          <option value="+234">Nigeria</option>
+          <option value="+254">Kenya</option>
+        </select>
+      </label>
+      <label><span id="authPhoneLabel">Mobile number or email</span>
+        <span class="phoneflex"><span class="prefix" id="authPrefix">+233</span><input type="tel" id="authPhone" placeholder="Mobile Number" autocomplete="tel"></span>
+      </label>
+      <label id="authEmailRow" style="display:none">Email *
         <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email">
       </label>
-      <label><span id="authPhoneLabel">Phone number</span>
-        <input type="tel" id="authPhone" placeholder="05X XXX XXXX" autocomplete="tel" required>
-      </label>
       <label>Password
-        <input type="password" id="authPass" placeholder="Your password" autocomplete="current-password" required>
+        <input type="password" id="authPass" placeholder="Password" autocomplete="current-password" required>
+      </label>
+      <label id="authRefRow" style="display:none">Referral code (optional)
+        <input type="text" id="authRef" placeholder="E.G. AB12CD" autocomplete="off">
       </label>
       <a class="forgot" href="#" id="forgotLink">Forgot Password?</a>
       <button type="submit" class="btn gold big" id="authSubmit">Login</button>
     </form>
-    <p class="modal-alt" id="authAlt">Don't have an account? <a href="#" id="authAltLink">Register</a></p>
+    <p class="modal-alt" id="authAlt">Need an account? <a href="#" id="authAltLink">Register</a></p>
+    <p class="auth-legal">18+ Gamble responsibly. Never bet more than you can afford.</p>
   </div>
 </div>
 

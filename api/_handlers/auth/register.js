@@ -11,7 +11,11 @@ const { sql, hashPassword, issueToken, readBody, send, guard, publicUser, ensure
 module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const { phone, password, display_name, ref, admin_invite, email } = await readBody(req);
-  const cleanPhone = String(phone || '').replace(/\s+/g, '');
+  let cleanPhone = String(phone || '').replace(/\s+/g, '');
+  // Canonicalise Ghana numbers to international form (+233…) so one
+  // person keeps one phone identity however the number was typed.
+  if (/^0\d{9}$/.test(cleanPhone)) cleanPhone = '+233' + cleanPhone.slice(1);
+  else if (/^233\d{9}$/.test(cleanPhone)) cleanPhone = '+' + cleanPhone;
   // Email is COMPULSORY for every sign-up (Prince's call, 2026-11-03):
   // no account is created without a valid, unique email address.
   // Players must also give a phone; admin-tier accounts (created
