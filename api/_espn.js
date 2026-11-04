@@ -217,10 +217,10 @@ async function syncLeagues(leagues, offsets) {
 // sweep. Tomorrow is included so the list never runs dry overnight:
 // without it, once today's games finish the site shows an empty list
 // until someone presses the admin Sync button (seen live 2026-11-03).
-async function refreshToday() {
+async function refreshWindow(offsets) {
   const jobs = [];
   for (const slug of Object.keys(LEAGUES)) {
-    for (const offset of [-1, 0, 1]) {
+    for (const offset of offsets) {
       jobs.push(
         fetchDay(slug, ymdOf(offset))
           .then(async data => {
@@ -235,6 +235,7 @@ async function refreshToday() {
   }
   await Promise.all(jobs);
 }
+async function refreshToday() { return refreshWindow([-1, 0, 1]); }
 
 // Gate for the public match list: at most one refresh runs per
 // REFRESH_MS across every visitor and both hosts. The stamp lives in
@@ -242,18 +243,23 @@ async function refreshToday() {
 // requests can never stampede the feed. Any failure is swallowed by the
 // caller — the list must never break because ESPN hiccuped.
 const REFRESH_MS = 120000;
-async function maybeRefreshLive() {
+const FIXTURES_MS = 600000; // days +2..+5 refresh at most every 10 minutes
+async function claimGate(key, ms) {
   const now = Date.now();
   const claimed = await sql(
-    `insert into operator_settings (key, value) values ('espn_refresh_at', $1)
+    `insert into operator_settings (key, value) values ($1, $2)
      on conflict (key) do update set value = excluded.value
-       where operator_settings.value ~ '^[0-9]+$' and operator_settings.value::bigint <= $2
+       where operator_settings.value ~ '^[0-9]+$' and operator_settings.value::bigint <= $3
      returning key`,
-    [String(now), String(now - REFRESH_MS)]
+    [key, String(now), String(now - ms)]
   );
-  if (!claimed.length) return false;
-  await refreshToday();
-  return true;
+  return claimed.length > 0;
+}
+async function maybeRefreshLive() {
+  let ran = false;
+  if (await claimGate('espn_refresh_at', REFRESH_MS)) { await refreshToday(); ran = true; }
+  if (await claimGate('espn_fixtures_at', FIXTURES_MS)) { await refreshWindow([2, 3, 4, 5]); ran = true; }
+  return ran;
 }
 
-module.exports = { LEAGUES, mapEvent, oddsFromEspn, syncLeagues, refreshToday, maybeRefreshLive };
+module.exports = { LEAGUES, mapEvent, oddsFromEspn, syncLeagues, refreshToday, refreshWindow, maybeRefreshLive };

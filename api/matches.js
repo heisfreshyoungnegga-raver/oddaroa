@@ -84,7 +84,7 @@ module.exports = guard(async (req, res) => {
      from matches
      where status in ('live', 'upcoming')
      order by (status = 'live') desc, starts_at asc
-     limit 300`
+     limit 500`
   );
   const now = new Date();
   // Group 0 is the primary block (API-Football rows, admin manual

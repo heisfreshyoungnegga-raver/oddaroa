@@ -185,9 +185,13 @@ function ymdOf(offsetDays) {
 
 const ODDS_CAP_PER_REFRESH = 25;
 
-async function refreshAf() {
+// Fixtures sweep: a full week of the core leagues (yesterday for
+// settlements, today, and five days ahead so the upcoming list
+// stays deep — Prince, 2026-11-04: he expects 100+ upcoming from
+// the two feeds together). One call per day, on the slow gate.
+async function refreshAfFixtures() {
   let imported = 0;
-  for (const offset of [-1, 0, 1]) {
+  for (const offset of [-1, 0, 1, 2, 3, 4, 5]) {
     let fixtures = [];
     try { fixtures = await afFetch('/fixtures?date=' + ymdOf(offset)); } catch (e) { continue; }
     for (const fx of fixtures) {
@@ -197,6 +201,11 @@ async function refreshAf() {
       imported++;
     }
   }
+  return imported;
+}
+
+async function refreshAfLive() {
+  let imported = 0;
   // Live sweep: EVERY match in play anywhere in the world joins the
   // list while it is live, whatever its league (one call). Rows that
   // were live but have dropped out of the live feed are reconciled
@@ -260,23 +269,35 @@ async function refreshAf() {
     );
     priced++;
   }
+  return { liveImported, priced };
+}
+
+// Admin Sync runs the whole programme at once, ungated.
+async function refreshAf() {
+  const imported = await refreshAfFixtures();
+  const { liveImported, priced } = await refreshAfLive();
   return { imported, priced, liveImported };
 }
 
 // Same anti-stampede gate as the ESPN refresh, separate clock.
 const REFRESH_MS = 120000;
-async function maybeRefreshAf() {
+const FIXTURES_MS = 600000; // the week-ahead sweep runs at most every 10 minutes
+async function claimGate(key, ms) {
   const now = Date.now();
   const claimed = await sql(
-    `insert into operator_settings (key, value) values ('af_refresh_at', $1)
+    `insert into operator_settings (key, value) values ($1, $2)
      on conflict (key) do update set value = excluded.value
-       where operator_settings.value ~ '^[0-9]+$' and operator_settings.value::bigint <= $2
+       where operator_settings.value ~ '^[0-9]+$' and operator_settings.value::bigint <= $3
      returning key`,
-    [String(now), String(now - REFRESH_MS)]
+    [key, String(now), String(now - ms)]
   );
-  if (!claimed.length) return false;
-  await refreshAf();
-  return true;
+  return claimed.length > 0;
+}
+async function maybeRefreshAf() {
+  let ran = false;
+  if (await claimGate('af_fixtures_at', FIXTURES_MS)) { await refreshAfFixtures(); ran = true; }
+  if (await claimGate('af_refresh_at', REFRESH_MS)) { await refreshAfLive(); ran = true; }
+  return ran;
 }
 
 module.exports = { afEnabled, maybeRefreshAf, refreshAf, mapFixture, oddsFromAf, fullFromAf, pickBookmaker, FULL_IDS, LEAGUES };
