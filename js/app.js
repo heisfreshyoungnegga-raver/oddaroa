@@ -400,16 +400,32 @@ function trustStripHTML() {
   // Winners ticker (Prince's ask, 2026-11-03): the sliding line under
   // the promo banner shows recent winners with their phone numbers
   // partly masked — a fresh random set is generated on every render.
-  const NAMES = ['Kwame', 'Ama', 'Yaw', 'Akosua', 'Kojo', 'Efua', 'Kwabena', 'Abena', 'Kofi', 'Adjoa',
-    'Kwaku', 'Esi', 'Fiifi', 'Araba', 'Nana', 'Maame', 'Paa', 'Ekua', 'Selasie', 'Edem',
-    'Afi', 'Mawuli', 'Senyo', 'Dzifa', 'Elikem', 'Sitsofe', 'Abdul', 'Fuseina', 'Ibrahim', 'Aisha'];
-  const PREFIX = ['024', '025', '027', '053', '054', '055', '057', '059', '020', '050'];
+  // Ghana, Nigeria and Kenya winners (Prince, 2026-11-04), each with
+  // their own names, number prefixes and currency.
+  const COUNTRIES = [
+    { names: ['Kwame', 'Ama', 'Yaw', 'Akosua', 'Kojo', 'Efua', 'Kwabena', 'Abena', 'Kofi', 'Adjoa',
+        'Kwaku', 'Esi', 'Fiifi', 'Araba', 'Nana', 'Maame', 'Paa', 'Ekua', 'Selasie', 'Edem',
+        'Afi', 'Mawuli', 'Senyo', 'Dzifa', 'Elikem', 'Sitsofe', 'Abdul', 'Fuseina', 'Ibrahim', 'Aisha'],
+      prefix: ['024', '025', '027', '053', '054', '055', '057', '059', '020', '050'],
+      cur: 'GHS', min: 150, max: 6500, step: 5, weight: 2 },
+    { names: ['Chidi', 'Ngozi', 'Emeka', 'Tunde', 'Funke', 'Olufemi', 'Blessing', 'Segun', 'Yetunde', 'Uche',
+        'Ifeanyi', 'Kemi', 'Adebayo', 'Chiamaka', 'Yusuf', 'Halima', 'Obinna', 'Titilayo', 'Musa', 'Folake'],
+      prefix: ['0803', '0806', '0703', '0706', '0810', '0813', '0814', '0816', '0805', '0807',
+        '0705', '0811', '0815', '0802', '0808', '0708', '0812', '0809', '0817', '0818'],
+      cur: '₦', min: 15000, max: 950000, step: 500, weight: 1 },
+    { names: ['Wanjiru', 'Kamau', 'Otieno', 'Achieng', 'Mwangi', 'Njeri', 'Kiprop', 'Chebet', 'Maina', 'Nyambura',
+        'Ochieng', 'Wambui', 'Korir', 'Mutiso', 'Auma', 'Karanja', 'Waithera', 'Barasa', 'Nekesa', 'Omondi'],
+      prefix: ['0712', '0722', '0725', '0701', '0702', '0740', '0741', '0790', '0791', '0110'],
+      cur: 'KSh', min: 2000, max: 120000, step: 100, weight: 1 },
+  ];
+  const bag = COUNTRIES.flatMap(c => Array(c.weight).fill(c));
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const items = [];
   for (let i = 0; i < 10; i++) {
-    const num = pick(PREFIX) + '•••' + String(Math.floor(100 + Math.random() * 900));
-    const amt = Math.round((150 + Math.random() * 6350) / 5) * 5;
-    items.push('<span class="titem">🏆 <b>' + pick(NAMES) + ' · ' + num + '</b> won <span class="win-amt">GHS ' +
+    const c = pick(bag);
+    const num = pick(c.prefix) + '•••' + String(Math.floor(100 + Math.random() * 900));
+    const amt = Math.round((c.min + Math.random() * (c.max - c.min)) / c.step) * c.step;
+    items.push('<span class="titem">🏆 <b>' + pick(c.names) + ' · ' + num + '</b> won <span class="win-amt">' + c.cur + ' ' +
       amt.toLocaleString('en-GB') + '</span></span>');
   }
   // One sliding line (duplicated half for a seamless loop); duration
