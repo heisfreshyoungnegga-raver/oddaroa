@@ -845,14 +845,14 @@ function applyCountry(code) {
 }
 function detectCountry() {
   if (countryTouched) return;
+  // Ghana +233 is the site's default country code on both forms
+  // (Prince, 2026-11-04). Detection may move it only on an exact
+  // timezone match — the browser-language guess was dropped after
+  // it put a Kenya prefix on a phone in Ghana.
   let code = null;
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     code = { 'Africa/Accra': '+233', 'Africa/Lagos': '+234', 'Africa/Nairobi': '+254', 'Africa/Kampala': '+256', 'Africa/Dar_es_Salaam': '+255' }[tz] || null;
-    if (!code && navigator.language) {
-      const region = navigator.language.split('-').pop().toUpperCase();
-      code = { GH: '+233', NG: '+234', KE: '+254', UG: '+256', TZ: '+255' }[region] || null;
-    }
   } catch (e) { /* detection is best-effort; Ghana stays the default */ }
   if (code) applyCountry(code);
 }
