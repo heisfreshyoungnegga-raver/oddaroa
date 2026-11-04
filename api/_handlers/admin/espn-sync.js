@@ -1,14 +1,20 @@
 const { readBody, send, guard, requireAdmin } = require('../../_lib');
 const { LEAGUES, syncLeagues } = require('../../_espn');
+const { afEnabled, refreshAf } = require('../../_apifootball');
 
-// Manual ESPN sync from the admin portal: a full sweep of the chosen
-// leagues over the coming days. Live scores between manual syncs are
-// kept fresh automatically by the public match list (see api/matches.js
-// and maybeRefreshLive in api/_espn.js).
+// Manual feed sync from the admin portal: with an API-Football key
+// configured, the button refreshes fixtures + odds from API-Football
+// (the primary source); otherwise it runs the classic ESPN sweep of
+// the chosen leagues over the coming days. Live scores between
+// manual syncs are kept fresh automatically by the public match list.
 module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const auth = requireAdmin(req, res);
   if (!auth) return;
+  if (afEnabled()) {
+    const { imported, priced } = await refreshAf();
+    return send(res, 200, { ok: true, source: 'api-football', imported, priced });
+  }
   const body = await readBody(req);
   const leagues = Array.isArray(body.leagues) && body.leagues.length
     ? body.leagues.filter(l => LEAGUES[l])

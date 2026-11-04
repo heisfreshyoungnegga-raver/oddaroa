@@ -1,5 +1,6 @@
 const { sql, send, guard, isCustomMatch, customMatchState, fillOdds } = require('./_lib');
 const { maybeRefreshLive } = require('./_espn');
+const { afEnabled, maybeRefreshAf } = require('./_apifootball');
 
 // Public match list: live matches first, then upcoming by start time.
 // Super-admin "featured" matches (external_ref custom:...) carry a goal
@@ -10,14 +11,22 @@ const { maybeRefreshLive } = require('./_espn');
 module.exports = guard(async (req, res) => {
   // Live matches keep themselves current: the first list request after
   // a quiet couple of minutes refreshes statuses, scores and minutes
-  // from ESPN before answering (see maybeRefreshLive). A feed failure
-  // must never break the list, so errors are swallowed.
-  await maybeRefreshLive().catch(() => {});
+  // from the active feed before answering. API-Football is primary
+  // once its key is configured; until then (and if it is ever
+  // removed) the ESPN feed drives the list. Either way a feed failure
+  // must never break the list, so errors are swallowed. While
+  // API-Football drives, older ESPN rows are hidden (same matches
+  // would otherwise appear twice) — admin manual matches and the
+  // super-admin featured matches always show.
+  const af = afEnabled();
+  if (af) await maybeRefreshAf().catch(() => {});
+  else await maybeRefreshLive().catch(() => {});
   const rows = await sql(
     `select id, league, home_team, away_team, starts_at, status, minute,
             score_home, score_away, odds, home_logo, away_logo, external_ref, goal_events
      from matches
      where status in ('live', 'upcoming')
+       ${af ? "and (external_ref is null or external_ref like 'af:%' or external_ref like 'custom:%')" : ''}
      order by (status = 'live') desc, starts_at asc
      limit 300`
   );
