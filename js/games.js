@@ -65,13 +65,13 @@
       '<input id="gStake" type="number" min="1" max="1000" step="1" value="' + def + '">' +
       '<button type="button" class="gstep" data-step="1">+</button></div>' +
       '<div class="gchips">' + [2, 5, 10, 25, 50, 100].map(v =>
-        '<button type="button" class="gchip" data-chip="' + v + '">' + v + '</button>').join('') +
+        '<button type="button" class="gchip" data-gchip="' + v + '">' + v + '</button>').join('') +
       '<button type="button" class="gchip" data-scale="0.5">½</button>' +
       '<button type="button" class="gchip" data-scale="2">2×</button></div>';
   }
   function bindStake() {
     const input = $g('#gStake');
-    document.querySelectorAll('[data-chip]').forEach(b => b.addEventListener('click', () => { input.value = b.dataset.chip; input.dispatchEvent(new Event('input')); }));
+    document.querySelectorAll('[data-gchip]').forEach(b => b.addEventListener('click', () => { input.value = b.dataset.gchip; input.dispatchEvent(new Event('input')); }));
     document.querySelectorAll('[data-scale]').forEach(b => b.addEventListener('click', () => {
       const v = Math.min(1000, Math.max(1, Math.round((Number(input.value) || 0) * Number(b.dataset.scale) * 100) / 100));
       input.value = v;
