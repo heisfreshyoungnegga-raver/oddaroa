@@ -343,18 +343,26 @@ function matchListHTML() {
 // URLs. If a host ever serves real JPEG bytes, a blob URL is used
 // instead — both worlds work.
 const heroUrls = {};
+// A fetched asset becomes an image URL only if it really is one:
+// JPEG bytes get a blob URL, clean base64 text gets a data URL, and
+// anything else (a 404 body, an HTML fallback page during a deploy)
+// yields null so the caller keeps its plain-path/SVG fallback. One
+// bad response used to poison a tile for the whole session — the
+// broken quick tiles Prince reported on 2026-11-04.
+function sniffImageUrl(buf) {
+  const bytes = new Uint8Array(buf);
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8) return URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+  const text = new TextDecoder().decode(buf).replace(/\s+/g, '');
+  return text.length > 100 && /^[A-Za-z0-9+/]+={0,2}$/.test(text) ? 'data:image/jpeg;base64,' + text : null;
+}
 function loadHeroImages() {
   HERO_SLIDES.forEach(s => {
     if (!s.img || heroUrls[s.img]) return;
     heroUrls[s.img] = s.img;
-    fetch(s.img).then(r => r.arrayBuffer()).then(buf => {
-      const bytes = new Uint8Array(buf);
-      if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
-        heroUrls[s.img] = URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
-      } else {
-        heroUrls[s.img] = 'data:image/jpeg;base64,' + new TextDecoder().decode(buf).replace(/\s+/g, '');
-      }
-      if (state.view === 'home') render();
+    fetch(s.img).then(r => (r.ok ? r.arrayBuffer() : null)).then(buf => {
+      if (!buf) return;
+      const u = sniffImageUrl(buf);
+      if (u) { heroUrls[s.img] = u; if (state.view === 'home') render(); }
     }).catch(() => {});
   });
 }
@@ -449,12 +457,10 @@ function loadTileImages() {
     const path = TILE_IMGS[label];
     if (tileUrls[label]) return;
     tileUrls[label] = path;
-    fetch(path).then(r => r.arrayBuffer()).then(buf => {
-      const bytes = new Uint8Array(buf);
-      tileUrls[label] = (bytes[0] === 0xFF && bytes[1] === 0xD8)
-        ? URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }))
-        : 'data:image/jpeg;base64,' + new TextDecoder().decode(buf).replace(/\s+/g, '');
-      if (state.view === 'home') render();
+    fetch(path).then(r => (r.ok ? r.arrayBuffer() : null)).then(buf => {
+      if (!buf) return;
+      const u = sniffImageUrl(buf);
+      if (u) { tileUrls[label] = u; if (state.view === 'home') render(); }
     }).catch(() => {});
   });
 }
@@ -475,12 +481,10 @@ function loadGameImages() {
     const path = GAME_IMGS[name];
     if (gameUrls[name]) return;
     gameUrls[name] = path;
-    fetch(path).then(r => r.arrayBuffer()).then(buf => {
-      const bytes = new Uint8Array(buf);
-      gameUrls[name] = (bytes[0] === 0xFF && bytes[1] === 0xD8)
-        ? URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }))
-        : 'data:image/jpeg;base64,' + new TextDecoder().decode(buf).replace(/\s+/g, '');
-      if (state.view === 'games') render();
+    fetch(path).then(r => (r.ok ? r.arrayBuffer() : null)).then(buf => {
+      if (!buf) return;
+      const u = sniffImageUrl(buf);
+      if (u) { gameUrls[name] = u; if (state.view === 'games') render(); }
     }).catch(() => {});
   });
 }
