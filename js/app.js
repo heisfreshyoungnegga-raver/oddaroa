@@ -107,6 +107,7 @@ function errToast(e, fallback) {
     account_blocked: 'This account has been blocked. Contact support.',
     withdrawal_locked: 'Withdrawals are not available on your account yet — please contact support.',
     match_finished: 'One of those matches has already finished.',
+    match_live_locked: 'Live matches are locked — betting closes at kickoff.',
     one_selection_per_match: 'Only one selection per match on a slip.',
     market_unavailable: 'One of those markets is not available right now.',
     ticket_not_found: 'No ticket found with that code.',
@@ -191,9 +192,10 @@ function matchVisible(m) {
 function oddsHTML(m) {
   const opts = marketsFor(m);
   if (!opts.length) return '<span class="more">Odds soon</span>';
+  const locked = m.status === 'live'; // live matches are locked (betting closes at kickoff)
   return '<span class="mkt">' + state.market + '</span>' + opts.map(o => {
     const sel = state.slip.has(slipKey(m.id, state.market, o.label)) ? ' sel' : '';
-    return '<button class="odd' + sel + '" data-odd="' + m.id + '" data-pick="' + esc(o.label) + '">' +
+    return '<button class="odd' + sel + (locked ? ' locked' : '') + '" data-odd="' + m.id + '" data-pick="' + esc(o.label) + '"' + (locked ? ' disabled' : '') + '>' +
       '<small>' + esc(o.label) + '</small>' + o.odd.toFixed(2) + '</button>';
   }).join('');
 }
@@ -248,12 +250,18 @@ function matchDetailsHTML() {
   let html = back + '<div class="card"><div class="league">' + esc(m.league) + '</div>' +
     '<div class="md-when">' + when + '</div>' +
     '<div class="md-teams">' + team(m.home, m.home_logo, m.status === 'live' ? m.sh : null) + team(m.away, m.away_logo, m.status === 'live' ? m.sa : null) + '</div></div>';
+  // Live matches are locked: prices stay visible but nothing can
+  // be added to the slip once a match has kicked off.
+  const locked = m.status === 'live';
+  const lkCls = locked ? ' locked' : '';
+  const lkDis = locked ? ' disabled' : '';
+  if (locked) html += '<div class="md-lock">🔒 Live betting is locked on this match</div>';
   for (const market of MARKET_LIST) {
     const opts = marketsForMarket(m, market);
     if (!opts.length) continue;
     html += '<div class="card md-sec"><h3>' + esc(market) + '</h3><div class="md-odds">' + opts.map(o => {
       const sel = state.slip.has(slipKey(m.id, market, o.label)) ? ' sel' : '';
-      return '<button class="odd' + sel + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"><small>' + esc(o.label) + '</small>' + o.odd.toFixed(2) + '</button>';
+      return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"' + lkDis + '><small>' + esc(o.label) + '</small>' + o.odd.toFixed(2) + '</button>';
     }).join('') + '</div></div>';
   }
   // Handicap (spread): ESPN publishes one line per game, so it is
@@ -269,7 +277,7 @@ function matchDetailsHTML() {
     ];
     html += '<div class="card md-sec"><h3>' + esc(market) + '</h3><div class="md-odds">' + opts.map(o => {
       const sel = state.slip.has(slipKey(m.id, market, o.label)) ? ' sel' : '';
-      return '<button class="odd' + sel + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"><small>' + esc(o.label) + '</small>' + o.odd.toFixed(2) + '</button>';
+      return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"' + lkDis + '><small>' + esc(o.label) + '</small>' + o.odd.toFixed(2) + '</button>';
     }).join('') + '</div></div>';
   }
   // Full market book: every remaining market the bookmaker offers
@@ -283,7 +291,7 @@ function matchDetailsHTML() {
       html += '<div class="card md-sec"><h3>' + esc(b.name) + '</h3><div class="md-odds">' + b.values.map(v => {
         const label = String(v.value);
         const sel = state.slip.has(slipKey(m.id, b.name, label)) ? ' sel' : '';
-        return '<button class="odd' + sel + '" data-odd="' + m.id + '" data-market="' + esc(b.name) + '" data-pick="' + esc(label) + '"><small>' + esc(label) + '</small>' + Number(v.odd).toFixed(2) + '</button>';
+        return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(b.name) + '" data-pick="' + esc(label) + '"' + lkDis + '><small>' + esc(label) + '</small>' + Number(v.odd).toFixed(2) + '</button>';
       }).join('') + '</div></div>';
     }
   }

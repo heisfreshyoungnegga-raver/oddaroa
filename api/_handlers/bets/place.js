@@ -27,6 +27,12 @@ module.exports = guard(async (req, res) => {
     // Featured matches finish by the clock even while their stored
     // status still says upcoming — never sell a bet on a finished one.
     if (isCustomMatch(m) && customMatchState(m).status === 'finished') return send(res, 400, { error: 'match_finished' });
+    // Live matches are locked (Prince, 2026-11-04, the GoalsVault
+    // way): the feed carries pre-match prices, so selling them
+    // in-play would let punters bet on a score they can already
+    // see. Betting closes at kickoff, on every match.
+    if (m.status === 'live') return send(res, 400, { error: 'match_live_locked' });
+    if (isCustomMatch(m) && customMatchState(m).status === 'live') return send(res, 400, { error: 'match_live_locked' });
     if (seenMatches.has(m.id)) return send(res, 400, { error: 'one_selection_per_match' });
     seenMatches.add(m.id);
     const key = keyFor(s.market, s.pick);
