@@ -154,12 +154,14 @@ async function refreshAf() {
       imported++;
     }
   }
-  // Odds pass: shown matches (live, or kicking off within 24h) that
-  // still have no 1X2 line get one odds call each, live first.
+  // Odds pass: shown matches (live, or kicking off within 48h) that
+  // still have no 1X2 line get one odds call each, live first. The
+  // API publishes odds days ahead, so tomorrow's matches price as
+  // soon as they are imported rather than at the last minute.
   const needy = await sql(
     `select id, external_ref, odds from matches
      where external_ref like 'af:%' and status in ('live', 'upcoming')
-       and starts_at < now() + interval '24 hours'
+       and starts_at < now() + interval '48 hours'
        and not (odds ? 'o1')
      order by (status = 'live') desc, starts_at asc
      limit $1`,

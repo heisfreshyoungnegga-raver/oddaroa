@@ -14,12 +14,22 @@ const { afEnabled, maybeRefreshAf } = require('./_apifootball');
 // Atletico Madrid are near-names token-wise, but a wrong merge also
 // needs the other team to match and kickoffs within 45 minutes.
 const TEAM_FILLER = new Set(['fc', 'afc', 'cf', 'sc', 'fk', 'ac', 'as', 'club', 'de', 'the', 'stade', 'us', 'cd', 'sd', 'bk']);
+// City exonyms: the feeds disagree on local vs English place names
+// (Slavia Praha vs Slavia Prague is the pair that proved the need).
+const TOKEN_ALIAS = {
+  prague: 'praha', munich: 'munchen', moscow: 'moskva', warsaw: 'warszawa',
+  lisbon: 'lisboa', seville: 'sevilla', turin: 'torino', naples: 'napoli',
+  milan: 'milano', rome: 'roma', athens: 'athina', vienna: 'wien',
+  cologne: 'koln', brussels: 'bruxelles', antwerp: 'antwerpen', ghent: 'gent',
+  copenhagen: 'kobenhavn', gothenburg: 'goteborg', salonika: 'thessaloniki',
+};
 function teamTokens(s) {
   return String(s || '').toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9 ]/g, ' ')
     .split(/\s+/)
-    .filter(t => t && !/^\d+$/.test(t) && !TEAM_FILLER.has(t));
+    .filter(t => t && !/^\d+$/.test(t) && !TEAM_FILLER.has(t))
+    .map(t => TOKEN_ALIAS[t] || t);
 }
 function lev(a, b) {
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
