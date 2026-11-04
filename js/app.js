@@ -8,6 +8,8 @@ const state = {
   league: 'All',
   market: '1X2',
   date: 'All',
+  pop: '',
+  lastSync: null,
   sport: 'Soccer',
   query: '',
   filtersOpen: false,
@@ -130,6 +132,7 @@ async function loadMatches() {
     state.matchesLoaded = true;
     if (e.code !== 'backend_not_configured') console.warn('matches load failed', e.code);
   }
+  state.lastSync = new Date();
   if (['home', 'live', 'sports', 'virtual', 'match'].includes(state.view)) render();
 }
 function leagues() {
@@ -156,6 +159,10 @@ function matchVisible(m) {
   if (state.date === 'Tomorrow') {
     const t = new Date(now); t.setDate(t.getDate() + 1);
     if (!sameDay(start, t)) return false;
+  }
+  if (state.pop === 'next3h' && m.status !== 'live') {
+    const diff = start - now;
+    if (!(diff >= 0 && diff <= 3 * 60 * 60 * 1000)) return false;
   }
   if (state.query) {
     const hay = (m.home + ' ' + m.away + ' ' + m.league).toLowerCase();
@@ -311,14 +318,40 @@ function filtersHTML() {
   // (Prince's UX call, 2026-11-03): the open panel pushed the matches
   // far down the page. Search stays visible at all times.
   const sliders = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"/><circle cx="16" cy="7" r="2.3"/><circle cx="10" cy="17" r="2.3"/></svg>';
-  return '<section class="filtercard">' +
+  return popularHTML() + '<section class="filtercard">' +
     '<div class="fbar"><div class="searchbar"><span class="sicon">⌕</span><input id="searchBox" type="search" placeholder="Search teams or leagues..." value="' + esc(state.query) + '"></div>' +
     '<button class="filterbtn' + (state.filtersOpen ? ' on' : '') + '" id="filterToggle" aria-expanded="' + !!state.filtersOpen + '">' + sliders + 'Filters<span class="fchev">' + (state.filtersOpen ? '▴' : '▾') + '</span></button></div>' +
     '<div class="frows' + (state.filtersOpen ? '' : ' closed') + '">' +
     row('League', 'league', leagues(), state.league) +
     row('Market', 'market', MARKET_LIST, state.market) +
     row('When', 'date', DATES, state.date) +
-    '</div></section>';
+    '</div></section>' +
+    (state.lastSync ? '<p class="updated-line">Updated ' + state.lastSync.toLocaleTimeString('en-GB') + '</p>' : '');
+}
+// Popular one-tap filters (idea borrowed from GoalsVault, 2026-11-04):
+// the shortcuts regulars actually want — next 3 hours, today's games,
+// and the busiest leagues in the current feed — one tap, no menus.
+function popularHTML() {
+  const counts = {};
+  state.matches.forEach(m => { counts[m.league] = (counts[m.league] || 0) + 1; });
+  const top = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 4);
+  const leagueChips = top.map(l =>
+    '<button class="chip' + (state.league === l && !state.pop ? ' on' : '') + '" data-chip="league" data-val="' + esc(l) + '">' + esc(l) + '</button>').join('');
+  return '<div class="poprow"><span class="pop-label">Popular</span>' +
+    '<button class="chip' + (state.pop === 'next3h' ? ' on' : '') + '" data-pop="next3h">Next 3 Hours</button>' +
+    '<button class="chip' + (state.date === 'Today' && !state.pop ? ' on' : '') + '" data-chip="date" data-val="Today">Today\'s Football</button>' +
+    leagueChips + '</div>';
+}
+// Instant join (idea borrowed from GoalsVault, 2026-11-04): a phone
+// number is all it takes to start — the full register form opens with
+// the number already filled in. Signed-out visitors on Home only.
+function joinHTML() {
+  if (state.user) return '';
+  return '<section class="join-card"><h3>Instant Registration</h3>' +
+    '<form id="joinForm" class="join-flex"><span class="phoneflex join-phone"><span class="prefix">+233</span>' +
+    '<input type="tel" id="joinPhone" placeholder="Mobile number" autocomplete="tel"></span>' +
+    '<button class="btn gold" type="submit">Join Now</button></form>' +
+    '<p class="muted">Make a deposit and start betting!</p></section>';
 }
 // Home quick-access tiles (the icon row under the hero): each tile is a
 // shortcut into a real view or filter. Icons are small inline SVGs drawn
@@ -783,7 +816,7 @@ function viewHTML() {
     case 'virtual':
       return filtersHTML() + matchListHTML();
     default:
-      return heroHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
+      return heroHTML() + joinHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
   }
 }
 function render() {
@@ -993,9 +1026,17 @@ document.addEventListener('click', e => {
     return;
   }
 
+  const pop = e.target.closest('[data-pop]');
+  if (pop) {
+    state.pop = state.pop === pop.dataset.pop ? '' : pop.dataset.pop;
+    if (state.pop) state.date = 'All';
+    render();
+    return;
+  }
   const chip = e.target.closest('[data-chip]');
   if (chip) {
     state[chip.dataset.chip] = chip.dataset.val;
+    state.pop = '';
     render();
     const sb = $('#searchBox');
     if (sb) sb.focus();
@@ -1173,6 +1214,11 @@ document.addEventListener('submit', async e => {
       startMomoPoll();
       render();
     } catch (err) { toast(err.detail || 'That code was not accepted — check it and try again.'); }
+  } else if (id === 'joinForm') {
+    e.preventDefault();
+    const num = ($('#joinPhone').value || '').trim();
+    openAuth('register');
+    if (num) $('#authPhone').value = num;
   } else if (id === 'withdrawForm') {
     e.preventDefault();
     try {
