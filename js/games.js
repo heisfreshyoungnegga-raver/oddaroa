@@ -65,14 +65,22 @@
       '<input id="gStake" type="number" min="1" max="1000" step="1" value="' + def + '">' +
       '<button type="button" class="gstep" data-step="1">+</button></div>' +
       '<div class="gchips">' + [2, 5, 10, 25, 50, 100].map(v =>
-        '<button type="button" class="gchip" data-chip="' + v + '">' + v + '</button>').join('') + '</div>';
+        '<button type="button" class="gchip" data-chip="' + v + '">' + v + '</button>').join('') +
+      '<button type="button" class="gchip" data-scale="0.5">½</button>' +
+      '<button type="button" class="gchip" data-scale="2">2×</button></div>';
   }
   function bindStake() {
     const input = $g('#gStake');
-    document.querySelectorAll('[data-chip]').forEach(b => b.addEventListener('click', () => { input.value = b.dataset.chip; }));
+    document.querySelectorAll('[data-chip]').forEach(b => b.addEventListener('click', () => { input.value = b.dataset.chip; input.dispatchEvent(new Event('input')); }));
+    document.querySelectorAll('[data-scale]').forEach(b => b.addEventListener('click', () => {
+      const v = Math.min(1000, Math.max(1, Math.round((Number(input.value) || 0) * Number(b.dataset.scale) * 100) / 100));
+      input.value = v;
+      input.dispatchEvent(new Event('input'));
+    }));
     document.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => {
       const v = Math.min(1000, Math.max(1, (Number(input.value) || 0) + Number(b.dataset.step) * 5));
       input.value = v;
+      input.dispatchEvent(new Event('input'));
     }));
   }
   const stakeVal = () => Math.round(Number($g('#gStake').value) * 100) / 100;
@@ -127,16 +135,19 @@
   /* ---------------- Aviator ---------------- */
   function aviatorScreen() {
     return shell('Aviator',
-      '<div class="av-wrap"><canvas id="avCanvas" width="720" height="420"></canvas>' +
+      '<div class="av-wrap">' +
+      '<div class="av-history"><span>Previous flights</span><div class="av-crashes" id="avCrashes"></div></div>' +
+      '<div class="av-stagebox"><canvas id="avCanvas" width="760" height="460"></canvas>' +
       '<div class="av-mult" id="avMult">1.00x</div>' +
-      '<div class="av-status" id="avStatus">Set your stake and launch</div>' +
-      '<div class="av-crashes" id="avCrashes"></div></div>',
+      '<div class="av-flew" id="avFlew">FLEW AWAY!</div>' +
+      '<div class="av-status" id="avStatus">Set your stake and take off</div></div>' +
+      '<div class="av-feed"><div class="av-feed-head"><span>Latest flights</span><span>Stake</span><span>Result</span></div><div id="avFeed"><p class="av-feed-empty">Flight results will appear here.</p></div></div></div>',
       stakeHTML(10) +
       '<label class="glabel">Auto cash out</label>' +
       '<div class="gauto"><label class="gswitch"><input type="checkbox" id="avAutoOn"><span></span></label>' +
-      '<input id="avAutoVal" type="number" min="1.01" max="500" step="0.1" value="2.0" disabled></div>' +
-      '<button class="btn gold big" id="avLaunch">Launch</button>' +
-      '<button class="btn big g-cash" id="avCash" hidden>Cash Out</button>' +
+      '<input id="avAutoVal" type="number" min="1.01" max="500" step="0.1" value="2.0" disabled><span class="av-auto-note">Cash out automatically at this multiplier</span></div>' +
+      '<button class="btn gold big av-bet-btn" id="avLaunch">BET</button>' +
+      '<button class="btn big g-cash av-cash-btn" id="avCash" hidden>Cash Out</button>' +
       '<p class="gnote2">The flight is fixed before takeoff — its hash is shown on every round and the seed is revealed after, so the crash point can be verified.</p>');
   }
   function aviatorMount() {
@@ -144,45 +155,113 @@
     bindStake();
     const cv = $g('#avCanvas'), ctx = cv.getContext('2d');
     const launchBtn = $g('#avLaunch'), cashBtn = $g('#avCash');
+    const paintBetLabel = () => { if (!S.flying) launchBtn.textContent = 'BET ' + money(stakeVal() || 0); };
+    $g('#gStake').addEventListener('input', paintBetLabel);
+    paintBetLabel();
     $g('#avAutoOn').addEventListener('change', (e) => { $g('#avAutoVal').disabled = !e.target.checked; });
+    const stageCard = $g('#avCanvas') && $g('#avCanvas').closest('.gstage');
+    if (stageCard) stageCard.classList.add('av-stage-card');
+    const panelCard = $g('#avLaunch') && $g('#avLaunch').closest('.gpanel');
+    if (panelCard) panelCard.classList.add('av-panel');
     S.onHistory = () => {
       const strip = $g('#avCrashes');
       if (!strip || !S.recent) return;
-      const crashes = S.recent.filter(r => r.game === 'aviator' && r.crash != null).slice(0, 10);
-      strip.innerHTML = crashes.map(r => '<span class="av-chip' + (r.crash < 2 ? ' low' : '') + '">' + Number(r.crash).toFixed(2) + 'x</span>').join('');
+      const flights = S.recent.filter(r => r.game === 'aviator');
+      const crashes = flights.filter(r => r.crash != null).slice(0, 10);
+      strip.innerHTML = crashes.map(r => '<span class="av-chip' + (r.crash < 2 ? ' low' : r.crash >= 10 ? ' hot' : '') + '">' + Number(r.crash).toFixed(2) + 'x</span>').join('');
+      const feed = $g('#avFeed');
+      if (feed) {
+        const rows = flights.slice(0, 6);
+        feed.innerHTML = rows.length ? rows.map(r => {
+          const result = r.payout > 0
+            ? '<b class="g-win">' + (r.stake ? (r.payout / r.stake).toFixed(2) : '0.00') + 'x · ' + money(r.payout) + '</b>'
+            : '<b class="g-lose">' + Number(r.crash || 1).toFixed(2) + 'x</b>';
+          return '<div class="av-feed-row"><span>' + esc(r.who || 'Player') + '</span><span>' + money(r.stake) + '</span>' + result + '</div>';
+        }).join('') : '<p class="av-feed-empty">Flight results will appear here.</p>';
+      }
     };
     loadHistory('aviator');
 
-    function draw(elapsed, mult, crashed) {
+    function flightPoint(ms, m) {
+      const W = cv.width, H = cv.height;
+      const progress = 1 - Math.exp(-Math.max(0, ms) / 11500);
+      const x = 52 + (W - 118) * progress;
+      const lift = Math.min(0.98, Math.log(Math.max(1, m)) / Math.log(14));
+      const y = (H - 54) - (H - 132) * lift;
+      return { x, y };
+    }
+    function drawPlane(x, y, angle, elapsed, crashed, alpha) {
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate(angle); ctx.globalAlpha = alpha == null ? 1 : alpha;
+      // Original red propeller plane, drawn from simple shapes.
+      const body = ctx.createLinearGradient(0, -14, 0, 14);
+      body.addColorStop(0, crashed ? '#ff6b74' : '#ff4d4d');
+      body.addColorStop(0.55, crashed ? '#d8232a' : '#e52b2b');
+      body.addColorStop(1, '#8f1116');
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.moveTo(38, 0); ctx.bezierCurveTo(24, -11, -8, -13, -28, -7);
+      ctx.bezierCurveTo(-38, -4, -38, 5, -27, 8); ctx.bezierCurveTo(-6, 13, 25, 10, 38, 0);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#a31219';
+      ctx.beginPath(); ctx.moveTo(-28, -5); ctx.lineTo(-43, -24); ctx.lineTo(-34, -25); ctx.lineTo(-18, -8); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-27, 6); ctx.lineTo(-43, 17); ctx.lineTo(-35, 18); ctx.lineTo(-18, 9); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#7d0d12';
+      ctx.beginPath(); ctx.moveTo(3, 2); ctx.lineTo(-16, 24); ctx.lineTo(-5, 25); ctx.lineTo(15, 7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#bfe9ff';
+      ctx.beginPath(); ctx.ellipse(8, -8, 11, 5.5, -0.08, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111820';
+      ctx.beginPath(); ctx.arc(-12, 13, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.82)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      const spin = Math.sin(elapsed / 28) * 15;
+      ctx.beginPath(); ctx.moveTo(40, -15 + spin * 0.25); ctx.lineTo(40, 15 - spin * 0.25); ctx.stroke();
+      ctx.fillStyle = '#f5c518'; ctx.beginPath(); ctx.arc(39, 0, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    function draw(elapsed, mult, crashed, opts) {
+      opts = opts || {};
       const W = cv.width, H = cv.height;
       ctx.clearRect(0, 0, W, H);
-      const sky = ctx.createLinearGradient(0, 0, 0, H);
-      sky.addColorStop(0, '#0a1510'); sky.addColorStop(1, '#12241a');
+      const sky = ctx.createRadialGradient(54, H - 54, 20, 54, H - 54, W * 1.05);
+      sky.addColorStop(0, '#23352a'); sky.addColorStop(0.34, '#111c15'); sky.addColorStop(1, '#050807');
       ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-      ctx.strokeStyle = 'rgba(245,197,24,.08)'; ctx.lineWidth = 1;
-      for (let x = 0; x < W; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-      for (let y = 0; y < H; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-      // Flight curve: x is time, y is log-multiplier, both eased.
-      const tMax = Math.max(elapsed, 4000);
-      const x = 40 + (W - 90) * Math.min(1, elapsed / (tMax * 1.15));
-      const yTop = 46, yBot = H - 46;
-      const frac = Math.min(1, Math.log(Math.max(mult, 1)) / Math.log(Math.max(10, mult * 1.25)));
-      const y = yBot - (yBot - yTop) * frac;
-      ctx.strokeStyle = crashed ? '#ff4757' : '#f5c518';
-      ctx.lineWidth = 3.5; ctx.lineCap = 'round';
-      ctx.shadowColor = crashed ? '#ff4757' : 'rgba(245,197,24,.55)'; ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.moveTo(40, yBot);
-      ctx.quadraticCurveTo(40 + (x - 40) * 0.55, yBot, x, y);
-      ctx.stroke(); ctx.shadowBlur = 0;
-      ctx.fillStyle = 'rgba(245,197,24,.10)';
-      ctx.lineTo(x, yBot); ctx.lineTo(40, yBot); ctx.closePath(); ctx.fill();
-      // The plane: a small gold jet at the head of the curve.
-      ctx.save(); ctx.translate(x, y); ctx.rotate(-0.32);
-      ctx.fillStyle = crashed ? '#ff4757' : '#f5c518';
-      ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-12, -7); ctx.lineTo(-7, 0); ctx.lineTo(-12, 7); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#0b100d';
-      ctx.beginPath(); ctx.moveTo(2, -10); ctx.lineTo(-4, 0); ctx.lineTo(3, 0); ctx.closePath(); ctx.fill();
+      // Slow rotating fan of light from the take-off corner — the
+      // living background the reference crash games are known for,
+      // rendered here in Oddaroa's own green, gold and red.
+      ctx.save(); ctx.translate(52, H - 54); ctx.rotate((elapsed / 90000) % (Math.PI * 2));
+      for (let i = 0; i < 28; i++) {
+        const a0 = (i / 28) * Math.PI * 2, a1 = ((i + 1) / 28) * Math.PI * 2;
+        ctx.fillStyle = i % 4 === 0 ? 'rgba(245,197,24,.055)' : i % 4 === 2 ? 'rgba(255,71,87,.045)' : 'rgba(90,180,120,.045)';
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, W * 1.15, a0, a1); ctx.closePath(); ctx.fill();
+      }
       ctx.restore();
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      [[92, 58], [188, 112], [646, 64], [556, 138], [690, 196], [238, 44]].forEach(([sx, sy], i) => {
+        ctx.globalAlpha = 0.16 + (i % 3) * 0.08; ctx.beginPath(); ctx.arc(sx, sy, i % 2 ? 1.4 : 2, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      const steps = 42, pts = [];
+      for (let i = 0; i <= steps; i++) {
+        const e = elapsed * i / steps;
+        pts.push(flightPoint(e, Math.exp(0.1 * Math.max(0, e) / 1000)));
+      }
+      const head = opts.head || flightPoint(elapsed, mult);
+      const under = ctx.createLinearGradient(0, 70, 0, H);
+      under.addColorStop(0, crashed ? 'rgba(255,71,87,.20)' : 'rgba(245,197,24,.16)');
+      under.addColorStop(1, 'rgba(245,197,24,0)');
+      ctx.fillStyle = under;
+      ctx.beginPath(); ctx.moveTo(pts[0].x, H - 54);
+      pts.forEach(p => ctx.lineTo(p.x, p.y)); ctx.lineTo(head.x, H - 54); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = crashed ? '#ff4757' : '#f03d3d';
+      ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.shadowColor = crashed ? 'rgba(255,71,87,.65)' : 'rgba(240,61,61,.6)'; ctx.shadowBlur = 12;
+      ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); ctx.shadowBlur = 0;
+      const prev = pts[pts.length - 2] || pts[0];
+      const angle = Math.atan2(head.y - prev.y, head.x - prev.x);
+      drawPlane(head.x, head.y, angle, elapsed, crashed, opts.alpha);
+      // Runway marks at the take-off corner.
+      ctx.fillStyle = 'rgba(255,255,255,.72)';
+      for (let i = 0; i < 5; i++) ctx.fillRect(18 + i * 19, H - 24, 10, 3);
     }
     draw(0, 1, false);
 
@@ -191,17 +270,34 @@
       cancelAnimationFrame(S.raf);
       clearInterval(S.poll);
       launchBtn.hidden = false; cashBtn.hidden = true;
-      const multEl = $g('#avMult'), st = $g('#avStatus');
+      const multEl = $g('#avMult'), st = $g('#avStatus'), flew = $g('#avFlew');
       if (round.status === 'cashed' || round.status === 'won') {
         multEl.classList.add('won');
+        if (flew) flew.classList.remove('on');
         st.textContent = 'Cashed out at ' + Number(cashedMult || round.cashed_at || 0).toFixed(2) + 'x';
         banner('win', 'You cashed out — <b>' + money(round.payout) + '</b> landed in your wallet.');
       } else {
-        multEl.textContent = Number(round.crash || 1).toFixed(2) + 'x';
+        const crash = Number(round.crash || 1);
+        multEl.textContent = crash.toFixed(2) + 'x';
         multEl.classList.add('crashed');
-        st.textContent = 'Flew away at ' + Number(round.crash || 1).toFixed(2) + 'x';
-        banner('lose', 'The plane flew away at <b>' + Number(round.crash || 1).toFixed(2) + 'x</b>. Your stake is gone — launch again when ready.');
-        draw(6000, round.crash || 1, true);
+        if (flew) flew.classList.add('on');
+        st.textContent = 'Flew away at ' + crash.toFixed(2) + 'x';
+        banner('lose', 'The plane flew away at <b>' + crash.toFixed(2) + 'x</b>. Your stake is gone — launch again when ready.');
+        // Let the plane visibly escape instead of freezing on the
+        // crash frame: half a second of flight beyond the curve.
+        const crashMs = Math.log(crash) / 0.1 * 1000;
+        const base = flightPoint(crashMs, crash);
+        const t0 = performance.now();
+        const escape = (now) => {
+          if (!S) return;
+          const f = Math.min(1, (now - t0) / 520);
+          draw(crashMs, crash, true, {
+            head: { x: base.x + f * 230, y: base.y - f * 92 },
+            alpha: 1 - f * 0.75,
+          });
+          if (f < 1) S.raf = requestAnimationFrame(escape);
+        };
+        S.raf = requestAnimationFrame(escape);
       }
       S.round = null;
       loadHistory('aviator');
@@ -223,12 +319,13 @@
       const d = await startRound('aviator', { auto_cashout: auto });
       S.busy = false; launchBtn.disabled = false;
       if (!d) return;
-      S.round = d.round; S.flying = true;
+      S.round = d.round; S.flying = true; S.stake = Number(d.round.stake) || stakeVal();
       S.offset = (d.server_now || Date.now()) - Date.now();
       S.startedAt = new Date(d.round.started_at).getTime();
       S.auto = auto;
-      const multEl = $g('#avMult'), st = $g('#avStatus');
+      const multEl = $g('#avMult'), st = $g('#avStatus'), flew = $g('#avFlew');
       multEl.classList.remove('won', 'crashed');
+      if (flew) flew.classList.remove('on');
       cashBtn.hidden = false; launchBtn.hidden = true;
       banner('', '');
       st.textContent = 'Flying…';
@@ -238,7 +335,7 @@
         const m = Math.exp(0.1 * Math.max(0, elapsed) / 1000);
         const shown = Math.floor(m * 100) / 100;
         multEl.textContent = shown.toFixed(2) + 'x';
-        cashBtn.textContent = 'Cash Out ' + money(stakeVal() * shown);
+        cashBtn.textContent = 'Cash Out ' + money((S.stake || stakeVal()) * shown);
         draw(elapsed, shown, false);
         if (S.auto && shown >= S.auto && !S.cashing) {
           S.cashing = true;

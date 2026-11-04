@@ -50,15 +50,34 @@
 .gswitch input:checked + span::before { transform: translateX(20px); background: var(--accent); }
 
 /* Aviator */
+.gstage.av-stage-card { padding: 0; background: #050807; border-color: #223128; }
 .av-wrap { position: relative; }
-.av-wrap canvas { width: 100%; height: auto; display: block; border-radius: 8px; }
-.av-mult { position: absolute; top: 12%; left: 0; right: 0; text-align: center; font-size: 46px; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--ink); text-shadow: 0 2px 18px rgba(0,0,0,.6); pointer-events: none; }
+.av-history { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 8px 12px; background: #0a0f0c; border-bottom: 1px solid #223128; overflow: hidden; }
+.av-history > span { flex: none; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.av-stagebox { position: relative; background: #050807; }
+.av-stagebox canvas { width: 100%; height: auto; display: block; }
+.av-mult { position: absolute; top: 15%; left: 0; right: 0; text-align: center; font-size: 58px; font-weight: 900; font-variant-numeric: tabular-nums; color: #fff; text-shadow: 0 3px 22px rgba(0,0,0,.78); pointer-events: none; z-index: 3; }
 .av-mult.won { color: var(--win); }
 .av-mult.crashed { color: var(--live); }
-.av-status { text-align: center; color: var(--muted); font-weight: 700; margin-top: 10px; }
-.av-crashes { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px; min-height: 24px; }
-.av-chip { background: rgba(47, 191, 113, .15); color: var(--win); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.av-chip.low { background: rgba(255, 71, 87, .13); color: var(--live); }
+.av-flew { position: absolute; top: 31%; left: 0; right: 0; text-align: center; color: var(--live); font-size: 25px; font-weight: 900; letter-spacing: .06em; opacity: 0; transform: translateY(6px) scale(.96); transition: opacity .18s ease, transform .18s ease; pointer-events: none; z-index: 3; text-shadow: 0 2px 16px rgba(0,0,0,.75); }
+.av-flew.on { opacity: 1; transform: translateY(0) scale(1); }
+.av-status { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: rgba(5,8,7,.72); border: 1px solid rgba(255,255,255,.13); border-radius: 999px; color: #eef4ef; font-size: 13px; font-weight: 800; padding: 7px 13px; z-index: 3; }
+.av-crashes { display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; min-height: 24px; scrollbar-width: none; }
+.av-crashes::-webkit-scrollbar { display: none; }
+.av-chip { flex: none; background: rgba(47, 191, 113, .16); color: #63df96; border: 1px solid rgba(47, 191, 113, .28); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.av-chip.low { background: rgba(47, 128, 237, .16); color: #7db4ff; border-color: rgba(47, 128, 237, .30); }
+.av-chip.hot { background: rgba(245, 197, 24, .16); color: var(--accent); border-color: rgba(245, 197, 24, .32); }
+.av-feed { background: #0a0f0c; border-top: 1px solid #223128; padding: 10px 12px 12px; }
+.av-feed-head, .av-feed-row { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; }
+.av-feed-head { color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding-bottom: 6px; }
+.av-feed-row { padding: 6px 0; border-top: 1px solid rgba(255,255,255,.055); font-size: 13px; font-variant-numeric: tabular-nums; }
+.av-feed-empty { color: var(--muted); font-size: 13px; margin: 6px 0 2px; }
+.gpanel.av-panel { background: #101812; border-color: #2a3b30; }
+.av-panel .gstake input { background: #070b08; font-size: 18px; }
+.av-auto-note { color: var(--muted); font-size: 12px; }
+.av-panel .av-bet-btn { height: 58px; font-size: 20px; letter-spacing: .05em; background: #28a745; color: #fff; border: none; box-shadow: 0 8px 22px rgba(40, 167, 69, .22); }
+.av-panel .av-bet-btn:hover { background: #2fbf71; }
+.av-panel .av-cash-btn { height: 58px; font-size: 18px; background: #e8590c; color: #fff; box-shadow: 0 8px 22px rgba(232, 89, 12, .22); }
 
 /* Plinko */
 .pl-wrap canvas { width: 100%; height: auto; display: block; border-radius: 8px; }
@@ -116,7 +135,10 @@
 @keyframes rung-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(245,197,24,.0); } 50% { box-shadow: 0 0 0 4px rgba(245,197,24,.18); } }
 
 @media (max-width: 560px) {
-  .av-mult { font-size: 36px; }
+  .av-mult { font-size: 40px; }
+  .av-flew { font-size: 20px; }
+  .av-status { font-size: 12px; bottom: 9px; }
+  .av-history > span { display: none; }
   .die { width: 68px; height: 68px; padding: 9px; }
   .pip { width: 12px; height: 12px; }
   .coin { width: 122px; height: 122px; }
