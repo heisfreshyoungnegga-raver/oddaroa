@@ -597,4 +597,60 @@ async function ensureInviteCode(userId) {
   return null;
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode };
+// Settle one MoMo deposit attempt (settlement safety net, 2026-11-04):
+// re-verify the intent with ShinobiPay and, only if it truly succeeded
+// for exactly the attempt's amount and reference, credit the wallet
+// exactly once — attempt flip, ledger deposit row and balance move in
+// a single statement, and the status guard makes a second call a
+// no-op. Shared by the webhook (primary) and the deposit-status poll
+// (reconciler), so a lost or unverifiable webhook can never strand a
+// paid deposit at "awaiting" forever — the player's own waiting
+// screen heals it. `attempt` needs id, user_id, reference, intent_id,
+// amount_ghs, amount_minor, network, status.
+// Returns 'credited' | 'already' | 'unverified' | 'not_succeeded'.
+async function settleAttempt(attempt) {
+  if (attempt.status === 'succeeded') return 'already';
+  if (!attempt.intent_id) return 'not_succeeded';
+  const got = await shinobiFetch(`/payment_intents/${encodeURIComponent(attempt.intent_id)}`);
+  const intent = got.data || {};
+  if (got.status !== 200 || intent.status !== 'succeeded') return 'not_succeeded';
+  const verified = Number(intent.merchant_amount) === Number(attempt.amount_minor)
+    && (!intent.reference || intent.reference === attempt.reference);
+  if (!verified) {
+    // Leave the status untouched but record why, so support can see
+    // the mismatch instead of a silent strand.
+    try {
+      await sql(
+        `update payment_attempts set fail_reason = $2 where id = $1 and status <> 'succeeded'`,
+        [attempt.id, `verify_mismatch merchant_amount=${intent.merchant_amount} amount_minor=${attempt.amount_minor} ref=${intent.reference || ''}`]
+      );
+    } catch (e) { /* diagnostics only */ }
+    return 'unverified';
+  }
+  const out = await sql(
+    `with a as (
+       update payment_attempts set status = 'succeeded', settled_at = now()
+       where id = $1 and status <> 'succeeded'
+       returning user_id, amount_ghs, network, intent_id
+     ),
+     ins as (
+       insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note)
+       select user_id, 'deposit', network || ' MoMo (ShinobiPay)', amount_ghs, 'completed', intent_id, 'ShinobiPay direct push deposit'
+       from a returning id
+     ),
+     cred as (
+       update users set balance_ghs = balance_ghs + (select amount_ghs from a)
+       where id = (select user_id from a) returning id
+     )
+     select (select count(*) from a) as settled, (select id from ins) as txn_id`,
+    [attempt.id]
+  );
+  if (Number(out[0].settled) === 1 && out[0].txn_id) {
+    await ensureAdminTables();
+    await applyDepositRewards(attempt.user_id, out[0].txn_id, Number(attempt.amount_ghs));
+    return 'credited';
+  }
+  return 'already';
+}
+
+module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode };

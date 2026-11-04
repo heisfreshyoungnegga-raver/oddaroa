@@ -14,7 +14,7 @@
 //     ShinobiPay keeps retrying instead of us processing unverified
 //     events.
 const crypto = require('crypto');
-const { sql, send, shinobiConfig, shinobiFetch, ensurePaymentTables, ensureAdminTables, applyDepositRewards } = require('../_lib');
+const { sql, send, shinobiConfig, ensurePaymentTables, settleAttempt } = require('../_lib');
 
 // Vercel: keep the raw body stream intact for signature verification.
 module.exports.config = { api: { bodyParser: false } };
@@ -46,6 +46,7 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const { webhookSecret, secretKey } = shinobiConfig();
   if (!process.env.DATABASE_URL || !webhookSecret) return send(res, 503, { error: 'webhook_not_configured' });
+  let eventId = '';
   try {
     const raw = await readRawBody(req);
     if (!verifySignature(raw, req.headers['x-akwapay-signature'], webhookSecret)) {
@@ -56,9 +57,10 @@ module.exports = async (req, res) => {
     await ensurePaymentTables();
 
     // Idempotency: a second delivery of the same event is a no-op.
+    eventId = String(event.id || '');
     const seen = await sql(
       `insert into webhook_events (event_id) values ($1) on conflict (event_id) do nothing returning event_id`,
-      [String(event.id || '')]
+      [eventId]
     );
     if (!seen.length) return send(res, 200, { ok: true, duplicate: true });
 
@@ -76,41 +78,18 @@ module.exports = async (req, res) => {
     if (seq) await sql(`update payment_attempts set last_sequence = $2 where id = $1`, [attempt.id, seq]);
 
     if (event.type === 'payment_intent.succeeded') {
-      // Re-verify with ShinobiPay before crediting a single pesewa.
-      const got = await shinobiFetch(`/payment_intents/${encodeURIComponent(data.intent_id || attempt.intent_id)}`);
-      const intent = got.data || {};
-      const verified = got.status === 200
-        && intent.status === 'succeeded'
-        && Number(intent.merchant_amount) === Number(attempt.amount_minor)
-        && (!intent.reference || intent.reference === attempt.reference);
-      if (!verified) return send(res, 200, { ok: true, unverified: true });
-      // Credit exactly once in a single statement: the attempt flips to
-      // succeeded, a completed deposit row lands in the wallet ledger
-      // (which is what completed_deposit_count counts), and the balance
-      // moves — all or nothing.
-      const out = await sql(
-        `with a as (
-           update payment_attempts set status = 'succeeded', settled_at = now()
-           where id = $1 and status <> 'succeeded'
-           returning user_id, amount_ghs, network, intent_id
-         ),
-         ins as (
-           insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note)
-           select user_id, 'deposit', network || ' MoMo (ShinobiPay)', amount_ghs, 'completed', intent_id, 'ShinobiPay direct push deposit'
-           from a returning id
-         ),
-         cred as (
-           update users set balance_ghs = balance_ghs + (select amount_ghs from a)
-           where id = (select user_id from a) returning id
-         )
-         select (select count(*) from a) as settled, (select id from ins) as txn_id`,
-        [attempt.id]
-      );
-      if (Number(out[0].settled) === 1 && out[0].txn_id) {
-        await ensureAdminTables();
-        await applyDepositRewards(attempt.user_id, out[0].txn_id, Number(attempt.amount_ghs));
+      // Re-verify and credit through the shared settler (exactly the
+      // attempt's amount, exactly once).
+      const result = await settleAttempt(attempt);
+      if (result === 'unverified') {
+        // Never strand a paid deposit behind a silent 200: drop the
+        // idempotency record so ShinobiPay's redelivery is processed
+        // fresh, and answer 500 so it actually retries on its backoff.
+        // The deposit-status reconciler is the second safety net.
+        await sql(`delete from webhook_events where event_id = $1`, [String(event.id || '')]);
+        return send(res, 500, { error: 'verification_failed' });
       }
-      return send(res, 200, { ok: true, credited: Number(out[0].settled) === 1 });
+      return send(res, 200, { ok: true, credited: result === 'credited' });
     }
 
     if (event.type === 'payment_intent.failed') {
@@ -126,7 +105,12 @@ module.exports = async (req, res) => {
     return send(res, 200, { ok: true, ignored: event.type || null });
   } catch (e) {
     // A 500 makes ShinobiPay retry on its backoff schedule — right for
-    // transient failures (database blip, re-verify fetch down).
+    // transient failures (database blip, re-verify fetch down). Drop
+    // the idempotency record so the redelivery is processed fresh
+    // instead of being dropped as a duplicate of a failed attempt.
+    if (eventId) {
+      try { await sql(`delete from webhook_events where event_id = $1`, [eventId]); } catch (ignored) { /* best effort */ }
+    }
     if (!res.writableEnded) send(res, 500, { error: 'webhook_error' });
   }
 };

@@ -3,8 +3,9 @@ const { sql, readBody, send, guard, requireAuth, shinobiConfig, shinobiFetch, ma
 
 // Instant MoMo deposit (ShinobiPay direct push): create a payment intent,
 // ShinobiPay pushes the approval prompt to the customer's phone. This
-// handler NEVER credits the wallet — settlement happens only in the
-// webhook handler after re-verification (see api/payments/).
+// handler NEVER credits the wallet — settlement happens through the
+// shared settleAttempt in _lib.js, driven by the webhook first and by
+// the deposit-status reconciler as the safety net.
 // Amounts: the API speaks integer pesewas. The customer is charged the
 // requested amount + 2.5% by ShinobiPay; the wallet is later credited
 // exactly the requested amount.
