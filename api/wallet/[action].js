@@ -1,5 +1,6 @@
 // Router for /api/wallet/* — one Vercel function for the whole group.
 const handlers = {
+  index: require('../_handlers/wallet/index'),
   'deposit-manual': require('../_handlers/wallet/deposit-manual'),
   'deposit-momo': require('../_handlers/wallet/deposit-momo'),
   'deposit-status': require('../_handlers/wallet/deposit-status'),

@@ -1,4 +1,5 @@
 const { sql, send, guard, isCustomMatch, customMatchState, fillOdds } = require('./_lib');
+const singleMatch = require('./_handlers/match-single');
 const { maybeRefreshLive } = require('./_espn');
 const { afEnabled, maybeRefreshAf } = require('./_apifootball');
 
@@ -65,6 +66,10 @@ function sameMatch(p, e) {
 // no one touching them. A featured match that has run its 95 minutes
 // stays visible as a result for 3 hours, then drops off.
 module.exports = guard(async (req, res) => {
+  // An id query means the details page wants ONE match's full book:
+  // /api/match rewrites here (vercel.json) and Railway mounts this
+  // file for /api/match too, so delegate to the single-match handler.
+  if (req.query && req.query.id) return singleMatch(req, res);
   // Live matches keep themselves current: the first list request after
   // a quiet couple of minutes refreshes statuses, scores and minutes
   // before answering. Both feeds run (Prince, 2026-11-04): API-Football

@@ -1,0 +1,1 @@
+{"rewrites":[{"destination":"/api/tips/list","source":"/api/tips"},{"destination":"/api/wallet/index","source":"/api/wallet"},{"destination":"/api/matches","source":"/api/match"}]}

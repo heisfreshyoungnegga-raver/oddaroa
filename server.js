@@ -12,9 +12,13 @@ const PORT = process.env.PORT || 8080;
 // API routes: exact files first, then the /api/<group>/<action> routers.
 const exactRoutes = {
   '/api/matches': require('./api/matches'),
-  '/api/match': require('./api/match'),
+  // /api/match is the matches handler too: it delegates to the
+  // single-match handler when an id query is present (the Vercel
+  // side reaches it through the vercel.json rewrite).
+  '/api/match': require('./api/matches'),
   '/api/support': require('./api/support'),
-  '/api/wallet': require('./api/wallet'),
+  '/api/tips': require('./api/_handlers/tips/list'),
+  '/api/wallet': require('./api/_handlers/wallet/index'),
   '/api/payments/shinobipay-webhook': require('./api/payments/shinobipay-webhook'),
 };
 const groupRouters = {
@@ -22,6 +26,8 @@ const groupRouters = {
   bets: require('./api/bets/[action]'),
   games: require('./api/games/[action]'),
   wallet: require('./api/wallet/[action]'),
+  payments: require('./api/payments/[action]'),
+  tips: require('./api/tips/[action]'),
   admin: require('./api/admin/[action]'),
 };
 
