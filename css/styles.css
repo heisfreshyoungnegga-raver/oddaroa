@@ -355,6 +355,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .odd.sel small { color: var(--accent-ink); }
 .odd.locked { opacity: .45; cursor: not-allowed; }
 .odd.locked:active { transform: none; }
+.lock-symbol { font-size: 15px; line-height: 1; vertical-align: middle; }
 .md-lock {
   margin: 10px 0 2px; padding: 10px 12px; border-radius: var(--radius-sm);
   background: var(--surface); border: 1px solid var(--line);

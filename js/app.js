@@ -196,7 +196,7 @@ function oddsHTML(m) {
   return '<span class="mkt">' + state.market + '</span>' + opts.map(o => {
     const sel = state.slip.has(slipKey(m.id, state.market, o.label)) ? ' sel' : '';
     return '<button class="odd' + sel + (locked ? ' locked' : '') + '" data-odd="' + m.id + '" data-pick="' + esc(o.label) + '"' + (locked ? ' disabled' : '') + '>' +
-      '<small>' + esc(o.label) + '</small>' + o.odd.toFixed(2) + '</button>';
+      '<small>' + esc(o.label) + '</small>' + (locked ? '<span class="lock-symbol" aria-hidden="true">🔒</span>' : o.odd.toFixed(2)) + '</button>';
   }).join('');
 }
 function rowHTML(m) {
@@ -250,18 +250,19 @@ function matchDetailsHTML() {
   let html = back + '<div class="card"><div class="league">' + esc(m.league) + '</div>' +
     '<div class="md-when">' + when + '</div>' +
     '<div class="md-teams">' + team(m.home, m.home_logo, m.status === 'live' ? m.sh : null) + team(m.away, m.away_logo, m.status === 'live' ? m.sa : null) + '</div></div>';
-  // Live matches are locked: prices stay visible but nothing can
-  // be added to the slip once a match has kicked off.
+  // Live matches are locked: a lock symbol replaces each price and
+  // nothing can be added to the slip once a match has kicked off.
   const locked = m.status === 'live';
   const lkCls = locked ? ' locked' : '';
   const lkDis = locked ? ' disabled' : '';
   if (locked) html += '<div class="md-lock">🔒 Live betting is locked on this match</div>';
+  const lkPrice = (odd) => locked ? '<span class="lock-symbol" aria-hidden="true">🔒</span>' : Number(odd).toFixed(2);
   for (const market of MARKET_LIST) {
     const opts = marketsForMarket(m, market);
     if (!opts.length) continue;
     html += '<div class="card md-sec"><h3>' + esc(market) + '</h3><div class="md-odds">' + opts.map(o => {
       const sel = state.slip.has(slipKey(m.id, market, o.label)) ? ' sel' : '';
-      return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"' + lkDis + '><small>' + esc(o.label) + '</small>' + o.odd.toFixed(2) + '</button>';
+      return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"' + lkDis + '><small>' + esc(o.label) + '</small>' + lkPrice(o.odd) + '</button>';
     }).join('') + '</div></div>';
   }
   // Handicap (spread): ESPN publishes one line per game, so it is
@@ -277,7 +278,7 @@ function matchDetailsHTML() {
     ];
     html += '<div class="card md-sec"><h3>' + esc(market) + '</h3><div class="md-odds">' + opts.map(o => {
       const sel = state.slip.has(slipKey(m.id, market, o.label)) ? ' sel' : '';
-      return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"' + lkDis + '><small>' + esc(o.label) + '</small>' + o.odd.toFixed(2) + '</button>';
+      return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"' + lkDis + '><small>' + esc(o.label) + '</small>' + lkPrice(o.odd) + '</button>';
     }).join('') + '</div></div>';
   }
   // Full market book: every remaining market the bookmaker offers
@@ -285,20 +286,27 @@ function matchDetailsHTML() {
   // on demand via loadMatchFull; until then the classic sections
   // above stand on their own.
   const book = state.fullBooks[m.id];
-  if (!html.includes('md-sec') && !Array.isArray(book)) {
-    // No prices published for this match yet (far-out fixtures wait
-    // for the bookmaker). Say so plainly instead of showing a bare
-    // page — sections appear here the moment prices land.
-    html += '<div class="card"><h3>Odds are on their way</h3><p class="muted">Prices for this match have not been published yet. They will appear here automatically as soon as they are out.</p></div>';
-  }
   if (Array.isArray(book)) {
     for (const b of book) {
       if (!b.values || !b.values.length) continue;
       html += '<div class="card md-sec"><h3>' + esc(b.name) + '</h3><div class="md-odds">' + b.values.map(v => {
         const label = String(v.value);
         const sel = state.slip.has(slipKey(m.id, b.name, label)) ? ' sel' : '';
-        return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(b.name) + '" data-pick="' + esc(label) + '"' + lkDis + '><small>' + esc(label) + '</small>' + Number(v.odd).toFixed(2) + '</button>';
+        return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(b.name) + '" data-pick="' + esc(label) + '"' + lkDis + '><small>' + esc(label) + '</small>' + lkPrice(v.odd) + '</button>';
       }).join('') + '</div></div>';
+    }
+  }
+  if (!html.includes('md-sec')) {
+    // No published prices yet: keep the familiar market layout on
+    // screen, with a lock symbol in every odds cell (the GoalsVault
+    // treatment Prince asked for) instead of a bare match page.
+    html += '<div class="md-lock">🔒 Odds locked until prices are published</div>';
+    for (const market of MARKET_LIST) {
+      const labels = (MARKET_KEYS[market] || []).map(([label]) => label);
+      if (!labels.length) continue;
+      html += '<div class="card md-sec"><h3>' + esc(market) + '</h3><div class="md-odds">' + labels.map(label =>
+        '<button class="odd locked" disabled aria-label="' + esc(market + ' ' + label) + ' locked"><small>' + esc(label) + '</small><span class="lock-symbol" aria-hidden="true">🔒</span></button>'
+      ).join('') + '</div></div>';
     }
   }
   return html;
