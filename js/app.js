@@ -1180,6 +1180,12 @@ document.addEventListener('click', e => {
   }
   if (e.target.closest('[data-goto-deposit]')) {
     closeVerifyModal();
+    // The prompt appears over the Withdraw section, where the
+    // deposit form is not rendered — switch the wallet to Deposit
+    // first, or the button visibly does nothing.
+    state.view = 'wallet';
+    state.walletSection = 'deposit';
+    render();
     const amt = $('#mmAmt');
     if (amt) amt.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
