@@ -325,8 +325,7 @@ function filtersHTML() {
     row('League', 'league', leagues(), state.league) +
     row('Market', 'market', MARKET_LIST, state.market) +
     row('When', 'date', DATES, state.date) +
-    '</div></section>' +
-    (state.lastSync ? '<p class="updated-line">Updated ' + state.lastSync.toLocaleTimeString('en-GB') + '</p>' : '');
+    '</div></section>';
 }
 // Popular one-tap filters (idea borrowed from GoalsVault, 2026-11-04):
 // the shortcuts regulars actually want — next 3 hours, today's games,
