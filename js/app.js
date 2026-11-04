@@ -1004,9 +1004,9 @@ function closeAuth() { $('#authWrap').classList.remove('open'); }
 function syncAuth() {
   // Form layout follows Prince's reference designs (2026-11-04):
   // Register = full name, country, mobile (with dial-prefix box),
-  // email, password, referral code. Login = one "Mobile number or
-  // email" field (same prefix box) + password. No tabs — the bottom
-  // link switches modes.
+  // email, password, referral code. Login = mobile number (same
+  // prefix box) + password with a show/hide eye. No tabs — the
+  // bottom link switches modes.
   const login = authMode === 'login';
   $('#authTitle').textContent = login ? 'Welcome back' : 'Create your account';
   $('#authSubmit').textContent = login ? 'Login' : 'Register';
@@ -1022,9 +1022,9 @@ function syncAuth() {
   show('#authRefRow', !login);
   show('#forgotLink', login);
   const phoneLabel = $('#authPhoneLabel');
-  if (phoneLabel) phoneLabel.textContent = login ? 'Mobile number or email' : 'Mobile number';
+  if (phoneLabel) phoneLabel.textContent = 'Mobile number';
   const phoneInput = $('#authPhone');
-  if (phoneInput) phoneInput.placeholder = login ? 'Mobile number or email' : (COUNTRY_HINT[$('#authPrefix').textContent.trim()] || '24 123 4567');
+  if (phoneInput) phoneInput.placeholder = COUNTRY_HINT[$('#authPrefix').textContent.trim()] || '24 123 4567';
   syncLoginPrefix();
   $('#authAlt').innerHTML = login
     ? 'Need an account? <a href="#" id="authAltLink">Register</a>'
@@ -1036,15 +1036,12 @@ function syncAuth() {
   });
 }
 const COUNTRY_HINT = { '+233': '24 123 4567', '+234': '803 123 4567', '+254': '712 345 678', '+256': '772 123 456', '+255': '713 123 456' };
-// On the login form the identifier field also accepts an email, so
-// the dial-prefix box hides itself while an email is being typed and
-// comes back for phone numbers. Register always shows the prefix.
+// The identifier field is a mobile number on both forms (Prince,
+// 2026-11-04: phones show a numbers-only keyboard there, so an email
+// can never be typed into it) — the dial-prefix box always shows.
 function syncLoginPrefix() {
-  const input = $('#authPhone');
   const prefix = $('#authPrefix');
-  if (!input || !prefix) return;
-  const isEmail = authMode === 'login' && input.value.includes('@');
-  prefix.style.display = isEmail ? 'none' : '';
+  if (prefix) prefix.style.display = '';
 }
 $('#authPhone').addEventListener('input', syncLoginPrefix);
 document.addEventListener('change', e => {
@@ -1430,6 +1427,17 @@ $('#scrim').addEventListener('click', closeSlip);
 $('#loginBtn').addEventListener('click', () => openAuth('login'));
 $('#registerBtn').addEventListener('click', () => openAuth('register'));
 $('#authClose').addEventListener('click', closeAuth);
+// Password visibility eye (Prince, 2026-11-04): tap to see what you
+// are typing, tap again to hide it.
+const EYE_OPEN = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_SHUT = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.6 10.6 0 0 1 12 19c-6.5 0-10-7-10-7a17.6 17.6 0 0 1 4.06-4.94M9.9 4.24A9.5 9.5 0 0 1 12 5c6.5 0 10 7 10 7a17.7 17.7 0 0 1-2.16 3.19M14.12 14.12A3 3 0 1 1 9.88 9.88"/><line x1="2" y1="2" x2="22" y2="22"/></svg>';
+$('#passEye').addEventListener('click', () => {
+  const input = $('#authPass'), btn = $('#passEye');
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.innerHTML = show ? EYE_SHUT : EYE_OPEN;
+  btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+});
 $('#authCountry').addEventListener('change', e => {
   countryTouched = true;
   applyCountry(e.target.value);

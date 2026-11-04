@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#070907">
 <title>Oddaroa Ghana | Sports Betting, Live Odds & Aviator</title>
 <meta name="description" content="Oddaroa — sports betting in Ghana: live odds, betslip, booking codes and mobile money wallet. 18+, bet responsibly.">
-<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/styles.css?v=6">
 <link rel="stylesheet" href="css/games.css?v=4">
 </head>
 <body>
@@ -90,13 +90,13 @@
         </select>
       </label>
       <label><span id="authPhoneLabel">Mobile number or email</span>
-        <span class="phoneflex"><span class="prefix" id="authPrefix">+233</span><input type="tel" id="authPhone" placeholder="Mobile Number" autocomplete="tel"></span>
+        <span class="phoneflex"><span class="prefix" id="authPrefix">+233</span><input type="tel" id="authPhone" placeholder="Mobile Number" autocomplete="tel" inputmode="numeric"></span>
       </label>
       <label id="authEmailRow" style="display:none">Email *
         <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email">
       </label>
       <label>Password
-        <input type="password" id="authPass" placeholder="Password" autocomplete="current-password" required>
+        <span class="passflex"><input type="password" id="authPass" placeholder="Password" autocomplete="current-password" required><button type="button" class="pass-eye" id="passEye" aria-label="Show password"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button></span>
       </label>
       <label id="authRefRow" style="display:none">Referral code (optional)
         <input type="text" id="authRef" placeholder="E.G. AB12CD" autocomplete="off">
@@ -147,7 +147,7 @@
 <div class="toast" id="toast" role="status"></div>
 
 <script src="js/data.js"></script>
-<script src="js/app.js?v=5"></script>
+<script src="js/app.js?v=6"></script>
 <script src="js/games.js?v=5"></script>
 </body>
 </html>
