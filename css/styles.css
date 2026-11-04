@@ -908,7 +908,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .headactions { margin-left: auto; }
   .headactions .btn { padding: 7px 12px; }
   .userchip { font-size: 12px; }
-  .page { padding: 10px 10px 96px; }
+  /* Bottom clearance must beat the fixed bottom bar PLUS its raised
+     betslip button (58px tall, -26px top margin): bar ~66px + 26px
+     protrusion + safe-area. At 96px the deposit form's Send button
+     could still sit under the slip button on small phones — Prince's
+     console hit-test caught exactly that stack on 2026-11-04. */
+  .page { padding: 10px 10px 124px; }
   .hero { min-height: 210px; }
   .hero-in { padding: 18px; }
   .hero h1 { font-size: 27px; }
