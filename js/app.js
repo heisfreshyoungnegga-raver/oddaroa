@@ -359,6 +359,32 @@ function loadTileImages() {
     }).catch(() => {});
   });
 }
+// Game card covers (original art made for Oddaroa, 2026-11-04).
+// Same base64-in-repo arrangement as the hero photos and tile icons:
+// decoded client-side, plain colour tile shows until a cover lands.
+const GAME_IMGS = {
+  'Aviator': 'assets/game-aviator.jpg',
+  'Plinko X': 'assets/game-plinko.jpg',
+  'Lucky Dice': 'assets/game-dice.jpg',
+  'Penalty Shootout': 'assets/game-penalty.jpg',
+  'Coin Flip': 'assets/game-coin.jpg',
+  'Football Penalty': 'assets/game-footpen.jpg',
+};
+const gameUrls = {};
+function loadGameImages() {
+  Object.keys(GAME_IMGS).forEach(name => {
+    const path = GAME_IMGS[name];
+    if (gameUrls[name]) return;
+    gameUrls[name] = path;
+    fetch(path).then(r => r.arrayBuffer()).then(buf => {
+      const bytes = new Uint8Array(buf);
+      gameUrls[name] = (bytes[0] === 0xFF && bytes[1] === 0xD8)
+        ? URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }))
+        : 'data:image/jpeg;base64,' + new TextDecoder().decode(buf).replace(/\s+/g, '');
+      if (state.view === 'games') render();
+    }).catch(() => {});
+  });
+}
 function quickHTML() {
   const tiles = [
     ['Soccer', ''],
@@ -728,11 +754,14 @@ function settingsHTML() {
     '<button class="btn gold big" type="submit">Update Password</button></form></div>';
 }
 function gamesHTML() {
-  const tiles = GAMES.map(g =>
-    '<button class="gtile ' + g.cls + '" data-game="' + esc(g.name) + '">' +
+  loadGameImages();
+  const tiles = GAMES.map(g => {
+    const cover = gameUrls[g.name];
+    return '<button class="gtile ' + g.cls + (cover ? ' has-cover' : '') + '" data-game="' + esc(g.name) + '">' +
+    (cover ? '<img class="gcover" src="' + cover + '" alt="">' : '') +
     (g.tag ? '<span class="gtag">' + g.tag + '</span>' : '') +
-    '<span class="gname">' + esc(g.name) + '</span><span class="gnote">' + esc(g.note) + ' · Coming soon</span></button>'
-  ).join('');
+    '<span class="gname">' + esc(g.name) + '</span><span class="gnote">' + esc(g.note) + ' · Coming soon</span></button>';
+  }).join('');
   return '<h2>Games</h2><div class="gamesgrid">' + tiles + '</div>' +
     '<div class="howto"><h3>Coming soon</h3><p>Casino games launch with our game provider integration. Sports betting is open now — head to the match list to play.</p></div>';
 }
