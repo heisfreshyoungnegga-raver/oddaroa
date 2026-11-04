@@ -10,6 +10,8 @@ const state = {
   date: 'All',
   pop: '',
   lastSync: null,
+  joinCountry: '+233',
+  joinPhone: '',
   sport: 'Soccer',
   query: '',
   filtersOpen: false,
@@ -340,6 +342,26 @@ function popularHTML() {
     '<button class="chip' + (state.pop === 'next3h' ? ' on' : '') + '" data-pop="next3h">Next 3 Hours</button>' +
     '<button class="chip' + (state.date === 'Today' && !state.pop ? ' on' : '') + '" data-chip="date" data-val="Today">Today\'s Football</button>' +
     leagueChips + '</div>';
+}
+// Instant join (idea borrowed from GoalsVault): a phone number is
+// all it takes to start — the register form opens with the number
+// already filled in. The dial code is TAPPABLE (Prince, 2026-11-04):
+// tapping it opens the country picker, and the chosen country
+// carries into the sign-up form. Signed-out visitors on Home only.
+function joinHTML() {
+  if (state.user) return '';
+  return '<section class="join-card"><h3>Instant Registration</h3>' +
+    '<form id="joinForm" class="join-flex"><span class="phoneflex join-phone">' +
+    '<span class="prefix prefix-picker"><span id="joinPrefixLabel">' + state.joinCountry + '</span><span class="pp-caret">\u25BE</span>' +
+    '<select id="joinCountry" aria-label="Country">' +
+    ['+233 Ghana', '+234 Nigeria', '+254 Kenya', '+256 Uganda', '+255 Tanzania'].map(c => {
+      const [code, name] = c.split(' ');
+      return '<option value="' + code + '"' + (state.joinCountry === code ? ' selected' : '') + '>' + name + ' \u00B7 ' + code + '</option>';
+    }).join('') +
+    '</select></span>' +
+    '<input type="tel" id="joinPhone" placeholder="Mobile number" autocomplete="tel" value="' + esc(state.joinPhone) + '"></span>' +
+    '<button class="btn gold" type="submit">Join Now</button></form>' +
+    '<p class="muted">Make a deposit and start betting!</p></section>';
 }
 // Home quick-access tiles (the icon row under the hero): each tile is a
 // shortcut into a real view or filter. Icons are small inline SVGs drawn
@@ -804,7 +826,7 @@ function viewHTML() {
     case 'virtual':
       return filtersHTML() + matchListHTML();
     default:
-      return heroHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
+      return heroHTML() + joinHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
   }
 }
 function render() {
@@ -953,6 +975,16 @@ function syncLoginPrefix() {
   prefix.style.display = isEmail ? 'none' : '';
 }
 $('#authPhone').addEventListener('input', syncLoginPrefix);
+document.addEventListener('change', e => {
+  if (e.target.id === 'joinCountry') {
+    state.joinCountry = e.target.value;
+    const label = $('#joinPrefixLabel');
+    if (label) label.textContent = e.target.value;
+  }
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'joinPhone') state.joinPhone = e.target.value;
+});
 function openMenu() { $('#drawerWrap').hidden = false; }
 function closeMenu() { const w = $('#drawerWrap'); if (w) w.hidden = true; }
 function syncHeader() {
@@ -1204,6 +1236,13 @@ document.addEventListener('submit', async e => {
       startMomoPoll();
       render();
     } catch (err) { toast(err.detail || 'That code was not accepted — check it and try again.'); }
+  } else if (id === 'joinForm') {
+    e.preventDefault();
+    const num = ($('#joinPhone').value || '').trim();
+    const country = ($('#joinCountry') || {}).value || '+233';
+    openAuth('register');
+    applyCountry(country);
+    if (num) $('#authPhone').value = num;
   } else if (id === 'withdrawForm') {
     e.preventDefault();
     try {
