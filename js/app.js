@@ -863,7 +863,7 @@ function gamesHTML() {
   }).join('');
   return '<h2>Games</h2><div class="gamesgrid">' + tiles + '</div>' +
     '<div class="howto"><h3>Real rounds, fair rolls</h3><p>Every game is rolled on the server and settled to your wallet instantly. Aviator flights are fixed before takeoff — the seed is revealed after each flight so the crash point can be verified.</p></div>' +
-    '<div class="ghist card"><h3>Latest results</h3><div id="gamesRecent"><p class="empty">' +
+    '<div class="ghist card"><h3>Latest results across Oddaroa</h3><div id="gamesRecent"><p class="empty">' +
     (state.user ? 'Loading…' : 'Log in to play and see the latest results.') + '</p></div></div>';
 }
 

@@ -368,7 +368,7 @@
   };
   function plinkoScreen() {
     return shell('Plinko X',
-      '<div class="pl-wrap"><canvas id="plCanvas" width="720" height="540"></canvas></div>',
+      '<div class="pl-wrap"><canvas id="plCanvas" width="720" height="500"></canvas></div>',
       '<label class="glabel">Rows</label>' + segHTML('plRows', [{ v: '8', t: '8' }, { v: '12', t: '12' }, { v: '16', t: '16' }], '12') +
       '<label class="glabel">Risk</label>' + segHTML('plRisk', [{ v: 'low', t: 'Low' }, { v: 'medium', t: 'Medium' }, { v: 'high', t: 'High' }], 'medium') +
       stakeHTML(5) +
@@ -438,6 +438,18 @@
       if (!d) { S.busy = false; btn.disabled = false; return; }
       const { path, slot } = d.round.result, g = geometry(rows);
       const stake = d.round.stake;
+      let dropDone = false;
+      const finishDrop = () => {
+        if (dropDone || !S) return;
+        dropDone = true;
+        draw({ x: pts[pts.length - 1].x, y: pts[pts.length - 1].y });
+        const mult = PLINKO_TABLES[rows][risk][slot];
+        if (d.round.payout > 0) banner(mult >= 1 ? 'win' : 'lose', 'Slot <b>' + mult + 'x</b> — you got back <b>' + money(d.round.payout) + '</b> on ' + money(stake) + '.');
+        else banner('lose', 'The ball found a dead slot — <b>' + money(stake) + '</b> gone. The edges pay for a reason.');
+        setBalance(d.balance);
+        S.busy = false; btn.disabled = false;
+        loadHistory('plinko');
+      };
       // Waypoints: at step s the ball sits above row s, drifting with
       // the rights it has taken so far; arcs between them sell the bounce.
       const pts = [{ x: g.cx, y: 18 }];
@@ -450,23 +462,23 @@
       const stepMs = 105, total = stepMs * (pts.length - 1);
       const t0 = performance.now();
       const frame = (now) => {
-        if (!S) return;
-        const t = Math.min(1, (now - t0) / total);
-        const pos = t * (pts.length - 1), i = Math.min(pts.length - 2, Math.floor(pos)), f = pos - i;
-        const a = pts[i], b = pts[i + 1];
-        const x = a.x + (b.x - a.x) * f;
-        const y = a.y + (b.y - a.y) * f - Math.sin(f * Math.PI) * 13;
-        draw({ x, y });
-        if (t < 1) { S.raf = requestAnimationFrame(frame); return; }
-        draw({ x: pts[pts.length - 1].x, y: pts[pts.length - 1].y });
-        const mult = PLINKO_TABLES[rows][risk][slot];
-        if (d.round.payout > 0) banner(mult >= 1 ? 'win' : 'lose', 'Slot <b>' + mult + 'x</b> — you got back <b>' + money(d.round.payout) + '</b> on ' + money(stake) + '.');
-        else banner('lose', 'The ball found a dead slot — <b>' + money(stake) + '</b> gone. The edges pay for a reason.');
-        setBalance(d.balance);
-        S.busy = false; btn.disabled = false;
-        loadHistory('plinko');
+        if (!S || dropDone) return;
+        try {
+          const t = Math.min(1, Math.max(0, (now - t0) / total));
+          const pos = t * (pts.length - 1), i = Math.min(pts.length - 2, Math.floor(pos)), f = pos - i;
+          const a = pts[i], b = pts[i + 1];
+          const x = a.x + (b.x - a.x) * f;
+          const y = a.y + (b.y - a.y) * f - Math.sin(f * Math.PI) * 13;
+          draw({ x, y });
+          if (t < 1) { S.raf = requestAnimationFrame(frame); return; }
+          finishDrop();
+        } catch (e) { finishDrop(); }
       };
       S.raf = requestAnimationFrame(frame);
+      // A stalled animation frame must never strand the player: if
+      // rAF is throttled (background tab, busy browser), the result
+      // still lands on a plain timer.
+      later(finishDrop, total + 1500);
     });
   }
 
@@ -479,7 +491,7 @@
   }
   function diceScreen() {
     return shell('Lucky Dice',
-      '<div class="dice-row"><div id="dieA">' + dieHTML(3) + '</div><div class="dice-plus">+</div><div id="dieB">' + dieHTML(4) + '</div><div class="dice-total" id="diceTotal">7</div></div>' +
+      '<div class="dice-row"><div id="dieA">' + dieHTML(6) + '</div><div class="dice-plus">+</div><div id="dieB">' + dieHTML(1) + '</div><div class="dice-total" id="diceTotal">–</div></div>' +
       '<p class="dice-hint" id="diceHint">Two dice. Call where the total lands.</p>',
       '<label class="glabel">Your call</label>' +
       '<div class="dice-picks" id="dicePicks">' +
