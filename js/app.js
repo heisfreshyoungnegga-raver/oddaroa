@@ -900,7 +900,14 @@ function render() {
   if (state.view === 'game' && root.dataset.view === 'game' && root.dataset.game === state.game) return;
   if (window.OddaroaGames) OddaroaGames.destroy();
   root.dataset.view = state.view;
-  root.dataset.game = state.view === 'game' ? state.game : '';
+  // NEVER write data-game="" — an empty attribute still matches the
+  // [data-game] selector, so every click inside #root would take the
+  // game-card branch and bounce the user to the games lobby. That
+  // one line broke every wallet tab, field and button on 2026-11-04
+  // (the forwarded "deposit takes you to the games" report). Remove
+  // the attribute outright when no game screen is showing.
+  if (state.view === 'game') root.dataset.game = state.game;
+  else root.removeAttribute('data-game');
   root.innerHTML = viewHTML();
   document.querySelectorAll('.navlink').forEach(b =>
     b.classList.toggle('active', b.dataset.nav === state.view));
@@ -1223,7 +1230,7 @@ document.addEventListener('click', e => {
     return;
   }
   const game = e.target.closest('[data-game]');
-  if (game) {
+  if (game && game.dataset.game) {
     if (!state.user) { openAuth('login'); toast('Log in to play ' + game.dataset.game); return; }
     state.game = game.dataset.game;
     state.view = 'game';
