@@ -400,23 +400,32 @@ function trustStripHTML() {
   // Winners ticker (Prince's ask, 2026-11-03): the sliding line under
   // the promo banner shows recent winners with their phone numbers
   // partly masked — a fresh random set is generated on every render.
-  // Ghana, Nigeria and Kenya winners (Prince, 2026-11-04), each with
-  // their own names, number prefixes and currency.
+  // Five winner countries (Prince, 2026-11-04): Ghana, Nigeria,
+  // Uganda, Kenya and Tanzania — picked at random for every slot,
+  // each with their own names, number prefixes and currency.
   const COUNTRIES = [
     { names: ['Kwame', 'Ama', 'Yaw', 'Akosua', 'Kojo', 'Efua', 'Kwabena', 'Abena', 'Kofi', 'Adjoa',
         'Kwaku', 'Esi', 'Fiifi', 'Araba', 'Nana', 'Maame', 'Paa', 'Ekua', 'Selasie', 'Edem',
         'Afi', 'Mawuli', 'Senyo', 'Dzifa', 'Elikem', 'Sitsofe', 'Abdul', 'Fuseina', 'Ibrahim', 'Aisha'],
       prefix: ['024', '025', '027', '053', '054', '055', '057', '059', '020', '050'],
-      cur: 'GHS', min: 150, max: 6500, step: 5, weight: 2 },
+      cur: 'GHS', min: 150, max: 6500, step: 5, weight: 1 },
     { names: ['Chidi', 'Ngozi', 'Emeka', 'Tunde', 'Funke', 'Olufemi', 'Blessing', 'Segun', 'Yetunde', 'Uche',
         'Ifeanyi', 'Kemi', 'Adebayo', 'Chiamaka', 'Yusuf', 'Halima', 'Obinna', 'Titilayo', 'Musa', 'Folake'],
       prefix: ['0803', '0806', '0703', '0706', '0810', '0813', '0814', '0816', '0805', '0807',
         '0705', '0811', '0815', '0802', '0808', '0708', '0812', '0809', '0817', '0818'],
       cur: '₦', min: 15000, max: 950000, step: 500, weight: 1 },
+    { names: ['Kato', 'Nakato', 'Mugisha', 'Birungi', 'Ssemakula', 'Nalwoga', 'Okello', 'Achen', 'Tumwine', 'Kyomuhendo',
+        'Namono', 'Aine', 'Byaruhanga', 'Namara', 'Muwanga', 'Nansubuga', 'Opio', 'Among', 'Kirabo', 'Namutebi'],
+      prefix: ['0772', '0773', '0775', '0782', '0701', '0702', '0704', '0750', '0752', '0740'],
+      cur: 'UGX', min: 50000, max: 3500000, step: 5000, weight: 1 },
     { names: ['Wanjiru', 'Kamau', 'Otieno', 'Achieng', 'Mwangi', 'Njeri', 'Kiprop', 'Chebet', 'Maina', 'Nyambura',
         'Ochieng', 'Wambui', 'Korir', 'Mutiso', 'Auma', 'Karanja', 'Waithera', 'Barasa', 'Nekesa', 'Omondi'],
       prefix: ['0712', '0722', '0725', '0701', '0702', '0740', '0741', '0790', '0791', '0110'],
       cur: 'KSh', min: 2000, max: 120000, step: 100, weight: 1 },
+    { names: ['Juma', 'Fatuma', 'Neema', 'Baraka', 'Zawadi', 'Mwanaidi', 'Emmanuel', 'Grace', 'Hassan', 'Amina',
+        'Peter', 'Anna', 'Joseph', 'Rehema', 'Said', 'Hadija', 'Kelvin', 'Lightness', 'Ombeni', 'Subira'],
+      prefix: ['0713', '0715', '0655', '0677', '0744', '0754', '0766', '0684', '0699', '0622'],
+      cur: 'TSh', min: 20000, max: 2500000, step: 5000, weight: 1 },
   ];
   const bag = COUNTRIES.flatMap(c => Array(c.weight).fill(c));
   const pick = a => a[Math.floor(Math.random() * a.length)];
