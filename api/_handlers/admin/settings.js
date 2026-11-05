@@ -22,7 +22,9 @@ module.exports = guard(async (req, res) => {
   for (const k of ['admin_commission_pct', 'user_cashback_pct']) {
     if (body[k] !== undefined) {
       const v = Number(body[k]);
-      if (!(v >= 0 && v <= 50)) return send(res, 400, { error: 'invalid_percent', detail: k + ' must be between 0 and 50.' });
+      // Cap raised 50 -> 100 on 2026-11-05: Prince set the admin
+      // referral commission to 70%.
+      if (!(v >= 0 && v <= 100)) return send(res, 400, { error: 'invalid_percent', detail: k + ' must be between 0 and 100.' });
       updates[k] = String(v);
     }
   }
