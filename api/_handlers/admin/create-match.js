@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, expandOdds } = require('../../_lib');
+const { sql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, ensureMatchColumns, expandOdds } = require('../../_lib');
 
 // Super admin only: create a "featured" match that plays like a real
 // one. Two ways in (Prince's design, 2026-11-03):
@@ -43,7 +43,22 @@ module.exports = guard(async (req, res) => {
   const auth = requireSuperAdmin(req, res);
   if (!auth) return;
   await ensureAdminTables();
-  const { league, home_team, away_team, starts_at, o1, ox, o2, goals, fav } = await readBody(req);
+  await ensureMatchColumns();
+  const { league, home_team, away_team, starts_at, o1, ox, o2, goals, fav, ht_stoppage, ft_stoppage, home_logo, away_logo } = await readBody(req);
+  // Match-level stoppage (Prince, 2026-11-05): minutes added to each
+  // half, 0-15. Crests ("flags") are a URL or a small data image the
+  // portal downscaled; anything else is ignored.
+  const clampStop = v => Math.min(15, Math.max(0, Math.round(Number(v) || 0)));
+  const htStop = clampStop(ht_stoppage);
+  const ftStop = clampStop(ft_stoppage);
+  const cleanLogo = v => {
+    const s = String(v || '').trim();
+    if (/^https:\/\/\S+$/i.test(s) && s.length <= 500) return s;
+    if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(s) && s.length <= 160000) return s;
+    return null;
+  };
+  const homeLogo = cleanLogo(home_logo);
+  const awayLogo = cleanLogo(away_logo);
 
   let home = String(home_team || '').trim();
   let away = String(away_team || '').trim();
@@ -106,10 +121,11 @@ module.exports = guard(async (req, res) => {
   }
 
   const rows = await sql(
-    `insert into matches (league, home_team, away_team, starts_at, odds, external_ref, goal_events)
-     values ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb) returning *`,
+    `insert into matches (league, home_team, away_team, starts_at, odds, external_ref, goal_events, home_logo, away_logo, ht_stoppage, ft_stoppage)
+     values ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8, $9, $10, $11) returning *`,
     [leagueName.slice(0, 80), home.slice(0, 80), away.slice(0, 80),
-     start.toISOString(), JSON.stringify(odds), 'custom:' + crypto.randomUUID(), JSON.stringify(cleanGoals)]
+     start.toISOString(), JSON.stringify(odds), 'custom:' + crypto.randomUUID(), JSON.stringify(cleanGoals),
+     homeLogo, awayLogo, htStop, ftStop]
   );
   send(res, 201, { match: rows[0] });
 });

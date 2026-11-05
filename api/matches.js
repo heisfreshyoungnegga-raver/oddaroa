@@ -1,4 +1,4 @@
-const { sql, send, guard, isCustomMatch, customMatchState, fillOdds, maybeAutoSettle } = require('./_lib');
+const { sql, send, guard, isCustomMatch, customMatchState, fillOdds, maybeAutoSettle, ensureMatchColumns } = require('./_lib');
 const singleMatch = require('./_handlers/match-single');
 const { maybeRefreshLive } = require('./_espn');
 const { afEnabled, maybeRefreshAf } = require('./_apifootball');
@@ -82,13 +82,15 @@ module.exports = guard(async (req, res) => {
   // simply the ESPN block, exactly as before.
   const af = afEnabled();
   if (af) await maybeRefreshAf().catch(() => {});
+  await ensureMatchColumns().catch(() => {});
   await maybeRefreshLive().catch(() => {});
   // Settle bets on matches the feeds have just finished (throttled
   // inside; a failure here must never break the list either).
   await maybeAutoSettle().catch(() => {});
   const rows = await sql(
     `select id, league, home_team, away_team, starts_at, status, minute,
-            score_home, score_away, odds, odds_full, home_logo, away_logo, external_ref, goal_events
+            score_home, score_away, odds, odds_full, home_logo, away_logo, external_ref, goal_events,
+            ht_stoppage, ft_stoppage
      from matches
      where status in ('live', 'upcoming')
      order by (status = 'live') desc, starts_at asc
@@ -102,8 +104,8 @@ module.exports = guard(async (req, res) => {
     const grp = m.external_ref && m.external_ref.startsWith('espn:') ? 1 : 0;
     if (isCustomMatch(m)) {
       const st = customMatchState(m, now);
-      if (st.status === 'finished' && now - new Date(m.starts_at) > (95 + 180) * 60000) continue;
-      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), status: st.status, minute: st.minute, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.odds_full, odds_full: undefined } });
+      if (st.status === 'finished' && now - new Date(m.starts_at) > (105 + (m.ht_stoppage || 0) + (m.ft_stoppage || 0) + 180) * 60000) continue;
+      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.odds_full, odds_full: undefined } });
     } else {
       entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.odds_full, odds_full: undefined } });
     }

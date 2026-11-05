@@ -312,6 +312,14 @@ function featuredFormHTML() {
     '<label>X (draw) <input type="number" step="0.01" min="1.01" id="ff_ox" placeholder="Auto"></label>' +
     '<label>2 (away) <input type="number" step="0.01" min="1.01" id="ff_o2" placeholder="Auto"></label></div>' +
     '<label>Goal schedule — minute:side, comma separated; stoppage time like 45+2:home or 90+3:away (blank = auto) <input type="text" id="ffGoals" placeholder="e.g. 12:home, 45+2:away, 90+3:home"></label>' +
+    '<div class="oddsgrid">' +
+    '<label>1st half stoppage (min) <input type="number" min="0" max="15" step="1" id="ffHtStop" value="0"></label>' +
+    '<label>2nd half stoppage (min) <input type="number" min="0" max="15" step="1" id="ffFtStop" value="0"></label></div>' +
+    '<p class="muted">The match goes live on its own at kickoff: 45 minutes, 15 minutes half time, 45 minutes, plus any stoppage time you add.</p>' +
+    '<label>Home crest (flag) — image URL <input type="url" id="ffHomeLogo" placeholder="https://…"></label>' +
+    '<label>…or upload the home crest <input type="file" id="ffHomeFlag" accept="image/*"></label>' +
+    '<label>Away crest (flag) — image URL <input type="url" id="ffAwayLogo" placeholder="https://…"></label>' +
+    '<label>…or upload the away crest <input type="file" id="ffAwayFlag" accept="image/*"></label>' +
     '<button class="btn gold big" type="submit">Create Featured Match</button></form></div>';
 }
 function supportHTML() {
@@ -570,6 +578,30 @@ document.addEventListener('click', async e => {
   }
 });
 
+// Crest uploads for the featured-match form: the picked image is
+// downscaled in the browser (max 256px) and held here until submit,
+// so a phone photo never becomes a multi-MB database value.
+const crestUploads = { home: '', away: '' };
+document.addEventListener('change', e => {
+  const side = e.target.id === 'ffHomeFlag' ? 'home' : e.target.id === 'ffAwayFlag' ? 'away' : null;
+  if (!side) return;
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    const scale = Math.min(1, 256 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.width * scale));
+    c.height = Math.max(1, Math.round(img.height * scale));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    crestUploads[side] = c.toDataURL('image/png');
+    URL.revokeObjectURL(img.src);
+    toast((side === 'home' ? 'Home' : 'Away') + ' crest ready — it will upload with the match.');
+  };
+  img.onerror = () => toast('That image could not be read.');
+  img.src = URL.createObjectURL(file);
+});
+
 document.addEventListener('submit', async e => {
   if (e.target.id === 'adminLogin') {
     e.preventDefault();
@@ -668,8 +700,15 @@ document.addEventListener('submit', async e => {
         return { minute: Number(mm[1] || NaN), extra: Number(mm[2] || 0), side: side === 'away' ? 'away' : 'home' };
       }).filter(g => g.minute >= 1 && g.minute <= 90);
     }
+    body.ht_stoppage = Number($('#ffHtStop').value) || 0;
+    body.ft_stoppage = Number($('#ffFtStop').value) || 0;
+    const homeLogo = $('#ffHomeLogo').value.trim() || crestUploads.home;
+    const awayLogo = $('#ffAwayLogo').value.trim() || crestUploads.away;
+    if (homeLogo) body.home_logo = homeLogo;
+    if (awayLogo) body.away_logo = awayLogo;
     try {
       const data = await api('/admin/create-match', { method: 'POST', body });
+      crestUploads.home = ''; crestUploads.away = '';
       toast('Created: ' + data.match.home_team + ' vs ' + data.match.away_team + ' — it plays by the clock from kickoff.');
       loadAll();
     } catch (err) { toast(err.message); }

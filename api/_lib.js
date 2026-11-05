@@ -509,8 +509,9 @@ async function applyDepositRewards(userId, txnId, amountGhs) {
 
 // A super-admin "featured" match carries a goal schedule. Its displayed
 // state is derived from the clock: before kickoff it is upcoming; from
-// kickoff the minute counts up and each scheduled goal lands at its
-// minute; at 100 minutes it is finished with the full scheduled score.
+// kickoff the match clock counts up (pausing for half time) and each
+// scheduled goal lands at its minute; at full time it is finished
+// with the full scheduled score.
 // A goal may carry stoppage time (Prince, 2026-11-05): {minute: 45,
 // extra: 2} is a 45+2' goal — `minute` stays the regulation minute (so
 // half-time derivation from minute <= 45 stays right) and the goal
@@ -526,10 +527,28 @@ function customMatchState(m, now = new Date()) {
   if (m.status === 'finished') return { status: 'finished', minute: null, score_home: m.score_home, score_away: m.score_away, final_home: m.score_home, final_away: m.score_away };
   const elapsed = Math.floor((now - new Date(m.starts_at)) / 60000);
   if (elapsed < 0) return { status: 'upcoming', minute: null, score_home: 0, score_away: 0, final_home: finH, final_away: finA };
-  if (elapsed >= 100) return { status: 'finished', minute: null, score_home: finH, score_away: finA, final_home: finH, final_away: finA };
-  const shown = goals.filter(g => goalEff(g) <= elapsed);
+  // Real football timing (Prince, 2026-11-05, from his reference):
+  // 45 minutes + 1st-half stoppage, a 15-minute half-time break,
+  // then 45 minutes + 2nd-half stoppage. The match clock pauses at
+  // half time; the returned `minute` is the match clock and
+  // `minute_label` is what the site displays (45+2′, HT, 90+3′).
+  const s1 = Math.min(15, Math.max(0, Number(m.ht_stoppage) || 0));
+  const s2 = Math.min(15, Math.max(0, Number(m.ft_stoppage) || 0));
+  const halfEnd = 45 + s1;
+  const secondStart = halfEnd + 15;
+  const fullEnd = secondStart + 45 + s2;
+  if (elapsed > fullEnd) return { status: 'finished', minute: null, score_home: finH, score_away: finA, final_home: finH, final_away: finA };
+  let clock, phase, label;
+  if (elapsed <= halfEnd) { phase = '1H'; clock = elapsed; }
+  else if (elapsed < secondStart) { phase = 'HT'; clock = halfEnd; }
+  else { phase = '2H'; clock = 45 + (elapsed - secondStart); }
+  if (phase === 'HT') label = 'HT';
+  else if (phase === '1H' && clock > 45) label = '45+' + (clock - 45) + '′';
+  else if (phase === '2H' && clock > 90) label = '90+' + (clock - 90) + '′';
+  else label = clock + '′';
+  const shown = goals.filter(g => goalEff(g) <= clock);
   return {
-    status: 'live', minute: Math.min(elapsed, 90),
+    status: 'live', minute: clock, minute_label: label, phase,
     score_home: shown.filter(g => g.side === 'home').length,
     score_away: shown.filter(g => g.side === 'away').length,
     final_home: finH, final_away: finA
@@ -704,6 +723,20 @@ function ensureBetColumns() {
   }
   return betColsReady;
 }
+// Custom-match stoppage columns (Prince, 2026-11-05): how many
+// stoppage minutes the super admin added to each half of a featured
+// match. The match clock is 45 + stoppage, a 15-minute half-time,
+// then 45 + stoppage.
+let matchColsReady = null;
+function ensureMatchColumns() {
+  if (!matchColsReady) {
+    matchColsReady = (async () => {
+      await sql(`alter table matches add column if not exists ht_stoppage int not null default 0`);
+      await sql(`alter table matches add column if not exists ft_stoppage int not null default 0`);
+    })();
+  }
+  return matchColsReady;
+}
 
 /* ---------------- Bet settlement (shared) ----------------
    Scores every pending selection on one finished match and settles
@@ -778,7 +811,7 @@ async function maybeAutoSettle() {
      from matches m
      where exists (select 1 from bet_selections s where s.match_id = m.id and s.result = 'pending')
        and ((m.status = 'finished' and m.score_home is not null and m.score_away is not null)
-            or (m.external_ref like 'custom:%' and m.starts_at < now() - interval '100 minutes'))
+            or (m.external_ref like 'custom:%' and m.starts_at + make_interval(mins => 106 + coalesce(m.ht_stoppage, 0) + coalesce(m.ft_stoppage, 0)) < now()))
      limit 5`
   );
   for (const m of rows) {
@@ -794,4 +827,4 @@ async function maybeAutoSettle() {
   }
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns };
+module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns };

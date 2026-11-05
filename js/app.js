@@ -276,7 +276,7 @@ function oddsHTML(m) {
 function rowHTML(m) {
   let time;
   if (m.status === 'live') {
-    time = '<span class="live-min">' + (m.minute != null ? m.minute + '&prime;' : 'LIVE') + '</span>';
+    time = '<span class="live-min">' + (m.minute_label || (m.minute != null ? m.minute + '&prime;' : 'LIVE')) + '</span>';
   } else {
     time = '<span>' + fmtDate(m.starts_at) + '</span>';
   }
@@ -318,7 +318,7 @@ function matchDetailsHTML() {
   const back = '<button class="btn ghost" data-back style="margin:10px 0">‹ Back</button>';
   if (!m) return back + '<div class="card"><h3>Match not available</h3><p class="muted">It may have finished or been removed.</p></div>';
   const when = m.status === 'live'
-    ? '<span class="live-min">' + (m.minute != null ? m.minute + '&prime;' : 'LIVE') + '</span>'
+    ? '<span class="live-min">' + (m.minute_label || (m.minute != null ? m.minute + '&prime;' : 'LIVE')) + '</span>'
     : esc(fmtDate(m.starts_at));
   const team = (name, logo, score) => '<div class="team">' + (logo ? '<img class="tlogo" src="' + esc(logo) + '" alt="" loading="lazy" onerror="this.remove()">' : '') + '<span class="tname">' + esc(name) + '</span>' + (score != null ? '<span class="tscore">' + score + '</span>' : '') + '</div>';
   let html = back + '<div class="card"><div class="league">' + esc(m.league) + '</div>' +
