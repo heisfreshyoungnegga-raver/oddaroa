@@ -36,7 +36,7 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('on'), 3600);
 }
-function esc(s) { return String(s == null ? '' : s).replace(/</g, '&lt;'); }
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 function money(n) { return 'GHS ' + Number(n || 0).toFixed(2); }
 function fmtDate(iso) {
   const d = new Date(iso);

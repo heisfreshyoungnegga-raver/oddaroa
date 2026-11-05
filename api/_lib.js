@@ -62,8 +62,11 @@ function verifyToken(token) {
   const [body, sig] = String(token || '').split('.');
   if (!body || !sig) return null;
   const expected = crypto.createHmac('sha256', sessionSecret).update(body).digest('base64url');
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
-  const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
+  // timingSafeEqual throws on a length mismatch — a garbage token
+  // must read as "not logged in" (401), never as a server error.
+  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+  let payload;
+  try { payload = JSON.parse(Buffer.from(body, 'base64url').toString()); } catch (e) { return null; }
   if (!payload.exp || payload.exp < Date.now()) return null;
   return payload;
 }
@@ -112,7 +115,10 @@ function guard(handler) {
     try {
       await handler(req, res);
     } catch (e) {
-      if (!res.writableEnded) send(res, 500, { error: 'server_error', detail: String(e.dbMessage || e.message || e).slice(0, 300) });
+      // Full error goes to the server log only — clients get a
+      // generic detail so internals (table names, SQL text) never leak.
+      console.error('[guard]', e && e.dbMessage ? e.dbMessage : e);
+      if (!res.writableEnded) send(res, 500, { error: 'server_error', detail: 'Something went wrong on our side. Please try again.' });
     }
   };
 }
@@ -694,4 +700,93 @@ function ensureBetColumns() {
   return betColsReady;
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns };
+/* ---------------- Bet settlement (shared) ----------------
+   Scores every pending selection on one finished match and settles
+   any bet whose selections are then all decided. Used by the admin
+   settle endpoint AND by maybeAutoSettle below — before this existed
+   a bet only settled when an admin settled its match by hand, so
+   winners waited on a person (forensic finding, 2026-11-05). */
+async function settleMatch(matchId, home, away) {
+  // Half-time score decides the full-book half markets; without it
+  // those selections stay pending instead of being guessed.
+  const htRow = await sql('select score_home_ht, score_away_ht from matches where id = $1', [matchId]);
+  const htH = htRow.length ? htRow[0].score_home_ht : null;
+  const htA = htRow.length ? htRow[0].score_away_ht : null;
+  const sels = await sql(
+    "select id, bet_id, market, pick from bet_selections where match_id = $1 and result = 'pending'",
+    [matchId]
+  );
+  for (const s of sels) {
+    let won;
+    if (keyFor(s.market, s.pick)) {
+      won = pickWon(s.market, s.pick, home, away);
+    } else {
+      won = afPickWon(s.market, s.pick, home, away, htH, htA);
+      if (won === null) continue; // undecidable yet — leave pending
+    }
+    await sql('update bet_selections set result = $2 where id = $1', [s.id, won ? 'won' : 'lost']);
+  }
+  const affected = [...new Set(sels.map(s => s.bet_id))];
+  let settledWon = 0, settledLost = 0;
+  for (const betId of affected) {
+    const rows = await sql(
+      `select b.id, b.user_id, b.potential_ghs, b.status,
+              count(*) filter (where s.result = 'pending') as pending,
+              count(*) filter (where s.result = 'lost') as lost
+       from bets b join bet_selections s on s.bet_id = b.id
+       where b.id = $1 group by b.id`,
+      [betId]
+    );
+    if (!rows.length) continue;
+    const b = rows[0];
+    if (b.status !== 'open' || Number(b.pending) > 0) continue;
+    if (Number(b.lost) > 0) {
+      await sql("update bets set status = 'lost', settled_at = now() where id = $1", [betId]);
+      settledLost++;
+    } else {
+      await sql(
+        `with upd as (update bets set status = 'won', settled_at = now() where id = $1 returning user_id, potential_ghs),
+              led as (insert into wallet_transactions (user_id, kind, method, amount_ghs, status)
+                      select user_id, 'bet_win', 'Balance', potential_ghs, 'completed' from upd returning id)
+         update users set balance_ghs = balance_ghs + (select potential_ghs from upd)
+         where id = (select user_id from upd)`,
+        [betId]
+      );
+      settledWon++;
+    }
+  }
+  return { selections_scored: sels.length, bets_won: settledWon, bets_lost: settledLost };
+}
+
+// Auto-settle pass: finished matches (feed-scored, or featured
+// matches past their derived full time) that still hold pending
+// selections get settled from their stored scores. Throttled to
+// one pass a minute per instance and a few matches per pass; the
+// admin endpoint remains as the manual override.
+let lastAutoSettle = 0;
+async function maybeAutoSettle() {
+  const nowMs = Date.now();
+  if (nowMs - lastAutoSettle < 60000) return;
+  lastAutoSettle = nowMs;
+  const rows = await sql(
+    `select m.id, m.score_home, m.score_away, m.external_ref, m.starts_at, m.status, m.goal_events
+     from matches m
+     where exists (select 1 from bet_selections s where s.match_id = m.id and s.result = 'pending')
+       and ((m.status = 'finished' and m.score_home is not null and m.score_away is not null)
+            or (m.external_ref like 'custom:%' and m.starts_at < now() - interval '95 minutes'))
+     limit 5`
+  );
+  for (const m of rows) {
+    try {
+      if (isCustomMatch(m)) {
+        const st = customMatchState(m);
+        if (st.status !== 'finished') continue;
+        await settleMatch(m.id, st.final_home, st.final_away);
+      } else {
+        await settleMatch(m.id, Number(m.score_home), Number(m.score_away));
+      }
+    } catch (e) { /* one bad match must not stop the pass */ }
+  }
+}
+
+module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns };

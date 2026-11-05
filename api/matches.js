@@ -1,4 +1,4 @@
-const { sql, send, guard, isCustomMatch, customMatchState, fillOdds } = require('./_lib');
+const { sql, send, guard, isCustomMatch, customMatchState, fillOdds, maybeAutoSettle } = require('./_lib');
 const singleMatch = require('./_handlers/match-single');
 const { maybeRefreshLive } = require('./_espn');
 const { afEnabled, maybeRefreshAf } = require('./_apifootball');
@@ -83,6 +83,9 @@ module.exports = guard(async (req, res) => {
   const af = afEnabled();
   if (af) await maybeRefreshAf().catch(() => {});
   await maybeRefreshLive().catch(() => {});
+  // Settle bets on matches the feeds have just finished (throttled
+  // inside; a failure here must never break the list either).
+  await maybeAutoSettle().catch(() => {});
   const rows = await sql(
     `select id, league, home_team, away_team, starts_at, status, minute,
             score_home, score_away, odds, odds_full, home_logo, away_logo, external_ref, goal_events

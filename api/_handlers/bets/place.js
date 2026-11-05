@@ -22,6 +22,10 @@ module.exports = guard(async (req, res) => {
   if (selections.length > 20) return send(res, 400, { error: 'too_many_selections' });
 
   const ids = [...new Set(selections.map(s => String(s.match_id)))];
+  // A malformed id must be a clean 400, not a Postgres uuid error.
+  if (ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+    return send(res, 400, { error: 'invalid_match_id' });
+  }
   const matchRows = await sql('select id, status, odds, odds_full, starts_at, external_ref, goal_events, score_home, score_away from matches where id = any($1::uuid[])', [ids]);
   const byId = new Map(matchRows.map(m => [m.id, m]));
 

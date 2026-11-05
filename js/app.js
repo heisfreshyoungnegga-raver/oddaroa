@@ -60,7 +60,7 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('on'), 3600);
 }
-function esc(s) { return String(s == null ? '' : s).replace(/</g, '&lt;'); }
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 // A drawn padlock (vector), not the emoji — same icon everywhere a
 // price is locked, styled by .lock-symbol in styles.css.
 const LOCK_ICON = '<span class="lock-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" focusable="false"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><rect x="5" y="10.5" width="14" height="9" rx="2" fill="currentColor"/><circle cx="12" cy="15" r="1.7" fill="#000" opacity="0.45"/></svg></span>';
@@ -1024,6 +1024,16 @@ async function applySlipCode(raw) {
   });
   return added;
 }
+// Mirror the slip onto the visible odds buttons in place. A full
+// render() on every odds tap rebuilt the whole page and made the
+// screen flicker like a refresh (Prince, 2026-11-05) — the buttons
+// only need their selected highlight updated.
+function syncOddSelection() {
+  document.querySelectorAll('[data-odd]').forEach(b => {
+    const market = b.dataset.market || state.market;
+    b.classList.toggle('sel', state.slip.has(slipKey(b.dataset.odd, market, b.dataset.pick)));
+  });
+}
 function renderSlip() {
   $('#slipCount').textContent = state.slip.size;
   const bnCount = $('#bnSlipCount');
@@ -1375,7 +1385,7 @@ document.addEventListener('click', e => {
       });
     }
     renderSlip();
-    render();
+    syncOddSelection();
     return;
   }
   if (e.target.closest('[data-back]')) {
@@ -1416,7 +1426,7 @@ document.addEventListener('click', e => {
     return;
   }
   const rm = e.target.closest('[data-rm]');
-  if (rm) { state.slip.delete(rm.dataset.rm); delete singleStakes[rm.dataset.rm]; renderSlip(); render(); return; }
+  if (rm) { state.slip.delete(rm.dataset.rm); delete singleStakes[rm.dataset.rm]; renderSlip(); syncOddSelection(); return; }
   const amtChip = e.target.closest('[data-amt]');
   if (amtChip) {
     const inp = $('#mmAmt');

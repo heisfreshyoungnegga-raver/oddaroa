@@ -1,8 +1,11 @@
-const { sql, readBody, send, guard, requireAdmin, pickWon, afPickWon, keyFor, isCustomMatch, customMatchState } = require('../../_lib');
+const { sql, readBody, send, guard, requireAdmin, isCustomMatch, customMatchState, settleMatch } = require('../../_lib');
 
-// Settle a finished match: score every pending selection on it, then
-// settle any bet whose selections are now all decided. A fully-won bet
-// credits its potential payout through the ledger.
+// Settle a finished match manually: resolve the final score (given,
+// stored, or a featured match's scheduled score), stamp it on the
+// match, then run the shared settlement. Routine settlement is
+// automatic — maybeAutoSettle in api/_lib.js runs it from the match
+// list once the feeds mark a match finished — so this endpoint is
+// the operator's override/correction path.
 module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const auth = requireAdmin(req, res);
@@ -24,55 +27,6 @@ module.exports = guard(async (req, res) => {
 
   await sql("update matches set status = 'finished', score_home = $2, score_away = $3 where id = $1", [match_id, home, away]);
 
-  // Half-time score decides the full-book half markets; without it
-  // those selections stay pending instead of being guessed.
-  const htRow = await sql('select score_home_ht, score_away_ht from matches where id = $1', [match_id]);
-  const htH = htRow.length ? htRow[0].score_home_ht : null;
-  const htA = htRow.length ? htRow[0].score_away_ht : null;
-
-  const sels = await sql(
-    "select id, bet_id, market, pick from bet_selections where match_id = $1 and result = 'pending'",
-    [match_id]
-  );
-  for (const s of sels) {
-    let won;
-    if (keyFor(s.market, s.pick)) {
-      won = pickWon(s.market, s.pick, home, away);
-    } else {
-      won = afPickWon(s.market, s.pick, home, away, htH, htA);
-      if (won === null) continue; // undecidable yet — leave pending
-    }
-    await sql('update bet_selections set result = $2 where id = $1', [s.id, won ? 'won' : 'lost']);
-  }
-
-  const affected = [...new Set(sels.map(s => s.bet_id))];
-  let settledWon = 0, settledLost = 0;
-  for (const betId of affected) {
-    const rows = await sql(
-      `select b.id, b.user_id, b.potential_ghs, b.status,
-              count(*) filter (where s.result = 'pending') as pending,
-              count(*) filter (where s.result = 'lost') as lost
-       from bets b join bet_selections s on s.bet_id = b.id
-       where b.id = $1 group by b.id`,
-      [betId]
-    );
-    if (!rows.length) continue;
-    const b = rows[0];
-    if (b.status !== 'open' || Number(b.pending) > 0) continue;
-    if (Number(b.lost) > 0) {
-      await sql("update bets set status = 'lost', settled_at = now() where id = $1", [betId]);
-      settledLost++;
-    } else {
-      await sql(
-        `with upd as (update bets set status = 'won', settled_at = now() where id = $1 returning user_id, potential_ghs),
-              led as (insert into wallet_transactions (user_id, kind, method, amount_ghs, status)
-                      select user_id, 'bet_win', 'Balance', potential_ghs, 'completed' from upd returning id)
-         update users set balance_ghs = balance_ghs + (select potential_ghs from upd)
-         where id = (select user_id from upd)`,
-        [betId]
-      );
-      settledWon++;
-    }
-  }
-  send(res, 200, { ok: true, selections_scored: sels.length, bets_won: settledWon, bets_lost: settledLost });
+  const out = await settleMatch(match_id, home, away);
+  send(res, 200, { ok: true, ...out });
 });
