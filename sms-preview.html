@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payout SMS — style preview</title>
+<link rel="stylesheet" href="css/styles.css?v=16">
+<style>
+  body { background: #17181c; margin: 0; padding: 22px 14px 40px; font-family: sans-serif; }
+  h1 { color: #f5f5f5; font-size: 19px; margin: 0 0 4px; }
+  p.sub { color: #a7a7ad; margin: 0 0 20px; font-size: 13.5px; }
+  .scene { max-width: 460px; margin: 0 auto 26px; }
+  .scene h2 { color: #f5c518; font-size: 13px; letter-spacing: 1.2px; margin: 0 0 8px; }
+  .scene .sms-alert { position: static; }
+  .scene .sms-card { transform: none; opacity: 1; }
+</style>
+</head>
+<body>
+<h1>Withdrawal-paid SMS — the three device styles</h1>
+<p class="sub">Exactly what an admin sees the moment a withdrawal is confirmed. The portal detects the device and picks the costume.</p>
+
+<div class="scene">
+  <h2>iPHONE — iOS MESSAGES STYLE</h2>
+  <div class="sms-alert show"><div class="sms-card ios">
+    <div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>
+    <div class="sms-body">
+      <div class="sms-head"><b>MTN MoMo</b><span>now</span></div>
+      <div class="sms-title">Withdrawal Paid</div>
+      <p><b>GHS 50.00</b> sent to +233244144067. Player's Oddaroa balance: <b>GHS 120.50</b>.</p>
+    </div>
+    <button class="sms-x" aria-label="Dismiss">&times;</button>
+  </div></div>
+</div>
+
+<div class="scene">
+  <h2>ANDROID — MATERIAL MESSAGES STYLE</h2>
+  <div class="sms-alert show"><div class="sms-card android">
+    <div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>
+    <div class="sms-body">
+      <div class="sms-head"><b>MTN MoMo</b><span>now</span></div>
+      <div class="sms-title">Withdrawal Paid</div>
+      <p><b>GHS 50.00</b> sent to +233244144067. Player's Oddaroa balance: <b>GHS 120.50</b>.</p>
+    </div>
+    <button class="sms-x" aria-label="Dismiss">&times;</button>
+  </div></div>
+</div>
+
+<div class="scene">
+  <h2>DESKTOP / ANYTHING ELSE — DARK CARD</h2>
+  <div class="sms-alert show"><div class="sms-card generic">
+    <div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>
+    <div class="sms-body">
+      <div class="sms-head"><b>MTN MoMo</b><span>now</span></div>
+      <div class="sms-title">Withdrawal Paid</div>
+      <p><b>GHS 50.00</b> sent to +233244144067. Player's Oddaroa balance: <b>GHS 120.50</b>.</p>
+    </div>
+    <button class="sms-x" aria-label="Dismiss">&times;</button>
+  </div></div>
+</div>
+
+</body>
+</html>
