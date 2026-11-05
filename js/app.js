@@ -796,7 +796,7 @@ function showWinCelebration(bet) {
   }
   winChime();
   document.getElementById('winContinue').addEventListener('click', closeWinCelebration);
-  document.getElementById('winViewBet').addEventListener('click', () => { closeWinCelebration(); go('bets'); });
+  document.getElementById('winViewBet').addEventListener('click', () => { closeWinCelebration(); state.view = 'bets'; render(); loadBets(); });
   el.addEventListener('click', e => { if (e.target === el) closeWinCelebration(); });
   document.getElementById('winShare').addEventListener('click', async () => {
     const text = 'I just won ' + amt + ' on Oddaroa! Verify code: ' + (bet.code || '') + ' — play at oddaroa.com';
