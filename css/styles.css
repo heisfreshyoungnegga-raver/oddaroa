@@ -1229,3 +1229,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .sms-card.android .sms-body p { color: #3c4043; }
 .sms-card.android .sms-body p b { color: #1f1f1f; }
 .sms-card.android .sms-x { color: #5f6368; }
+
+/* Bets live legs (2026-11-05): the pulsing LIVE chip, same family
+   as the Super Admin pages; Oddaroa wears its own live colours. */
+.st-live { background: var(--live); color: var(--live-ink); animation: stpulse 1.6s ease-in-out infinite; }
+@keyframes stpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.legstate { white-space: nowrap; }

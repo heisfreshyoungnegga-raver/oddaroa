@@ -1,4 +1,4 @@
-const { sql, send, guard, requireAuth, getSettings, cashoutQuoteFor } = require('../../_lib');
+const { sql, send, guard, requireAuth, getSettings, cashoutQuoteFor, isCustomMatch, customMatchState } = require('../../_lib');
 
 module.exports = guard(async (req, res) => {
   const auth = requireAuth(req, res);
@@ -36,8 +36,35 @@ module.exports = guard(async (req, res) => {
       if (!byBet.has(l.bet_id)) byBet.set(l.bet_id, []);
       byBet.get(l.bet_id).push(l);
     }
+    const matchById = new Map();
+    for (const l of legs) if (l.match && l.match.id) matchById.set(l.match.id, l.match);
     for (const b of rows) {
-      if (b.status === 'open') b.cashout_ghs = cashoutQuoteFor(b, byBet.get(b.id) || [], settings.cashout_margin_pct);
+      if (b.status !== 'open') continue;
+      b.cashout_ghs = cashoutQuoteFor(b, byBet.get(b.id) || [], settings.cashout_margin_pct);
+      // Live state per leg (Prince's ask 2026-11-05, same as
+      // PrimeStake): the Bets view shows a leg's match as LIVE with
+      // its current score and clock instead of a bare "pending".
+      // Custom matches derive state from their real football clock
+      // (minute_label carries 45+2′ / HT / 90+3′); feed matches use
+      // their stored status and score.
+      for (const s of (b.selections || [])) {
+        const m = matchById.get(s.match_id);
+        if (!m) continue;
+        if (isCustomMatch(m)) {
+          const st = customMatchState(m);
+          s.match_status = st.status;
+          s.live_home = st.score_home;
+          s.live_away = st.score_away;
+          s.live_minute = st.minute;
+          s.live_label = st.minute_label || null;
+        } else {
+          s.match_status = m.status;
+          s.live_home = m.score_home;
+          s.live_away = m.score_away;
+          s.live_minute = null;
+          s.live_label = null;
+        }
+      }
     }
   }
   send(res, 200, { bets: rows });

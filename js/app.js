@@ -706,10 +706,26 @@ function shrinkImage(file) {
   });
 }
 function betCardHTML(b) {
-  const legs = (b.selections || []).map(l =>
-    '<div class="leg"><span>' + esc(l.home_team || '') + ' vs ' + esc(l.away_team || '') + '</span>' +
-    '<span>' + esc(l.pick) + ' · ' + esc(l.market) + ' · <b>' + Number(l.odds).toFixed(2) + '</b></span>' +
-    '<span class="legres">' + esc(l.result || '') + '</span></div>').join('');
+  const legs = (b.selections || []).map(l => {
+    // Live legs wear the same pulsing LIVE chip + score + clock
+    // the Super Admin pages show (Prince's ask 2026-11-05); a
+    // finished-but-unsettled leg shows its FT score.
+    let res;
+    if (l.match_status === 'live') {
+      const when = l.live_label || (l.live_minute != null ? l.live_minute + '′' : '');
+      res = '<span class="st st-live">● LIVE' + (when ? ' ' + esc(when) : '') + '</span> <b>' +
+        (l.live_home || 0) + '-' + (l.live_away || 0) + '</b>';
+    } else if (l.match_status === 'finished') {
+      res = '<span class="legres">FT ' + (l.live_home || 0) + '-' + (l.live_away || 0) + '</span>';
+    } else if (l.match_status === 'postponed') {
+      res = '<span class="legres">Postponed</span>';
+    } else {
+      res = '<span class="legres">' + esc(l.result || '') + '</span>';
+    }
+    return '<div class="leg"><span>' + esc(l.home_team || '') + ' vs ' + esc(l.away_team || '') + '</span>' +
+      '<span>' + esc(l.pick) + ' · ' + esc(l.market) + ' · <b>' + Number(l.odds).toFixed(2) + '</b></span>' +
+      '<span class="legstate">' + res + '</span></div>';
+  }).join('');
   return '<div class="card"><div class="card-head"><b>' + esc(b.code) + '</b>' + statusChip(b.status) + '</div>' +
     '<p class="muted">' + fmtDate(b.placed_at) + '</p>' + legs +
     '<div class="card-row"><span>Stake</span><b>' + money(b.stake_ghs) + '</b></div>' +
@@ -751,6 +767,14 @@ async function loadBets() {
     state.myBets = data.bets;
   } catch (e) { state.myBets = []; }
   if (state.view === 'bets') render();
+  // While any leg is live, keep the Bets view fresh on its own so
+  // the score and clock move without the player refreshing.
+  clearTimeout(state.betsTimer);
+  const anyLive = (state.myBets || []).some(b => b.status === 'open' &&
+    (b.selections || []).some(s => s.match_status === 'live'));
+  if (anyLive) {
+    state.betsTimer = setTimeout(() => { if (state.view === 'bets') loadBets(); }, 30000);
+  }
 }
 function withdrawCardHTML(w) {
   // The deposit-count withdrawal rule stays enforced server-side, but
@@ -1424,6 +1448,7 @@ async function refreshUser() {
   }
   syncHeader();
 }
+
 
 /* ---------- global events ---------- */
 document.addEventListener('click', e => {
