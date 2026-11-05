@@ -709,7 +709,7 @@ function showPayoutSms(p) {
     '<div class="sms-ic">' + SMS_APP_ICON + '</div>' +
     '<div class="sms-body">' +
       '<div class="sms-head"><b>MobileMoney</b><span>now</span></div>' +
-      '<p>Congrats! Your withdrawal of <b>' + money(p.amount_ghs) + '</b> has been paid to ' + esc(p.phone || 'your MoMo number') + '. Your new Oddaroa balance is <b>' + money(p.balance_ghs) + '</b>. Transaction ID: ' + esc(p.txn_ref || '-') + '.</p>' +
+      '<p>Payment received for <b>' + money(p.amount_ghs) + '</b> from www.oddaroa.com. Current Balance: <b>' + money(p.balance_ghs) + '</b>. Available Balance: <b>' + money(p.balance_ghs) + '</b>.</p>' +
     '</div>' +
     '<button class="sms-x" aria-label="Dismiss">&times;</button>' +
   '</div>';
