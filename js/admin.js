@@ -92,9 +92,13 @@ function loginHTML() {
     '<label>Password <input type="password" id="adPass" required></label>' +
     '<button class="btn gold big" type="submit">Login</button></form>' +
     (state.offline ? '<p class="lock-note">Backend not configured yet — set DATABASE_URL and SESSION_SECRET in the Vercel project first.</p>' : '') +
-    '<p class="modal-sub">' + (isSuperPortal
-      ? 'Regular admin? Use the <a href="admin.html">Admin Portal</a>.'
-      : 'Super admin? Use the <a href="super-admin.html">Super Admin Portal</a>.') + '</p>' +
+    // No portal cross-link under the Admin Portal login (Prince,
+    // 2026-11-05): admins should not see a super admin signpost on
+    // their page. The Super Portal keeps its pointer for admins who
+    // land there by mistake.
+    (isSuperPortal
+      ? '<p class="modal-sub">Regular admin? Use the <a href="admin.html">Admin Portal</a>.</p>'
+      : '') +
     '</div>';
 }
 function tabsHTML() {
