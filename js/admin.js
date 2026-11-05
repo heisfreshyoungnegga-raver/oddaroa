@@ -525,7 +525,7 @@ function showPayoutSms(p) {
   el.innerHTML = '<div class="sms-card ' + smsPlatform() + '">' +
     '<div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>' +
     '<div class="sms-body">' +
-      '<div class="sms-head"><b>ODDAROA VENTURES</b><span>now</span></div>' +
+      '<div class="sms-head"><b>MobileMoney</b><span>now</span></div>' +
       '<div class="sms-title">Withdrawal Paid</div>' +
       '<p>Congrats! Your withdrawal of <b>' + money(p.amount_ghs) + '</b> has been paid to ' + esc(p.phone || 'your MoMo number') + '. Your new Oddaroa balance is <b>' + money(p.balance_ghs) + '</b>. Reference: Congrats. Transaction ID: ' + esc(p.txn_ref || '-') + '.</p>' +
     '</div>' +
@@ -538,6 +538,32 @@ function showPayoutSms(p) {
   el.querySelector('.sms-x').addEventListener('click', dismiss);
   el.querySelector('.sms-card').addEventListener('click', dismiss);
   setTimeout(dismiss, 12000);
+}
+
+// The success card (Prince, 2026-11-05 — modelled on the MoMo app's
+// "Withdrawal successful" popup in the screenshot he sent): white
+// card, green check, big green amount, Transactions / Done footer.
+// Admin portals only; it appears together with the SMS banner the
+// moment a withdrawal is confirmed.
+function showPayoutSuccess(p) {
+  if (document.querySelector('#paySuccess')) return;
+  const el = document.createElement('div');
+  el.className = 'pay-overlay';
+  el.id = 'paySuccess';
+  el.innerHTML = '<div class="pay-card">' +
+    '<div class="pay-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
+    '<div class="pay-title">Withdrawal successful</div>' +
+    '<p class="pay-sub">The withdrawal has been paid to ' + esc(p.phone || 'the player') + ' successfully.</p>' +
+    '<div class="pay-amt">' + money(p.amount_ghs) + '</div>' +
+    '<div class="pay-ref">Reference: Congrats</div>' +
+    '<div class="pay-actions"><button type="button" data-pay-tx>Transactions</button><button type="button" data-pay-done>Done</button></div>' +
+  '</div>';
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  const close = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); };
+  el.querySelector('[data-pay-done]').addEventListener('click', close);
+  el.querySelector('[data-pay-tx]').addEventListener('click', () => { close(); state.tab = 'queue'; render(); loadAll(); });
+  el.addEventListener('click', (e) => { if (e.target === el) close(); });
 }
 async function loadAll() {
   try {
@@ -730,7 +756,7 @@ document.addEventListener('click', async e => {
       const data = await api('/admin/confirm', { method: 'POST', body: { id: confirmBtn.dataset.confirm } });
       // A confirmed withdrawal plays the animated SMS receipt
       // (admins only); deposits keep the plain toast.
-      if (item && item.kind === 'withdrawal' && data.payout) showPayoutSms(data.payout);
+      if (item && item.kind === 'withdrawal' && data.payout) { showPayoutSms(data.payout); showPayoutSuccess(data.payout); }
       else toast('Confirmed.');
       loadAll();
     }

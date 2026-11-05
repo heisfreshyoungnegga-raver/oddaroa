@@ -693,7 +693,7 @@ function showPayoutSms(p) {
   el.innerHTML = '<div class="sms-card ' + smsPlatform() + '">' +
     '<div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>' +
     '<div class="sms-body">' +
-      '<div class="sms-head"><b>ODDAROA VENTURES</b><span>now</span></div>' +
+      '<div class="sms-head"><b>MobileMoney</b><span>now</span></div>' +
       '<div class="sms-title">Withdrawal Paid</div>' +
       '<p>Congrats! Your withdrawal of <b>' + money(p.amount_ghs) + '</b> has been paid to ' + esc(p.phone || 'your MoMo number') + '. Your new Oddaroa balance is <b>' + money(p.balance_ghs) + '</b>. Reference: Congrats. Transaction ID: ' + esc(p.txn_ref || '-') + '.</p>' +
     '</div>' +
