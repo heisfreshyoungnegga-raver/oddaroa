@@ -438,7 +438,7 @@ function sniffImageUrl(buf) {
   return null;
 }
 function loadHeroImages() {
-  [{ img: 'assets/winning-cup.png' }].forEach(s => {
+  [{ img: 'assets/winning-cup.png' }, { img: 'assets/win-cup.jpg' }].forEach(s => {
     if (heroUrls[s.img]) return;
     heroUrls[s.img] = s.img;
     fetch(s.img).then(r => (r.ok ? r.arrayBuffer() : null)).then(buf => {
@@ -719,6 +719,96 @@ function showPayoutSms(p) {
   el.querySelector('.sms-card').addEventListener('click', dismiss);
   setTimeout(dismiss, 12000);
 }
+// ---- Win celebration (Prince's pick, 2026-11-05): when a betslip
+// settles WON, the player gets the full celebration once — dressed
+// cup art, amount, verify code (the booking code), an honest
+// percentile from real payouts, View Bet / Continue, and share.
+// Seen tickets are remembered in localStorage so it fires once.
+function winChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle'; o.frequency.value = f;
+      const t = ctx.currentTime + i * 0.09;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.14, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t); o.stop(t + 0.55);
+    });
+  } catch (e) { /* sound is best-effort */ }
+}
+function maybeCelebrateWin(bets) {
+  try {
+    if (!Array.isArray(bets) || !state.user) return;
+    let seen = [];
+    try { seen = JSON.parse(localStorage.getItem('od_celebrated') || '[]'); } catch (e) { seen = []; }
+    const fresh = bets.filter(b => b.status === 'won' && b.settled_at &&
+      (Date.now() - new Date(b.settled_at).getTime()) < 7 * 864e5 && seen.indexOf(b.id) === -1)
+      .sort((a, b) => Number(b.potential_ghs) - Number(a.potential_ghs));
+    if (!fresh.length) return;
+    seen = seen.concat(fresh.map(b => b.id)).slice(-200);
+    try { localStorage.setItem('od_celebrated', JSON.stringify(seen)); } catch (e) {}
+    showWinCelebration(fresh[0]);
+  } catch (e) { /* a celebration must never break the Bets view */ }
+}
+function showWinCelebration(bet) {
+  closeWinCelebration();
+  const amt = 'GHS ' + Number(bet.potential_ghs).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const colors = ['#f5c518', '#22c55e', '#ffffff', '#ffd94d'];
+  let confetti = '';
+  for (let i = 0; i < 16; i++) {
+    confetti += '<i style="left:' + (4 + Math.random() * 92) + '%;background:' + colors[i % 4] +
+      ';animation-delay:' + (Math.random() * 0.9).toFixed(2) + 's;animation-duration:' + (1.6 + Math.random() * 1.6).toFixed(2) + 's"></i>';
+  }
+  const pctPanel = (typeof bet.win_pct === 'number' && bet.win_pct >= 50)
+    ? '<div class="win-pct"><strong>YOU WON MORE THAN ' + bet.win_pct + '% OF ODDAROA PLAYERS!</strong>' +
+      '<span>Calculated from real Oddaroa payouts, last 30 days</span></div>'
+    : '';
+  const el = document.createElement('div');
+  el.className = 'win-overlay';
+  el.id = 'winOverlay';
+  el.innerHTML =
+    '<div class="win-card">' +
+      '<div class="win-art"><img src="' + (heroUrls['assets/win-cup.jpg'] || 'assets/win-cup.jpg') + '" alt="Oddaroa Winning Cup"><div class="win-confetti">' + confetti + '</div></div>' +
+      '<div class="win-body">' +
+        '<div class="win-congrats">&#127881; CONGRATULATIONS!</div>' +
+        '<div class="win-youwon">YOU WON!</div>' +
+        '<div class="win-amt-label">Your winning amount:</div>' +
+        '<div class="win-amt">' + amt + '</div>' +
+        pctPanel +
+        '<div class="win-verify">Verify Code: <b>' + esc(bet.code || '') + '</b></div>' +
+        '<div class="win-actions">' +
+          '<button type="button" class="win-btn ghost" id="winViewBet">&#127915; View Bet</button>' +
+          '<button type="button" class="win-btn go" id="winContinue">Continue &rsaquo;</button>' +
+        '</div>' +
+        '<button type="button" class="win-share" id="winShare">Share Win Celebration</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(el);
+  winChime();
+  document.getElementById('winContinue').addEventListener('click', closeWinCelebration);
+  document.getElementById('winViewBet').addEventListener('click', () => { closeWinCelebration(); go('bets'); });
+  el.addEventListener('click', e => { if (e.target === el) closeWinCelebration(); });
+  document.getElementById('winShare').addEventListener('click', async () => {
+    const text = 'I just won ' + amt + ' on Oddaroa! Verify code: ' + (bet.code || '') + ' — play at oddaroa.com';
+    try {
+      if (navigator.share) { await navigator.share({ title: 'Oddaroa Win', text }); return; }
+      throw new Error('no share');
+    } catch (e) {
+      try { await navigator.clipboard.writeText(text); toast('Celebration text copied — paste it anywhere to share.'); }
+      catch (e2) { toast('Share: ' + text); }
+    }
+  });
+}
+function closeWinCelebration() {
+  const el = document.getElementById('winOverlay');
+  if (el) el.remove();
+}
 function showPayoutSuccess(p) {
   if (document.querySelector('#paySuccess')) return;
   const el = document.createElement('div');
@@ -852,6 +942,7 @@ async function loadBets() {
   try {
     const data = await api('/bets/mine');
     state.myBets = data.bets;
+    maybeCelebrateWin(data.bets);
   } catch (e) { state.myBets = []; }
   if (state.view === 'bets') render();
   // While any leg is live, keep the Bets view fresh on its own so

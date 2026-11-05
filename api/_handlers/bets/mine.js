@@ -4,7 +4,7 @@ module.exports = guard(async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
   const rows = await sql(
-    `select b.id, b.code, b.stake_ghs, b.total_odds, b.potential_ghs, b.status, b.placed_at, b.kind, b.bonus_pct, b.system_label,
+    `select b.id, b.code, b.stake_ghs, b.total_odds, b.potential_ghs, b.status, b.placed_at, b.settled_at, b.kind, b.bonus_pct, b.system_label,
             coalesce(json_agg(json_build_object(
               'match_id', s.match_id, 'market', s.market, 'pick', s.pick,
               'odds', s.odds, 'result', s.result,
@@ -64,6 +64,23 @@ module.exports = guard(async (req, res) => {
           s.live_minute = null;
           s.live_label = null;
         }
+      }
+    }
+  }
+  // Honest win percentile for the celebration popup: among all
+  // betslips that WON in the last 30 days, the share that paid less
+  // than this ticket. Needs a real sample (>= 5 wins) or it stays
+  // null and the client hides the panel.
+  const wonMine = rows.filter(b => b.status === 'won');
+  if (wonMine.length) {
+    const stats = await sql(
+      `select potential_ghs from bets where status = 'won' and settled_at > now() - interval '30 days'`
+    );
+    if (stats.length >= 5) {
+      const pots = stats.map(r => Number(r.potential_ghs));
+      for (const b of wonMine) {
+        const below = pots.filter(p => p < Number(b.potential_ghs)).length;
+        b.win_pct = Math.round(100 * below / pots.length);
       }
     }
   }

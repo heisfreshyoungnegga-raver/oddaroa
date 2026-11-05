@@ -1313,3 +1313,28 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .cupimg { height: 86px; width: auto; flex: none; filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.55)); }
 .cupimg.big { height: 158px; }
 .cuphead .cupimg { display: block; margin: 0 auto 8px; }
+
+/* Win celebration popup (2026-11-05) */
+.win-overlay { position: fixed; inset: 0; z-index: 97; background: rgba(0, 0, 0, 0.74); display: flex; align-items: center; justify-content: center; padding: 14px; }
+.win-card { width: min(430px, 100%); max-height: 94vh; overflow-y: auto; background: linear-gradient(180deg, #0d120c, #070907); border: 1px solid #6d5518; border-radius: 20px; overflow: hidden; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6); animation: payPop 0.45s cubic-bezier(0.22, 1.36, 0.36, 1); text-align: center; }
+.win-art { position: relative; background: #000; }
+.win-art img { width: 100%; height: 248px; object-fit: cover; object-position: center 32%; display: block; }
+.win-confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.win-confetti i { position: absolute; top: -14px; width: 7px; height: 12px; border-radius: 2px; opacity: 0; animation-name: winFall; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes winFall { 8% { opacity: 1; } 100% { transform: translateY(280px) rotate(560deg); opacity: 0.85; } }
+.win-body { padding: 14px 20px 20px; }
+.win-congrats { color: #f5c518; font-weight: 700; letter-spacing: 1.5px; font-size: 14px; }
+.win-youwon { color: #ffffff; font-size: 34px; font-weight: 800; margin-top: 2px; }
+.win-amt-label { color: #9aa79a; font-size: 13px; margin-top: 12px; }
+.win-amt { color: #ffd94d; font-size: 31px; font-weight: 800; }
+.win-pct { margin-top: 14px; background: linear-gradient(120deg, #2c2105, #54400d 55%, #2c2105); border: 1px solid #6d5518; border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.win-pct strong { color: #ffe08a; font-size: 13.5px; letter-spacing: 0.4px; }
+.win-pct span { color: #b9ac7d; font-size: 11px; }
+.win-verify { color: #9aa79a; font-size: 13px; margin-top: 12px; }
+.win-verify b { color: #ffffff; letter-spacing: 1px; }
+.win-actions { display: flex; gap: 10px; margin-top: 14px; }
+.win-btn { flex: 1; padding: 12px; border-radius: 10px; font: inherit; font-weight: 700; cursor: pointer; }
+.win-btn.ghost { background: transparent; border: 1px solid #3d443d; color: #ffffff; }
+.win-btn.go { background: #22c55e; border: 0; color: #04150a; }
+.win-share { margin-top: 13px; background: none; border: 0; color: #c9d1c9; font: inherit; font-size: 13.5px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .win-confetti i { animation: none; } .win-card { animation: none; } }
