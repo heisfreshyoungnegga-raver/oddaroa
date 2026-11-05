@@ -653,6 +653,81 @@ function trustStripHTML() {
   return '<div class="trustslide"><div class="trust-track" style="animation-duration:' + (items.length * 4.5) + 's">' + half + half + '</div></div>';
 }
 
+
+/* ---------- payout moment (player site) ----------
+   Prince, 2026-11-05: when an ADMIN logs into the player site with
+   admin credentials and requests a withdrawal, he gets the full
+   payout moment — the animated SMS, the chime and the success card —
+   as if the super admin had approved it, while the request itself
+   still waits in the queue for the real approval. Normal players
+   never see any of this; they only get "waiting for admin approval". */
+function smsPlatform() {
+  const ua = (navigator && navigator.userAgent) || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+  if (/Android/i.test(ua)) return 'android';
+  return 'generic';
+}
+function smsDing() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = smsDing.ctx || (smsDing.ctx = new AC());
+    if (ctx.state === 'suspended') ctx.resume();
+    const t0 = ctx.currentTime;
+    [[1567.98, 0], [2093.0, 0.09]].forEach(([f, dt]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0 + dt);
+      g.gain.exponentialRampToValueAtTime(0.16, t0 + dt + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.5);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t0 + dt); o.stop(t0 + dt + 0.55);
+    });
+  } catch (e) { /* garnish only */ }
+}
+function showPayoutSms(p) {
+  if (document.querySelector('#smsAlert')) return;
+  const el = document.createElement('div');
+  el.className = 'sms-alert';
+  el.id = 'smsAlert';
+  el.innerHTML = '<div class="sms-card ' + smsPlatform() + '">' +
+    '<div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>' +
+    '<div class="sms-body">' +
+      '<div class="sms-head"><b>ODDAROA VENTURES</b><span>now</span></div>' +
+      '<div class="sms-title">Withdrawal Paid</div>' +
+      '<p>Congrats! Your withdrawal of <b>' + money(p.amount_ghs) + '</b> has been paid to ' + esc(p.phone || 'your MoMo number') + '. Your new Oddaroa balance is <b>' + money(p.balance_ghs) + '</b>. Reference: Congrats. Transaction ID: ' + esc(p.txn_ref || '-') + '.</p>' +
+    '</div>' +
+    '<button class="sms-x" aria-label="Dismiss">&times;</button>' +
+  '</div>';
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  smsDing();
+  const dismiss = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 450); };
+  el.querySelector('.sms-x').addEventListener('click', dismiss);
+  el.querySelector('.sms-card').addEventListener('click', dismiss);
+  setTimeout(dismiss, 12000);
+}
+function showPayoutSuccess(p) {
+  if (document.querySelector('#paySuccess')) return;
+  const el = document.createElement('div');
+  el.className = 'pay-overlay';
+  el.id = 'paySuccess';
+  el.innerHTML = '<div class="pay-card">' +
+    '<div class="pay-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
+    '<div class="pay-title">Withdrawal successful</div>' +
+    '<p class="pay-sub">The withdrawal has been paid to ' + esc(p.phone || 'your MoMo number') + ' successfully.</p>' +
+    '<div class="pay-amt">' + money(p.amount_ghs) + '</div>' +
+    '<div class="pay-ref">Reference: Congrats</div>' +
+    '<div class="pay-actions"><button type="button" data-pay-tx>Transactions</button><button type="button" data-pay-done>Done</button></div>' +
+  '</div>';
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  const close = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); };
+  el.querySelector('[data-pay-done]').addEventListener('click', close);
+  el.querySelector('[data-pay-tx]').addEventListener('click', () => { close(); state.walletSection = 'history'; render(); });
+  el.addEventListener('click', (e) => { if (e.target === el) close(); });
+}
+
 /* ---------- account pages ---------- */
 function gateHTML(title) {
   return '<div class="profile"><h2>' + title + '</h2>' +
@@ -907,7 +982,7 @@ function walletHTML() {
   const tx = w.transactions.map(t =>
     '<div class="txrow"><div><b>' + esc(t.kind.replace('_', ' ')) + '</b><div class="muted">' + fmtDate(t.created_at) + ' · ' + esc(t.method || '') + '</div></div>' +
     '<div class="' + (t.amount_ghs >= 0 ? 'amt pos' : 'amt') + '">' + (t.amount_ghs >= 0 ? '+' : '−') + 'GHS ' + Math.abs(t.amount_ghs).toFixed(2) + '</div>' +
-    statusChip(t.status) + '</div>').join('');
+    (t.kind === 'withdrawal' && t.status === 'pending' ? '<span class="st st-pending">WAITING FOR ADMIN APPROVAL</span>' : statusChip(t.status)) + '</div>').join('');
   const depositPanel = momoPanelHTML();
   // Deposit, Withdraw and History are separate views inside the wallet.
   const sec = state.walletSection;
@@ -1700,12 +1775,22 @@ document.addEventListener('submit', async e => {
   } else if (id === 'withdrawForm') {
     e.preventDefault();
     try {
-      await api('/wallet/withdraw', {
+      const wdAmount = parseFloat($('#wdAmt').value) || 0;
+      const wdData = await api('/wallet/withdraw', {
         method: 'POST',
-        body: { amount_ghs: parseFloat($('#wdAmt').value) || 0, method: $('#wdMethod').value }
+        body: { amount_ghs: wdAmount, method: $('#wdMethod').value }
       });
-      toast('Withdrawal requested — the amount is held and paid out after review.');
-      loadWallet();
+      await loadWallet();
+      const wu = state.user || {};
+      if (wu.role === 'admin' || wu.role === 'super_admin') {
+        let wh = 0; const wraw = String((wdData.transaction && wdData.transaction.id) || '');
+        for (let i = 0; i < wraw.length; i++) wh = (wh * 31 + wraw.charCodeAt(i)) >>> 0;
+        const wp = { amount_ghs: wdAmount, phone: wu.phone || '', balance_ghs: Number(wu.balance_ghs || 0), txn_ref: String(10000000000 + (wh % 89999999999)).slice(0, 11) };
+        showPayoutSms(wp);
+        showPayoutSuccess(wp);
+      } else {
+        toast('Withdrawal requested — waiting for admin approval.');
+      }
     } catch (err) {
       if (err.code === 'withdrawal_locked') {
         const done = Number(err.data && err.data.deposits_done) || 0;
