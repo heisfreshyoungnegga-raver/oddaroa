@@ -926,7 +926,7 @@ function settingsHTML() {
   return '<h2>Settings</h2><div class="card stack">' +
     '<div class="card-row"><span>Phone / email</span><b>' + esc(state.user.phone || state.user.email || '') + '</b></div>' +
     '<div class="card-row"><span>Region / currency</span><b>Ghana · GHS</b></div>' +
-    '<div class="card-row"><span>Theme</span><span class="dtheme-ctl"><span data-theme-state>Dark</span><button class="tswitch" data-theme-toggle role="switch" aria-checked="false" aria-label="Toggle light or dark theme"><span class="tknob"></span></button></span></div>' +
+    '<div class="card-row"><span>Theme</span><span class="dtheme-ctl"><span data-theme-state>' + (state.theme === 'light' ? 'Light' : 'Dark') + '</span><button class="tswitch" data-theme-toggle role="switch" aria-checked="' + (state.theme === 'light' ? 'true' : 'false') + '" aria-label="Toggle light or dark theme"><span class="tknob"></span></button></span></div>' +
     '<h3>Change password</h3><form id="passwordForm" class="stack">' +
     '<label>Current password <input type="password" id="pwCurrent" required></label>' +
     '<label>New password <input type="password" id="pwNew" required></label>' +

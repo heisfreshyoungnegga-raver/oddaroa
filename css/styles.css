@@ -60,6 +60,14 @@
   --chip-bg: #e2ece2;
   --overlay: rgba(18, 28, 20, 0.45);
 }
+/* Light-mode pins for the deliberately-dark surfaces: the live
+   band and the menu links keep their black design in both themes
+   (like the bottom bar), so their text stays light in light mode
+   instead of following the flipped ink variables. */
+[data-theme="light"] .group.live-group { background: #070907; }
+[data-theme="light"] .group.live-group .mteams .team { color: #f5f5f5; }
+[data-theme="light"] .group.live-group .odd { color: #f5f5f5; }
+[data-theme="light"] .dlink { background: #ffffff; border-color: var(--line); color: var(--ink); }
 
 * { box-sizing: border-box; }
 /* No native tap flash (Prince, 2026-11-05): mobile browsers painted
@@ -176,7 +184,9 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   position: relative;
   z-index: 1;
   padding: 30px 28px 34px;
-  color: var(--header-ink);
+  /* Hero text sits on photographs in BOTH themes — it must stay
+     light even when the light theme flips --header-ink dark. */
+  color: #f5f8f5;
   max-width: 600px;
 }
 .hero .kicker {
