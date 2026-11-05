@@ -31,6 +31,7 @@ const state = {
   invite: new URLSearchParams(location.search).get('admin_invite') || '',
   inviteDone: '',
   editingMatch: '',
+  createdMatches: [],
 };
 const $ = (s, r = document) => r.querySelector(s);
 const root = $('#adminRoot');
@@ -198,7 +199,7 @@ function isoLocal(iso) {
 // Every game the super admin created himself (featured + manual),
 // with its real live state, and an Edit button (Prince, 2026-11-05).
 function createdGamesHTML() {
-  const mine = state.matches.filter(m => !m.external_ref || String(m.external_ref).indexOf('custom:') === 0);
+  const mine = state.createdMatches || [];
   if (!mine.length) return '<div class="card"><h3>Created by you</h3><p class="empty">No games created yet — use the forms below.</p></div>';
   const rows = mine.map(m => {
     const custom = String(m.external_ref || '').indexOf('custom:') === 0;
@@ -252,7 +253,7 @@ function matchesHTML() {
     '</div><button class="btn gold big" type="submit">Add Match</button></form></div>';
   const rows = state.matches.map(m =>
     '<div class="txrow"><div><b>' + esc(m.home_team) + ' vs ' + esc(m.away_team) + '</b>' +
-    '<div class="muted">' + (m.external_ref && String(m.external_ref).indexOf('espn:') === 0 ? 'ESPN · ' : m.external_ref && String(m.external_ref).indexOf('custom:') === 0 ? 'Featured · ' : 'Manual · ') + esc(m.league) + ' · ' + fmtDate(m.starts_at) + ' · ' + m.score_home + '-' + m.score_away + (m.minute != null ? ' · ' + m.minute + "'" : '') + '</div></div>' +
+    '<div class="muted">' + (m.external_ref && String(m.external_ref).indexOf('espn:') === 0 ? 'ESPN · ' : m.external_ref && String(m.external_ref).indexOf('custom:') === 0 ? 'Featured · ' : 'Manual · ') + esc(m.league) + ' · ' + fmtDate(m.starts_at) + ' · ' + m.score_home + '-' + m.score_away + (m.minute != null ? ' · ' + (m.minute_label || (m.minute + "'")) : '') + '</div></div>' +
     chip(m.status) +
     '<span>' +
     (m.status === 'upcoming' ? '<button class="btn gold sm" data-golive="' + m.id + '">Go Live</button> ' : '') +
@@ -448,12 +449,14 @@ async function loadAll() {
       api('/admin/settings').catch(() => null), api('/admin/my-dashboard').catch(() => null)
     ];
     if (superTools()) jobs.push(api('/admin/invite-admin').catch(() => null));
-    const [stats, queue, matches, users, support, settings, myDash, invites] = await Promise.all(jobs);
+    if (superTools()) jobs.push(api('/admin/matches?created=1').catch(() => null));
+    const [stats, queue, matches, users, support, settings, myDash, invites, created] = await Promise.all(jobs);
     state.stats = stats.stats; state.queue = queue.queue; state.matches = matches.matches;
     state.users = users.users; state.support = support.messages;
     if (settings) state.settings = settings.settings;
     if (myDash) state.myDash = myDash;
     if (invites) state.invites = invites.invites || [];
+    if (created) state.createdMatches = created.matches || [];
   } catch (e) { toast(e.message); }
   render();
 }
@@ -716,7 +719,7 @@ document.addEventListener('submit', async e => {
   } else if (e.target.id === 'editMatchForm') {
     e.preventDefault();
     const id = e.target.dataset.mid;
-    const m = state.matches.find(x => x.id === id);
+    const m = (state.createdMatches || []).find(x => x.id === id) || state.matches.find(x => x.id === id);
     const kicked = !m || m.status !== 'upcoming';
     const custom = !!m && String(m.external_ref || '').indexOf('custom:') === 0;
     const body = {

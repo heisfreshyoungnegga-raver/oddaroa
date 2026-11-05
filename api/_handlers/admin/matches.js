@@ -9,7 +9,14 @@ module.exports = guard(async (req, res) => {
   if (!auth) return;
   if (req.method === 'GET') {
     await ensureMatchColumns().catch(() => {});
-    const rows = await sql('select * from matches order by starts_at desc limit 200');
+    // ?created=1 returns ONLY the games the admin side created
+    // (featured + manual). The general list is capped at 200 by
+    // kickoff, and feed sweeps run five days ahead — created games
+    // would fall off the end and vanish from their own section.
+    const onlyCreated = req.query && String(req.query.created || '') === '1';
+    const rows = onlyCreated
+      ? await sql("select * from matches where external_ref like 'custom:%' or external_ref is null order by starts_at desc limit 200")
+      : await sql('select * from matches order by starts_at desc limit 200');
     const now = new Date();
     const out = rows.map(m => {
       if (!isCustomMatch(m)) return m;
