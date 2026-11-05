@@ -30,6 +30,7 @@ const state = {
   // instead of the login form (Prince, 2026-11-05).
   invite: new URLSearchParams(location.search).get('admin_invite') || '',
   inviteDone: '',
+  editingMatch: '',
 };
 const $ = (s, r = document) => r.querySelector(s);
 const root = $('#adminRoot');
@@ -177,6 +178,64 @@ function queueHTML(compact) {
     (rows || '<p class="empty">Nothing waiting for review.</p>') + '</div>' +
     (compact ? '' : '<p class="muted">Confirming a deposit credits the player and counts it toward their withdrawal unlock. Rejecting a withdrawal refunds the held amount. Withdrawal decisions are super-admin only.</p>');
 }
+// "12:home, 45+2:away" -> [{minute: 12, side: 'home'}, {minute: 45, extra: 2, side: 'away'}]
+function parseGoalsText(text) {
+  return text.split(',').map(x => x.trim()).filter(Boolean).map(part => {
+    const [minRaw, side] = part.split(':').map(y => (y || '').trim());
+    const mm = /^(\d+)(?:\+(\d+))?$/.exec(minRaw) || [];
+    return { minute: Number(mm[1] || NaN), extra: Number(mm[2] || 0), side: side === 'away' ? 'away' : 'home' };
+  }).filter(g => g.minute >= 1 && g.minute <= 90);
+}
+function goalsTextOf(m) {
+  return (Array.isArray(m.goal_events) ? m.goal_events : [])
+    .map(g => g.minute + (g.extra ? '+' + g.extra : '') + ':' + (g.side === 'away' ? 'away' : 'home')).join(', ');
+}
+function isoLocal(iso) {
+  const d = new Date(iso);
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+// Every game the super admin created himself (featured + manual),
+// with its real live state, and an Edit button (Prince, 2026-11-05).
+function createdGamesHTML() {
+  const mine = state.matches.filter(m => !m.external_ref || String(m.external_ref).indexOf('custom:') === 0);
+  if (!mine.length) return '<div class="card"><h3>Created by you</h3><p class="empty">No games created yet — use the forms below.</p></div>';
+  const rows = mine.map(m => {
+    const custom = String(m.external_ref || '').indexOf('custom:') === 0;
+    const statusLine = m.status === 'live'
+      ? '<b style="color:#e5484d">LIVE ' + esc(m.minute_label || (m.minute + "'")) + '</b> · ' + m.score_home + '-' + m.score_away
+      : m.status === 'finished' ? 'Full time · ' + m.score_home + '-' + m.score_away
+      : 'Kicks off ' + fmtDate(m.starts_at);
+    return '<div class="txrow"><div><b>' + esc(m.home_team) + ' vs ' + esc(m.away_team) + '</b>' +
+      '<div class="muted">' + (custom ? 'Featured' : 'Manual') + ' · ' + esc(m.league) + '</div>' +
+      '<div>' + statusLine + '</div></div>' + chip(m.status) +
+      '<span>' + (m.status !== 'finished' ? '<button class="btn gold sm" data-edit-match="' + m.id + '">' + (state.editingMatch === m.id ? 'Close' : 'Edit') + '</button>' : '') + '</span></div>' +
+      (state.editingMatch === m.id ? editMatchFormHTML(m, custom) : '');
+  }).join('');
+  return '<div class="card"><h3>Created by you</h3>' + rows + '</div>';
+}
+function editMatchFormHTML(m, custom) {
+  const kicked = m.status !== 'upcoming';
+  const o = m.odds || {};
+  return '<form id="editMatchForm" data-mid="' + m.id + '" class="stack" style="margin:10px 0">' +
+    (kicked ? '<p class="muted">This game has kicked off — kickoff, odds and the goal schedule are locked. Names, crests and stoppages can still change.</p>' : '') +
+    '<label>League <input type="text" id="emLeague" value="' + esc(m.league) + '"></label>' +
+    '<label>Home team <input type="text" id="emHome" value="' + esc(m.home_team) + '"></label>' +
+    '<label>Away team <input type="text" id="emAway" value="' + esc(m.away_team) + '"></label>' +
+    '<label>Kickoff <input type="datetime-local" id="emStart" value="' + isoLocal(m.starts_at) + '"' + (kicked ? ' disabled' : '') + '></label>' +
+    (custom ? '<div class="oddsgrid">' +
+      '<label>1 (home) <input type="number" step="0.01" min="1.01" id="em_o1" value="' + (o.o1 || '') + '"' + (kicked ? ' disabled' : '') + '></label>' +
+      '<label>X (draw) <input type="number" step="0.01" min="1.01" id="em_ox" value="' + (o.ox || '') + '"' + (kicked ? ' disabled' : '') + '></label>' +
+      '<label>2 (away) <input type="number" step="0.01" min="1.01" id="em_o2" value="' + (o.o2 || '') + '"' + (kicked ? ' disabled' : '') + '></label></div>' +
+      '<label>Goal schedule <input type="text" id="emGoals" value="' + esc(goalsTextOf(m)) + '"' + (kicked ? ' disabled' : '') + '></label>' +
+      '<div class="oddsgrid"><label>1st half stoppage (min) <input type="number" min="0" max="15" id="emHtStop" value="' + (m.ht_stoppage || 0) + '"></label>' +
+      '<label>2nd half stoppage (min) <input type="number" min="0" max="15" id="emFtStop" value="' + (m.ft_stoppage || 0) + '"></label></div>' : '') +
+    '<label>Home crest (flag) — image URL <input type="url" id="emHomeLogo" value="' + esc(m.home_logo || '') + '"></label>' +
+    '<label>…or upload the home crest <input type="file" data-crest="home" accept="image/*"></label>' +
+    '<label>Away crest (flag) — image URL <input type="url" id="emAwayLogo" value="' + esc(m.away_logo || '') + '"></label>' +
+    '<label>…or upload the away crest <input type="file" data-crest="away" accept="image/*"></label>' +
+    '<button class="btn gold big" type="submit">Save Changes</button></form>';
+}
 function matchesHTML() {
   // Creating matches is super-admin work (Prince, 2026-11-05 — the
   // create-match API already refuses regular admins): don't show
@@ -200,7 +259,7 @@ function matchesHTML() {
     (m.status === 'live' ? '<button class="btn ghost sm" data-score="' + m.id + '">Update Score</button> ' : '') +
     (m.status !== 'finished' ? '<button class="btn ghost sm" data-settle="' + m.id + '">Settle</button>' : '') +
     '</span></div>').join('');
-  return tabsHTML() + featuredFormHTML() + form + '<div class="card"><h3>Matches</h3>' + (rows || '<p class="empty">No matches yet.</p>') + '</div>';
+  return tabsHTML() + (superTools() ? createdGamesHTML() : '') + featuredFormHTML() + form + '<div class="card"><h3>Matches</h3>' + (rows || '<p class="empty">No matches yet.</p>') + '</div>';
 }
 function usersHTML() {
   const rows = state.users.map(u =>
@@ -317,9 +376,9 @@ function featuredFormHTML() {
     '<label>2nd half stoppage (min) <input type="number" min="0" max="15" step="1" id="ffFtStop" value="0"></label></div>' +
     '<p class="muted">The match goes live on its own at kickoff: 45 minutes, 15 minutes half time, 45 minutes, plus any stoppage time you add.</p>' +
     '<label>Home crest (flag) — image URL <input type="url" id="ffHomeLogo" placeholder="https://…"></label>' +
-    '<label>…or upload the home crest <input type="file" id="ffHomeFlag" accept="image/*"></label>' +
+    '<label>…or upload the home crest <input type="file" id="ffHomeFlag" data-crest="home" accept="image/*"></label>' +
     '<label>Away crest (flag) — image URL <input type="url" id="ffAwayLogo" placeholder="https://…"></label>' +
-    '<label>…or upload the away crest <input type="file" id="ffAwayFlag" accept="image/*"></label>' +
+    '<label>…or upload the away crest <input type="file" id="ffAwayFlag" data-crest="away" accept="image/*"></label>' +
     '<button class="btn gold big" type="submit">Create Featured Match</button></form></div>';
 }
 function supportHTML() {
@@ -542,6 +601,12 @@ document.addEventListener('click', async e => {
     catch (err) { toast(err.message); }
     return;
   }
+  const editMatchBtn = e.target.closest('[data-edit-match]');
+  if (editMatchBtn) {
+    state.editingMatch = state.editingMatch === editMatchBtn.dataset.editMatch ? '' : editMatchBtn.dataset.editMatch;
+    render();
+    return;
+  }
   const liveBtn = e.target.closest('[data-golive]');
   if (liveBtn) {
     try { await api('/admin/matches', { method: 'PATCH', body: { id: liveBtn.dataset.golive, status: 'live', minute: 0 } }); toast('Match is live.'); loadAll(); }
@@ -578,12 +643,12 @@ document.addEventListener('click', async e => {
   }
 });
 
-// Crest uploads for the featured-match form: the picked image is
+// Crest uploads for the match forms: the picked image is
 // downscaled in the browser (max 256px) and held here until submit,
 // so a phone photo never becomes a multi-MB database value.
 const crestUploads = { home: '', away: '' };
 document.addEventListener('change', e => {
-  const side = e.target.id === 'ffHomeFlag' ? 'home' : e.target.id === 'ffAwayFlag' ? 'away' : null;
+  const side = e.target.dataset ? e.target.dataset.crest : null;
   if (!side) return;
   const file = e.target.files && e.target.files[0];
   if (!file) return;
@@ -648,6 +713,37 @@ document.addEventListener('submit', async e => {
       toast(err.message);
       if (String(err.message).includes('invite')) { state.invite = ''; render(); }
     }
+  } else if (e.target.id === 'editMatchForm') {
+    e.preventDefault();
+    const id = e.target.dataset.mid;
+    const m = state.matches.find(x => x.id === id);
+    const kicked = !m || m.status !== 'upcoming';
+    const custom = !!m && String(m.external_ref || '').indexOf('custom:') === 0;
+    const body = {
+      id,
+      league: $('#emLeague').value.trim(),
+      home_team: $('#emHome').value.trim(),
+      away_team: $('#emAway').value.trim(),
+      home_logo: $('#emHomeLogo').value.trim() || crestUploads.home,
+      away_logo: $('#emAwayLogo').value.trim() || crestUploads.away
+    };
+    if (custom) {
+      body.ht_stoppage = Number($('#emHtStop').value) || 0;
+      body.ft_stoppage = Number($('#emFtStop').value) || 0;
+    }
+    if (!kicked) {
+      if ($('#emStart') && $('#emStart').value) body.starts_at = new Date($('#emStart').value).toISOString();
+      if (custom && $('#emGoals') && $('#emGoals').value.trim()) body.goals = parseGoalsText($('#emGoals').value.trim());
+      const o1 = Number(($('#em_o1') || {}).value), ox = Number(($('#em_ox') || {}).value), o2 = Number(($('#em_o2') || {}).value);
+      if (o1 > 1 && ox > 1 && o2 > 1) { body.o1 = o1; body.ox = ox; body.o2 = o2; }
+    }
+    try {
+      await api('/admin/edit-match', { method: 'POST', body });
+      crestUploads.home = ''; crestUploads.away = '';
+      state.editingMatch = '';
+      toast('Game updated.');
+      loadAll();
+    } catch (err) { toast(err.message); }
   } else if (e.target.id === 'ratesForm') {
     e.preventDefault();
     try {
@@ -693,13 +789,7 @@ document.addEventListener('submit', async e => {
     const o1 = Number($('#ff_o1').value), ox = Number($('#ff_ox').value), o2 = Number($('#ff_o2').value);
     if (o1 > 1 && ox > 1 && o2 > 1) { body.o1 = o1; body.ox = ox; body.o2 = o2; }
     const goalsText = $('#ffGoals').value.trim();
-    if (goalsText) {
-      body.goals = goalsText.split(',').map(x => x.trim()).filter(Boolean).map(part => {
-        const [minRaw, side] = part.split(':').map(y => (y || '').trim());
-        const mm = /^(\d+)(?:\+(\d+))?$/.exec(minRaw) || [];
-        return { minute: Number(mm[1] || NaN), extra: Number(mm[2] || 0), side: side === 'away' ? 'away' : 'home' };
-      }).filter(g => g.minute >= 1 && g.minute <= 90);
-    }
+    if (goalsText) body.goals = parseGoalsText(goalsText);
     body.ht_stoppage = Number($('#ffHtStop').value) || 0;
     body.ft_stoppage = Number($('#ffFtStop').value) || 0;
     const homeLogo = $('#ffHomeLogo').value.trim() || crestUploads.home;

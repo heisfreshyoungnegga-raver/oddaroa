@@ -1,13 +1,22 @@
-const { sql, readBody, send, guard, requireAdmin } = require('../../_lib');
+const { sql, readBody, send, guard, requireAdmin, ensureMatchColumns, isCustomMatch, customMatchState } = require('../../_lib');
 
 // Admin match manager: list all matches, create new ones, and update
-// live state (status, minute, score).
+// live state (status, minute, score). Custom (featured) matches carry
+// no stored live state — theirs is derived from the clock, so the
+// list enriches them with the derived status, score and label.
 module.exports = guard(async (req, res) => {
   const auth = requireAdmin(req, res);
   if (!auth) return;
   if (req.method === 'GET') {
+    await ensureMatchColumns().catch(() => {});
     const rows = await sql('select * from matches order by starts_at desc limit 200');
-    return send(res, 200, { matches: rows });
+    const now = new Date();
+    const out = rows.map(m => {
+      if (!isCustomMatch(m)) return m;
+      const st = customMatchState(m, now);
+      return { ...m, status: st.status, minute: st.minute, minute_label: st.minute_label, phase: st.phase, score_home: st.score_home, score_away: st.score_away };
+    });
+    return send(res, 200, { matches: out });
   }
   const body = await readBody(req);
   if (req.method === 'POST') {

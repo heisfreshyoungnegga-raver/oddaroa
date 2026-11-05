@@ -517,6 +517,35 @@ async function applyDepositRewards(userId, txnId, amountGhs) {
 // half-time derivation from minute <= 45 stays right) and the goal
 // lands at minute + extra on the live clock.
 function goalEff(g) { return Number(g.minute) + (Number(g.extra) || 0); }
+// Shared by match creation and editing: validate a goal schedule
+// into [{minute, side, extra?}] sorted by effective minute.
+function cleanGoalSchedule(goals) {
+  const out = [];
+  if (Array.isArray(goals)) {
+    for (const g of goals.slice(0, 14)) {
+      const minute = Math.round(Number(g && g.minute));
+      const side = g && g.side;
+      let extra = Math.round(Number(g && g.extra) || 0);
+      if (minute !== 45 && minute !== 90) extra = 0;
+      extra = Math.min(15, Math.max(0, extra));
+      if (minute >= 1 && minute <= 90 && (side === 'home' || side === 'away')) {
+        const goal = { minute, side };
+        if (extra) goal.extra = extra;
+        out.push(goal);
+      }
+    }
+    out.sort((a, b) => goalEff(a) - goalEff(b));
+  }
+  return out;
+}
+// A team crest ("flag"): an https URL, or a small data image the
+// portal downscaled before sending. Anything else is rejected.
+function cleanCrestUrl(v) {
+  const s = String(v || '').trim();
+  if (/^https:\/\/\S+$/i.test(s) && s.length <= 500) return s;
+  if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(s) && s.length <= 160000) return s;
+  return null;
+}
 function isCustomMatch(m) {
   return m && typeof m.external_ref === 'string' && m.external_ref.startsWith('custom:');
 }
@@ -827,4 +856,4 @@ async function maybeAutoSettle() {
   }
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns };
+module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl };

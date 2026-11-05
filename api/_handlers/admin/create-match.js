@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, ensureMatchColumns, expandOdds } = require('../../_lib');
+const { sql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, ensureMatchColumns, expandOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
 
 // Super admin only: create a "featured" match that plays like a real
 // one. Two ways in (Prince's design, 2026-11-03):
@@ -51,14 +51,8 @@ module.exports = guard(async (req, res) => {
   const clampStop = v => Math.min(15, Math.max(0, Math.round(Number(v) || 0)));
   const htStop = clampStop(ht_stoppage);
   const ftStop = clampStop(ft_stoppage);
-  const cleanLogo = v => {
-    const s = String(v || '').trim();
-    if (/^https:\/\/\S+$/i.test(s) && s.length <= 500) return s;
-    if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(s) && s.length <= 160000) return s;
-    return null;
-  };
-  const homeLogo = cleanLogo(home_logo);
-  const awayLogo = cleanLogo(away_logo);
+  const homeLogo = cleanCrestUrl(home_logo);
+  const awayLogo = cleanCrestUrl(away_logo);
 
   let home = String(home_team || '').trim();
   let away = String(away_team || '').trim();
@@ -81,24 +75,7 @@ module.exports = guard(async (req, res) => {
   }
   if (!odds.o1) return send(res, 400, { error: 'valid_1x2_odds_required', detail: 'Home, draw and away odds must all be above 1.00.' });
 
-  let cleanGoals = [];
-  if (Array.isArray(goals)) {
-    for (const g of goals.slice(0, 14)) {
-      const minute = Math.round(Number(g && g.minute));
-      const side = g && g.side;
-      // Stoppage time (45+X / 90+X) rides in `extra`; it is only
-      // meaningful at the end of a half, anything else is dropped.
-      let extra = Math.round(Number(g && g.extra) || 0);
-      if (minute !== 45 && minute !== 90) extra = 0;
-      extra = Math.min(15, Math.max(0, extra));
-      if (minute >= 1 && minute <= 90 && (side === 'home' || side === 'away')) {
-        const goal = { minute, side };
-        if (extra) goal.extra = extra;
-        cleanGoals.push(goal);
-      }
-    }
-    cleanGoals.sort((a, b) => (a.minute + (a.extra || 0)) - (b.minute + (b.extra || 0)));
-  }
+  let cleanGoals = cleanGoalSchedule(goals);
   if (!cleanGoals.length) {
     // Auto goal schedule from the priced probabilities: the stronger
     // side's expected goals rise, the weaker side's fall.
