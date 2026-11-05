@@ -134,6 +134,8 @@ function errToast(e, fallback) {
     email_already_registered: 'That email is already registered — log in instead.',
     account_blocked: 'This account has been blocked. Contact support.',
     withdrawal_locked: 'Withdrawals are not available on your account yet — please contact support.',
+    cashout_unavailable: 'Cashout is not available for this ticket right now.',
+    bet_not_open: 'That ticket is already settled.',
     match_finished: 'One of those matches has already finished.',
     match_live_locked: 'Live matches are locked — betting closes at kickoff.',
     betting_locked: 'Betting is locked on this match.',
@@ -658,8 +660,9 @@ function gateHTML(title) {
     '<button class="btn gold big" data-open-auth>Login</button></div>';
 }
 function statusChip(s) {
-  const cls = s === 'completed' || s === 'won' ? 'completed' : s === 'rejected' || s === 'lost' ? 'rejected' : 'pending';
-  return '<span class="st st-' + cls + '">' + String(s).toUpperCase() + '</span>';
+  const cls = s === 'completed' || s === 'won' || s === 'cashed_out' ? 'completed' : s === 'rejected' || s === 'lost' ? 'rejected' : 'pending';
+  const label = s === 'cashed_out' ? 'CASHED OUT' : String(s).toUpperCase();
+  return '<span class="st st-' + cls + '">' + label + '</span>';
 }
 function profileHTML() {
   if (!state.user) {
@@ -713,7 +716,29 @@ function betCardHTML(b) {
     '<div class="card-row"><span>Type</span><b>' + esc(b.kind === 'system' ? 'System ' + (b.system_label || '') : b.kind === 'single' ? 'Single' : 'Multiple') + '</b></div>' +
     (Number(b.bonus_pct) > 0 ? '<div class="card-row"><span>Winnings bonus</span><b>+' + Number(b.bonus_pct) + '%</b></div>' : '') +
     '<div class="card-row"><span>Total odds</span><b>' + Number(b.total_odds).toFixed(2) + '</b></div>' +
-    '<div class="card-row"><span>Potential win</span><b>' + money(b.potential_ghs) + '</b></div></div>';
+    '<div class="card-row"><span>Potential win</span><b>' + money(b.potential_ghs) + '</b></div>' +
+    // Cashout (Prince, 2026-11-05): the button exists only while
+    // the server quotes a value. When any leg is live there is no
+    // quote, so there is no button and no message — it comes back
+    // once that game is settled at full time.
+    (b.status === 'open' && b.cashout_ghs
+      ? '<button class="btn gold cashout-btn" data-cashout="' + b.id + '">Cash out · ' + money(b.cashout_ghs) + '</button>'
+      : '') +
+    '</div>';
+}
+async function cashOut(betId) {
+  const b = state.myBets.find(x => x.id === betId);
+  if (!b || !b.cashout_ghs) return;
+  if (!confirm('Cash out ticket ' + b.code + ' for ' + money(b.cashout_ghs) + '? The ticket closes and the money lands in your balance now.')) return;
+  try {
+    const data = await api('/bets/cashout', { method: 'POST', body: { bet_id: betId } });
+    if (state.user) { state.user.balance_ghs = data.balance_ghs; syncHeader(); }
+    toast('Cashed out — ' + money(data.cashout_ghs) + ' added to your balance.');
+    loadBets();
+  } catch (err) {
+    errToast(err, 'Cashout is not available for this ticket right now.');
+    loadBets();
+  }
 }
 function betsHTML() {
   if (!state.user) return gateHTML('Bets');
@@ -1402,6 +1427,8 @@ async function refreshUser() {
 
 /* ---------- global events ---------- */
 document.addEventListener('click', e => {
+  const co = e.target.closest('[data-cashout]');
+  if (co) { e.preventDefault(); cashOut(co.dataset.cashout); return; }
   const nav = e.target.closest('[data-nav]');
   if (nav) { closeMenu();
     e.preventDefault();

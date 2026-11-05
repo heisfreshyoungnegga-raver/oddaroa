@@ -1,4 +1,4 @@
-const { sql, send, guard, requireAuth } = require('../../_lib');
+const { sql, send, guard, requireAuth, getSettings, cashoutQuoteFor } = require('../../_lib');
 
 module.exports = guard(async (req, res) => {
   const auth = requireAuth(req, res);
@@ -19,5 +19,26 @@ module.exports = guard(async (req, res) => {
      limit 100`,
     [auth.uid]
   );
+  // Attach a live cashout quote to each open ticket (null when no
+  // cashout is offered — e.g. a leg is live — and the client then
+  // shows no button and no message, Prince's rule, 2026-11-05).
+  const openIds = rows.filter(b => b.status === 'open').map(b => b.id);
+  if (openIds.length) {
+    const legs = await sql(
+      `select s.bet_id, s.market, s.pick, s.result, to_jsonb(m) as match
+       from bet_selections s join matches m on m.id = s.match_id
+       where s.bet_id = any($1::uuid[])`,
+      [openIds]
+    );
+    const settings = await getSettings(['cashout_margin_pct']);
+    const byBet = new Map();
+    for (const l of legs) {
+      if (!byBet.has(l.bet_id)) byBet.set(l.bet_id, []);
+      byBet.get(l.bet_id).push(l);
+    }
+    for (const b of rows) {
+      if (b.status === 'open') b.cashout_ghs = cashoutQuoteFor(b, byBet.get(b.id) || [], settings.cashout_margin_pct);
+    }
+  }
   send(res, 200, { bets: rows });
 });

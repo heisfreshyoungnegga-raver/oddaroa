@@ -458,7 +458,7 @@ function ensureAdminTables() {
       await sql(`insert into operator_settings (key, value) values
         ('gateway_enabled', '1'), ('payouts_frozen', '0'),
         ('admin_commission_pct', '0'), ('user_cashback_pct', '0'),
-        ('referral_deposit_bonus_ghs', '100')
+        ('referral_deposit_bonus_ghs', '100'), ('cashout_margin_pct', '10')
         on conflict (key) do nothing`);
     })().catch(e => { adminTablesReady = null; throw e; });
   }
@@ -1077,4 +1077,45 @@ async function maybeAutoSettle() {
   }
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds };
+// ---- Cashout valuation (Prince, 2026-11-05) -----------------------
+// A ticket's fair cashout value is its potential payout discounted by
+// the CURRENT probability of its still-pending legs winning, then by
+// the operator's cashout margin, so the house never pays more than
+// the ticket is mathematically worth:
+//   value = potential × Π (1 / current_odds_i) × (1 − margin%)
+// rounded DOWN to the pesewa. Won legs count at full value. The quote
+// is null — no cashout offered at all — when any pending leg's match
+// is LIVE (the button stays hidden until that game is settled at full
+// time), postponed, already finished-but-unsettled, or its current
+// price can no longer be read.
+function legDerivedStatus(m) {
+  if (!m) return 'finished';
+  return isCustomMatch(m) ? customMatchState(m).status : m.status;
+}
+function currentPickOdds(m, market, pick) {
+  const key = keyFor(market, pick);
+  let odds = key ? Number(fillOdds(m.odds)[key]) : NaN;
+  if (!(odds > 1)) {
+    const book = Array.isArray(m.odds_full) ? m.odds_full.find(b => b.name === market) : null;
+    const v = book ? book.values.find(x => String(x.value) === String(pick)) : null;
+    odds = v ? Number(v.odd) : NaN;
+  }
+  return odds > 1 ? odds : null;
+}
+function cashoutQuoteFor(bet, legs, marginPct) {
+  if (!bet || bet.status !== 'open' || !Array.isArray(legs) || !legs.length) return null;
+  let p = 1;
+  for (const leg of legs) {
+    if (leg.result === 'lost') return null;
+    if (leg.result === 'won') continue;
+    if (legDerivedStatus(leg.match) !== 'upcoming') return null;
+    const cur = currentPickOdds(leg.match, leg.market, leg.pick);
+    if (!cur) return null;
+    p *= 1 / cur;
+  }
+  const margin = Math.min(50, Math.max(0, Number(marginPct) || 0));
+  const value = Math.floor(Number(bet.potential_ghs) * p * (1 - margin / 100) * 100) / 100;
+  return value >= 0.10 ? value : null;
+}
+
+module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor };

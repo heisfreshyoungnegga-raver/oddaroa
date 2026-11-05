@@ -1164,3 +1164,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Locked referral code on the register form (arrived via a link) */
 #authRef[readonly] { opacity: .55; }
+
+/* Cashout button on open bet cards (full width under the totals) */
+.cashout-btn { width: 100%; margin-top: 10px; }

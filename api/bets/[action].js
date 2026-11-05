@@ -1,6 +1,7 @@
 // Router for /api/bets/* — one Vercel function for the whole group.
 const handlers = {
   place: require('../_handlers/bets/place'),
+  cashout: require('../_handlers/bets/cashout'),
   mine: require('../_handlers/bets/mine'),
   verify: require('../_handlers/bets/verify'),
   winners: require('../_handlers/bets/winners'),

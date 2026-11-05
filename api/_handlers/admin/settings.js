@@ -1,6 +1,6 @@
 const { sql, readBody, send, guard, requireAdmin, requireSuperAdmin, ensureAdminTables, getSettings } = require('../../_lib');
 
-const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs'];
+const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'cashout_margin_pct'];
 
 // Platform control settings. Any admin can read them (dashboards show
 // the state); only the super admin can change them: the ShinobiPay
@@ -27,6 +27,11 @@ module.exports = guard(async (req, res) => {
       if (!(v >= 0 && v <= 100)) return send(res, 400, { error: 'invalid_percent', detail: k + ' must be between 0 and 100.' });
       updates[k] = String(v);
     }
+  }
+  if (body.cashout_margin_pct !== undefined) {
+    const v = Number(body.cashout_margin_pct);
+    if (!(v >= 0 && v <= 50)) return send(res, 400, { error: 'invalid_percent', detail: 'Cashout margin must be between 0 and 50.' });
+    updates.cashout_margin_pct = String(v);
   }
   if (body.referral_deposit_bonus_ghs !== undefined) {
     const v = Number(body.referral_deposit_bonus_ghs);
