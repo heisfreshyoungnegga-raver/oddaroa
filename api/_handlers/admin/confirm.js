@@ -12,7 +12,7 @@ module.exports = guard(async (req, res) => {
   if (!auth) return;
   const { id } = await readBody(req);
   await ensureAdminTables();
-  const pending = await sql('select user_id, kind, amount_ghs from wallet_transactions where id = $1 and status = $2', [id, 'pending']);
+  const pending = await sql('select user_id, kind, amount_ghs, method from wallet_transactions where id = $1 and status = $2', [id, 'pending']);
   if (!pending.length) return send(res, 404, { error: 'pending_transaction_not_found' });
   const txn = pending[0];
   // Withdrawal approvals are super-admin only (Prince's rule,
@@ -45,6 +45,22 @@ module.exports = guard(async (req, res) => {
   if (!rows.length || Number(rows[0].updated) === 0) return send(res, 404, { error: 'pending_transaction_not_found' });
   if (txn.kind === 'deposit') {
     await applyDepositRewards(txn.user_id, id, Number(txn.amount_ghs));
+  }
+  if (txn.kind === 'withdrawal') {
+    // The portal plays an animated SMS-style receipt for the payout
+    // (Prince, 2026-11-05, admins only) — hand it everything the
+    // message needs: amount paid, method, recipient, and the
+    // player's resulting Oddaroa balance.
+    const u = await sql('select phone, balance_ghs from users where id = $1', [txn.user_id]);
+    return send(res, 200, {
+      ok: true,
+      payout: {
+        amount_ghs: Math.abs(Number(txn.amount_ghs)),
+        method: txn.method || 'Mobile Money',
+        phone: (u[0] && u[0].phone) || '',
+        balance_ghs: Number((u[0] && u[0].balance_ghs) || 0)
+      }
+    });
   }
   send(res, 200, { ok: true });
 });

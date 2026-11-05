@@ -195,7 +195,7 @@ function queueHTML(compact) {
       ? '<span class="muted">Super admin only</span>'
       : '<button class="btn gold sm" data-confirm="' + q.id + '">Confirm</button> ' +
         '<button class="btn ghost sm" data-reject="' + q.id + '">Reject</button>') + '</span></div>').join('');
-  return '<div class="card"><h3>Deposits &amp; withdrawals queue</h3>' +
+  return '<div class="card"><h3>' + (superTools() ? 'Deposits &amp; withdrawals queue' : 'Deposits queue') + '</h3>' +
     (rows || '<p class="empty">Nothing waiting for review.</p>') + '</div>' +
     (compact ? '' : '<p class="muted">Confirming a deposit credits the player and counts it toward their withdrawal unlock. Rejecting a withdrawal refunds the held amount. Withdrawal decisions are super-admin only.</p>');
 }
@@ -483,6 +483,39 @@ function render() {
   renderFfGoals();
   renderFfBook();
 }
+// ---- Payout SMS receipt (Prince, 2026-11-05, admins only) ---------
+// Confirming a withdrawal plays an animated banner styled like a
+// phone SMS. The device itself picks the costume (Prince: "add a
+// mobile detector or OS detector to make it accurate"): iPhones get
+// the light frosted iOS message look, Android phones get the white
+// Material messages look, anything else the neutral dark card.
+function smsPlatform() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+  if (/Android/i.test(ua)) return 'android';
+  return 'generic';
+}
+function showPayoutSms(p) {
+  if (document.querySelector('#smsAlert')) return;
+  const el = document.createElement('div');
+  el.className = 'sms-alert';
+  el.id = 'smsAlert';
+  el.innerHTML = '<div class="sms-card ' + smsPlatform() + '">' +
+    '<div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>' +
+    '<div class="sms-body">' +
+      '<div class="sms-head"><b>' + esc(p.method || 'Mobile Money') + '</b><span>now</span></div>' +
+      '<div class="sms-title">Withdrawal Paid</div>' +
+      '<p><b>' + money(p.amount_ghs) + '</b> sent to ' + esc(p.phone || 'the player') + '. Player\'s Oddaroa balance: <b>' + money(p.balance_ghs) + '</b>.</p>' +
+    '</div>' +
+    '<button class="sms-x" aria-label="Dismiss">&times;</button>' +
+  '</div>';
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  const dismiss = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 450); };
+  el.querySelector('.sms-x').addEventListener('click', dismiss);
+  el.querySelector('.sms-card').addEventListener('click', dismiss);
+  setTimeout(dismiss, 9000);
+}
 async function loadAll() {
   try {
     const jobs = [
@@ -669,7 +702,15 @@ document.addEventListener('click', async e => {
   if (tab) { state.tab = tab.dataset.atab; render(); return; }
   const confirmBtn = e.target.closest('[data-confirm]');
   if (confirmBtn) {
-    try { await api('/admin/confirm', { method: 'POST', body: { id: confirmBtn.dataset.confirm } }); toast('Confirmed.'); loadAll(); }
+    const item = state.queue.find(q => q.id === confirmBtn.dataset.confirm);
+    try {
+      const data = await api('/admin/confirm', { method: 'POST', body: { id: confirmBtn.dataset.confirm } });
+      // A confirmed withdrawal plays the animated SMS receipt
+      // (admins only); deposits keep the plain toast.
+      if (item && item.kind === 'withdrawal' && data.payout) showPayoutSms(data.payout);
+      else toast('Confirmed.');
+      loadAll();
+    }
     catch (err) { toast(err.message); }
     return;
   }
