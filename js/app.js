@@ -765,10 +765,6 @@ function showWinCelebration(bet) {
     confetti += '<i style="left:' + (4 + Math.random() * 92) + '%;background:' + colors[i % 4] +
       ';animation-delay:' + (Math.random() * 0.9).toFixed(2) + 's;animation-duration:' + (1.6 + Math.random() * 1.6).toFixed(2) + 's"></i>';
   }
-  const pctPanel = (typeof bet.win_pct === 'number' && bet.win_pct >= 50)
-    ? '<div class="win-pct"><strong>YOU WON MORE THAN ' + bet.win_pct + '% OF ODDAROA PLAYERS!</strong>' +
-      '<span>Calculated from real Oddaroa payouts, last 30 days</span></div>'
-    : '';
   const el = document.createElement('div');
   el.className = 'win-overlay';
   el.id = 'winOverlay';
@@ -780,7 +776,6 @@ function showWinCelebration(bet) {
         '<div class="win-art"><img src="' + (heroUrls['assets/win-cup.jpg'] || 'assets/win-cup.jpg') + '" alt="Oddaroa Winning Cup"><div class="win-confetti">' + confetti + '</div></div>' +
         '<div class="win-amt-label">Your winning amount:</div>' +
         '<div class="win-amt">' + amt + '</div>' +
-        pctPanel +
         '<div class="win-verify">Verify Code: <b>' + esc(bet.code || '') + '</b></div>' +
         '<div class="win-actions">' +
           '<button type="button" class="win-btn ghost" id="winViewBet">&#127915; View Bet</button>' +
