@@ -141,7 +141,11 @@ function queueHTML(compact) {
     (compact ? '' : '<p class="muted">Confirming a deposit credits the player and counts it toward their withdrawal unlock. Rejecting a withdrawal refunds the held amount. Withdrawal decisions are super-admin only.</p>');
 }
 function matchesHTML() {
-  const form = '<div class="card"><h3>Add a match</h3><form id="matchForm" class="stack">' +
+  // Creating matches is super-admin work (Prince, 2026-11-05 — the
+  // create-match API already refuses regular admins): don't show
+  // the form where it can only fail. Admins keep the match list and
+  // its Go Live / Update Score / Settle actions.
+  const form = !superTools() ? '' : '<div class="card"><h3>Add a match</h3><form id="matchForm" class="stack">' +
     '<label>League <input type="text" id="mfLeague" placeholder="England Premier League" required></label>' +
     '<label>Home team <input type="text" id="mfHome" required></label>' +
     '<label>Away team <input type="text" id="mfAway" required></label>' +
