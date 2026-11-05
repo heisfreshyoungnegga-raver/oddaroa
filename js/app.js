@@ -166,6 +166,32 @@ function marketsForMarket(m, market) {
     .map(([label, key]) => ({ label, odd: Number(m.odds[key]) }))
     .filter(o => o.odd > 1);
 }
+// Price lookup for a clicked odds button. The classic markets resolve
+// through marketsForMarket, but the full book (Exact Score, HT/FT and
+// the rest of odds_full) and the Handicap section are rendered from
+// other sources — a click that only checked marketsForMarket found no
+// price and silently did nothing, which is why those odds looked
+// present but were not clickable (Prince's report, 2026-11-05). The
+// server accepts these picks under the market's real stored name.
+function priceForPick(m, market, pick) {
+  const classic = marketsForMarket(m, market).find(x => x.label === pick);
+  if (classic) return classic;
+  const book = state.fullBooks[m.id];
+  if (Array.isArray(book)) {
+    const b = book.find(x => x.name === market);
+    const v = b && b.values.find(x => String(x.value) === pick);
+    if (v && Number(v.odd) > 1) return { label: pick, odd: Number(v.odd) };
+  }
+  if (m.odds && market.indexOf('Handicap ') === 0 && Number(m.odds.sph) > 1 && Number(m.odds.spa) > 1 && m.odds.sp_line != null) {
+    const L = Number(m.odds.sp_line);
+    const fmt = (x) => (x > 0 ? '+' : '') + x.toFixed(1);
+    return [
+      { label: 'Home ' + fmt(L), odd: Number(m.odds.sph) },
+      { label: 'Away ' + fmt(-L), odd: Number(m.odds.spa) },
+    ].find(x => x.label === pick) || null;
+  }
+  return null;
+}
 function slipKey(matchId, market, pick) { return matchId + '|' + market + '|' + pick; }
 
 function matchVisible(m) {
@@ -292,7 +318,11 @@ function matchDetailsHTML() {
   if (Array.isArray(book)) {
     for (const b of book) {
       if (!b.values || !b.values.length) continue;
-      html += '<div class="card md-sec"><h3>' + esc(b.name) + '</h3><div class="md-odds">' + b.values.map(v => {
+      // Display name only: the market's stored name stays 'Exact Score'
+      // everywhere it is a key (buttons, slip, server settlement) —
+      // Prince calls this market Correct Score, so the heading does too.
+      const bTitle = b.name === 'Exact Score' ? 'Correct Score' : b.name;
+      html += '<div class="card md-sec"><h3>' + esc(bTitle) + '</h3><div class="md-odds">' + b.values.map(v => {
         const label = String(v.value);
         const sel = state.slip.has(slipKey(m.id, b.name, label)) ? ' sel' : '';
         return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(b.name) + '" data-pick="' + esc(label) + '"' + lkDis + '><small>' + esc(label) + '</small>' + lkPrice(v.odd) + '</button>';
@@ -1159,7 +1189,7 @@ document.addEventListener('click', e => {
       [...state.slip.keys()].forEach(k => {
         if (k.startsWith(m.id + '|')) state.slip.delete(k);
       });
-      const o = marketsForMarket(m, market).find(x => x.label === pick);
+      const o = priceForPick(m, market, pick);
       if (!o) return;
       state.slip.set(key, {
         matchId: m.id,
