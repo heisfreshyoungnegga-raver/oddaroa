@@ -774,10 +774,10 @@ function showWinCelebration(bet) {
   el.id = 'winOverlay';
   el.innerHTML =
     '<div class="win-card">' +
-      '<div class="win-art"><img src="' + (heroUrls['assets/win-cup.jpg'] || 'assets/win-cup.jpg') + '" alt="Oddaroa Winning Cup"><div class="win-confetti">' + confetti + '</div></div>' +
       '<div class="win-body">' +
-        '<div class="win-congrats">&#127881; CONGRATULATIONS!</div>' +
+        '<div class="win-congrats"><span class="win-mini">' + TROPHY_ICON + '</span> CONGRATULATIONS! <span class="win-mini">' + TROPHY_ICON + '</span></div>' +
         '<div class="win-youwon">YOU WON!</div>' +
+        '<div class="win-art"><img src="' + (heroUrls['assets/win-cup.jpg'] || 'assets/win-cup.jpg') + '" alt="Oddaroa Winning Cup"><div class="win-confetti">' + confetti + '</div></div>' +
         '<div class="win-amt-label">Your winning amount:</div>' +
         '<div class="win-amt">' + amt + '</div>' +
         pctPanel +
