@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Win celebration — live preview</title>
+<link rel="stylesheet" href="css/styles.css?v=22">
+<style>body { background: #05070a; margin: 0; min-height: 100vh; }</style>
+<script>
+  const __realFetch = window.fetch.bind(window);
+  window.fetch = async (url, opts) => {
+    const u = String(url);
+    if (u.indexOf('assets/') > -1) return __realFetch(url, opts);
+    if (u.indexOf('/auth/me') > -1) return { ok: true, json: async () => ({ user: { id: 'p1', role: 'player', phone: '+233240000000', balance_ghs: 480 } }) };
+    return { ok: true, json: async () => ({}), arrayBuffer: async () => new ArrayBuffer(0), text: async () => '' };
+  };
+</script>
+</head>
+<body>
+<main id="viewRoot"></main>
+<div id="toast"></div>
+<script src="js/data.js"></script>
+<script src="js/app.js?v=30"></script>
+<script>
+  setTimeout(() => {
+    showWinCelebration({ id: 'preview', code: 'ODW1N2WIN', status: 'won', potential_ghs: 23509.21, settled_at: new Date().toISOString(), selections: [] });
+  }, 1500);
+</script>
+</body>
+</html>
