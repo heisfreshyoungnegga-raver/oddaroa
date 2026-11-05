@@ -1302,3 +1302,5 @@ button:disabled { opacity: .45; cursor: not-allowed; }
    three lines ending in an ellipsis, like a real phone notification,
    so the card never grows tall however long the text runs. */
 .sms-body p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* deploy nudge 2026-11-05 */
