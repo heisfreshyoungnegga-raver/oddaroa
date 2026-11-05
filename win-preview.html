@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Win celebration — live preview</title>
+<link rel="stylesheet" href="css/styles.css?v=21">
+<style>body { background: #101711; margin: 0; min-height: 100vh; }</style>
+<script>
+  // Stubs so the real app.js boots without a backend session.
+  window.fetch = async (url) => {
+    const u = String(url);
+    if (u.indexOf('/auth/me') > -1) return { ok: true, json: async () => ({ user: { id: 'p1', role: 'player', phone: '+233240000000', balance_ghs: 480 } }) };
+    if (u.indexOf('assets/') === 0 || u.indexOf('/assets/') > -1) return fetch.__real(url);
+    return { ok: true, json: async () => ({}), arrayBuffer: async () => new ArrayBuffer(0), text: async () => '' };
+  };
+  window.fetch.__real = window.fetch.bind(window);
+</script>
+</head>
+<body>
+<main id="viewRoot"></main>
+<div id="toast"></div>
+<script src="js/data.js"></script>
+<script src="js/app.js?v=27"></script>
+<script>
+  // Fire the REAL celebration exactly as a winning player sees it,
+  // once the real cup art has loaded through the asset pipeline.
+  setTimeout(() => {
+    showWinCelebration({ id: 'preview', code: 'ODW1N2WIN', status: 'won', potential_ghs: 23509.21, win_pct: 98, settled_at: new Date().toISOString(), selections: [] });
+  }, 1500);
+</script>
+</body>
+</html>
