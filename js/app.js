@@ -12,6 +12,8 @@ const state = {
   lastSync: null,
   joinCountry: '+233',
   joinPhone: '',
+  hideBal: localStorage.getItem('od_hidebal') === '1',
+  theme: localStorage.getItem('od_theme') || 'dark',
   sport: 'Soccer',
   query: '',
   filtersOpen: false,
@@ -70,6 +72,25 @@ function fmtDate(iso) {
     d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 function money(n) { return 'GHS ' + Number(n || 0).toFixed(2); }
+// Headline balances respect the header eye toggle (Prince,
+// 2026-11-05): hidden shows a masked amount. Transaction history
+// amounts are records, not "the balance", and stay visible.
+function balMoney(n) { return state.hideBal ? 'GHS ••••' : money(n); }
+// Icons: EYE_OPEN / EYE_SHUT are shared with the password eye
+// (declared with the auth wiring below; same visible/hidden sense).
+function eyeBtnHTML() {
+  return '<button class="eyebtn" id="eyeToggle" aria-label="' + (state.hideBal ? 'Show balance' : 'Hide balance') + '">' + (state.hideBal ? EYE_SHUT : EYE_OPEN) + '</button>';
+}
+// Theme: 'dark' is the brand default; 'light' flips the CSS
+// variables via [data-theme="light"] in styles.css. The choice
+// persists and the head script applies it before first paint.
+function applyTheme(t) {
+  state.theme = t === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = state.theme;
+  localStorage.setItem('od_theme', state.theme);
+  document.querySelectorAll('[data-theme-state]').forEach(el => { el.textContent = state.theme === 'light' ? 'Light' : 'Dark'; });
+  document.querySelectorAll('.tswitch').forEach(el => { el.setAttribute('aria-checked', state.theme === 'light' ? 'true' : 'false'); });
+}
 
 /* ---------- API client ---------- */
 async function api(path, opts = {}) {
@@ -642,7 +663,7 @@ function profileHTML() {
       '<button class="btn gold big" data-open-auth>Login</button></div>';
   }
   return '<div class="profile"><h2>' + esc(state.user.phone || state.user.email || '') + '</h2>' +
-    '<div>Balance</div><div class="bal">' + money(state.user.balance_ghs) + '</div>' +
+    '<div>Balance</div><div class="bal">' + balMoney(state.user.balance_ghs) + '</div>' +
     '<button class="prow" data-nav="bets">Bets <span>›</span></button>' +
     '<button class="prow" data-nav="wallet">Wallet &amp; Transactions <span>›</span></button>' +
     '<button class="prow" data-nav="verify">Verify Bet <span>›</span></button>' +
@@ -848,7 +869,7 @@ function walletHTML() {
     sectionBody = '<div class="card"><h3>Transactions</h3>' + (tx || '<p class="empty">No transactions yet.</p>') + '</div>';
   }
   return '<h2>Wallet</h2>' +
-    '<div class="card"><div class="muted">Balance</div><div class="bal">' + money(w.balance_ghs) + '</div></div>' +
+    '<div class="card"><div class="muted">Balance</div><div class="bal">' + balMoney(w.balance_ghs) + '</div></div>' +
     sectionTabs + sectionBody;
 }
 async function loadWallet() {
@@ -905,6 +926,7 @@ function settingsHTML() {
   return '<h2>Settings</h2><div class="card stack">' +
     '<div class="card-row"><span>Phone / email</span><b>' + esc(state.user.phone || state.user.email || '') + '</b></div>' +
     '<div class="card-row"><span>Region / currency</span><b>Ghana · GHS</b></div>' +
+    '<div class="card-row"><span>Theme</span><span class="dtheme-ctl"><span data-theme-state>Dark</span><button class="tswitch" data-theme-toggle role="switch" aria-checked="false" aria-label="Toggle light or dark theme"><span class="tknob"></span></button></span></div>' +
     '<h3>Change password</h3><form id="passwordForm" class="stack">' +
     '<label>Current password <input type="password" id="pwCurrent" required></label>' +
     '<label>New password <input type="password" id="pwNew" required></label>' +
@@ -1292,11 +1314,18 @@ function syncHeader() {
     // the balance instead; the number lives in Me). The button's
     // own listener primes the wallet on the deposit section before the
     // shared nav handler switches the view.
-    ha.innerHTML = '<span class="userchip">' + money(state.user.balance_ghs) + '</span>' +
+    ha.innerHTML = '<span class="userchip">' + balMoney(state.user.balance_ghs) + '</span>' + eyeBtnHTML() +
       '<button class="btn gold" id="headDeposit" data-nav="wallet">Deposit</button>';
     $('#headDeposit').addEventListener('click', () => {
       state.walletSection = 'deposit';
       state.walletTab = 'instant';
+    });
+    $('#eyeToggle').addEventListener('click', () => {
+      state.hideBal = !state.hideBal;
+      localStorage.setItem('od_hidebal', state.hideBal ? '1' : '0');
+      syncHeader();
+      // The Me and Wallet pages print the headline balance too.
+      if (state.view === 'wallet' || state.view === 'profile') render();
     });
   } else {
     ha.innerHTML = '<button class="btn ghost" id="loginBtn">Login</button>' +
@@ -1485,6 +1514,8 @@ document.addEventListener('click', e => {
     toast('MoMo number copied: ' + cp.dataset.copy);
     return;
   }
+  const thT = e.target.closest('[data-theme-toggle]');
+  if (thT) { applyTheme(state.theme === 'light' ? 'dark' : 'light'); return; }
   if (e.target.id === 'logoutBtn') {
     state.user = null;
     state.token = '';
@@ -1846,6 +1877,7 @@ if (urlParams.get('ref')) {
 }
 
 // boot: restore session, then load real matches
+applyTheme(state.theme);
 $('#burgerBtn').addEventListener('click', openMenu);
 $('#drawerClose').addEventListener('click', closeMenu);
 $('#drawerShade').addEventListener('click', closeMenu);

@@ -40,6 +40,27 @@
   --radius-sm: 8px;
 }
 
+/* Light theme (Prince, 2026-11-05): the whole palette is variable-
+   driven, so the light scheme is one override block. The gold
+   accent, the black bottom bar, the hero photos and the casino
+   stages stay as they are — they read as brand surfaces on both
+   themes. Toggled from the hamburger menu and Settings. */
+[data-theme="light"] {
+  --bg: #edf3ed;
+  --surface: #ffffff;
+  --ink: #152219;
+  --header-bg: #ffffff;
+  --header-ink: #152219;
+  --card-dark: #dde8dd;
+  --ticker-bg: #123524;
+  --muted: #5b6f60;
+  --line: #c9d8c9;
+  --odds-bg: #dcecdc;
+  --odds-ink: #152219;
+  --chip-bg: #e2ece2;
+  --overlay: rgba(18, 28, 20, 0.45);
+}
+
 * { box-sizing: border-box; }
 /* No native tap flash (Prince, 2026-11-05): mobile browsers painted
    a quick blue highlight over the whole match card whenever an odds
@@ -1077,3 +1098,29 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .slip-code .bigcode.sm { font-size: 12px; letter-spacing: 1px; padding: 6px 8px; word-break: break-all; flex: 1; }
 .slip-load { display: flex; gap: 8px; }
 .slip-load input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); min-width: 0; }
+
+/* Balance eye toggle + theme switch (2026-11-05) */
+.eyebtn {
+  background: none; border: 0; color: var(--accent); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0; border-radius: 50%;
+}
+.eyebtn svg { width: 20px; height: 20px; }
+.eyebtn:active { transform: scale(0.92); }
+.tswitch {
+  width: 46px; height: 26px; border-radius: 999px; flex: none;
+  background: var(--chip-bg); border: 1px solid var(--line);
+  position: relative; cursor: pointer; padding: 0;
+}
+.tswitch .tknob {
+  position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+  border-radius: 50%; background: var(--gold-grad);
+  transition: transform 0.18s var(--ease-out);
+}
+[data-theme="light"] .tswitch .tknob { transform: translateX(20px); }
+.dtheme {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px; border-top: 1px solid var(--line);
+  font-weight: 600; color: var(--ink);
+}
+.dtheme-ctl { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; }
