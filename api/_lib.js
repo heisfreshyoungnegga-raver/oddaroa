@@ -444,7 +444,8 @@ function ensureAdminTables() {
       await sql(`alter table matches add column if not exists goal_events jsonb not null default '[]'::jsonb`);
       await sql(`insert into operator_settings (key, value) values
         ('gateway_enabled', '1'), ('payouts_frozen', '0'),
-        ('admin_commission_pct', '0'), ('user_cashback_pct', '0')
+        ('admin_commission_pct', '0'), ('user_cashback_pct', '0'),
+        ('referral_deposit_bonus_ghs', '100')
         on conflict (key) do nothing`);
     })().catch(e => { adminTablesReady = null; throw e; });
   }
@@ -469,9 +470,10 @@ async function getSettings(keys) {
 async function applyDepositRewards(userId, txnId, amountGhs) {
   const amount = Number(amountGhs);
   if (!(amount > 0)) return;
-  const s = await getSettings(['admin_commission_pct', 'user_cashback_pct']);
+  const s = await getSettings(['admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs']);
   const cashPct = Number(s.user_cashback_pct || 0);
   const commPct = Number(s.admin_commission_pct || 0);
+  const refBonus = Number(s.referral_deposit_bonus_ghs || 0);
   if (cashPct > 0) {
     const cash = Math.round(amount * cashPct) / 100;
     if (cash > 0) {
@@ -488,20 +490,40 @@ async function applyDepositRewards(userId, txnId, amountGhs) {
       }
     }
   }
-  if (commPct > 0) {
+  if (commPct > 0 || refBonus > 0) {
     const inv = await sql(
       `select i.id from users u join users i on i.id = u.invited_by
        where u.id = $1 and i.status = 'active' and i.role in ('admin', 'super_admin')`,
       [userId]
     );
     if (inv.length) {
-      const earn = Math.round(amount * commPct) / 100;
-      if (earn > 0) {
-        await sql(
-          `insert into commissions (earner_id, source_user_id, source_txn_id, basis_ghs, pct, amount_ghs)
-           values ($1, $2, $3, $4, $5, $6) on conflict (source_txn_id) where source_txn_id is not null do nothing`,
-          [inv[0].id, userId, txnId, amount, commPct, earn]
-        );
+      // Referral deposit bonus (Prince, 2026-11-05): a player who
+      // joined through any admin's referral link gets a flat bonus
+      // on EVERY completed deposit, on top of the deposit itself.
+      // Idempotent per deposit via the refbonus: external_ref, same
+      // pattern as the cashback above.
+      if (refBonus > 0) {
+        const dupe = await sql('select id from wallet_transactions where external_ref = $1', ['refbonus:' + txnId]);
+        if (!dupe.length) {
+          await sql(
+            `with ins as (
+               insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note)
+               values ($1, 'adjustment', 'Referral deposit bonus', $2, 'completed', $3, $4) returning id
+             )
+             update users set balance_ghs = balance_ghs + $2 where id = $1`,
+            [userId, refBonus, 'refbonus:' + txnId, 'Referral bonus on deposit']
+          );
+        }
+      }
+      if (commPct > 0) {
+        const earn = Math.round(amount * commPct) / 100;
+        if (earn > 0) {
+          await sql(
+            `insert into commissions (earner_id, source_user_id, source_txn_id, basis_ghs, pct, amount_ghs)
+             values ($1, $2, $3, $4, $5, $6) on conflict (source_txn_id) where source_txn_id is not null do nothing`,
+            [inv[0].id, userId, txnId, amount, commPct, earn]
+          );
+        }
       }
     }
   }

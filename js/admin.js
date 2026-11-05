@@ -328,6 +328,7 @@ function controlHTML() {
     '<div class="card"><h3>Commission rates</h3><form id="ratesForm" class="stack">' +
     '<label>Referral commission % (of a referred user\'s deposits, paid to whoever invited them) <input type="number" id="rateAdmin" step="0.1" min="0" max="50" value="' + esc(s.admin_commission_pct || '0') + '"></label>' +
     '<label>User cashback % (of their own deposit, credited back instantly) <input type="number" id="rateUser" step="0.1" min="0" max="50" value="' + esc(s.user_cashback_pct || '0') + '"></label>' +
+    '<label>Referral deposit bonus GHS (flat bonus a referred player gets on EVERY deposit; 0 = off) <input type="number" id="rateBonus" step="1" min="0" max="100000" value="' + esc(s.referral_deposit_bonus_ghs || '0') + '"></label>' +
     '<button class="btn gold big" type="submit">Save Rates</button></form></div>' +
     '<div class="card"><h3>Give a bonus</h3><form id="bonusForm" class="stack">' +
     '<label>Who <select id="bonusScope"><option value="all">All active players</option><option value="one">One account</option></select></label>' +
@@ -770,7 +771,7 @@ document.addEventListener('submit', async e => {
     try {
       const data = await api('/admin/settings', {
         method: 'POST',
-        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value) }
+        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), referral_deposit_bonus_ghs: Number($('#rateBonus').value) }
       });
       state.settings = data.settings;
       toast('Rates saved.');

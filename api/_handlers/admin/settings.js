@@ -1,6 +1,6 @@
 const { sql, readBody, send, guard, requireAdmin, requireSuperAdmin, ensureAdminTables, getSettings } = require('../../_lib');
 
-const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct'];
+const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs'];
 
 // Platform control settings. Any admin can read them (dashboards show
 // the state); only the super admin can change them: the ShinobiPay
@@ -25,6 +25,11 @@ module.exports = guard(async (req, res) => {
       if (!(v >= 0 && v <= 50)) return send(res, 400, { error: 'invalid_percent', detail: k + ' must be between 0 and 50.' });
       updates[k] = String(v);
     }
+  }
+  if (body.referral_deposit_bonus_ghs !== undefined) {
+    const v = Number(body.referral_deposit_bonus_ghs);
+    if (!(v >= 0 && v <= 100000)) return send(res, 400, { error: 'invalid_bonus', detail: 'Referral deposit bonus must be between 0 and 100000 GHS.' });
+    updates.referral_deposit_bonus_ghs = String(v);
   }
   for (const [k, v] of Object.entries(updates)) {
     await sql('insert into operator_settings (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', [k, v]);
