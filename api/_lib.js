@@ -671,6 +671,175 @@ function fillOdds(odds) {
   return { ...expandOdds(odds.o1, odds.ox, odds.o2), ...odds };
 }
 
+// Full market book for operator-created matches (Prince, 2026-11-05:
+// created games should carry the same markets as the API-Football
+// ones — "correct score etc ... like the ones from api football").
+// Derived from the match's own 1X2 line with the same Poisson split
+// expandOdds uses for the classic ladder (mu = 2.7 total goals), so
+// the whole page prices coherently and the create-match autofill /
+// randomizer produces the full book automatically. Market names,
+// ids and pick labels mirror API-Football's exactly, and every
+// market emitted is one afPickWon can settle — the unit test sweeps
+// every pick over the score matrix and asserts none is undecidable.
+// Half markets price off a 45/55 goal split between the halves.
+function fullBookFromOdds(odds) {
+  if (!odds || !(odds.o1 > 1 && odds.ox > 1 && odds.o2 > 1)) return [];
+  const raw = [1 / odds.o1, 1 / odds.ox, 1 / odds.o2];
+  const margin = raw[0] + raw[1] + raw[2];
+  const pH = raw[0] / margin, pA = raw[2] / margin;
+  const mu = 2.7;
+  const muH = mu * (pH / (pH + pA || 1)) || mu / 2;
+  const muA = Math.max(mu - muH, 0.15);
+  const MAXG = 12;
+  const pmf = (lambda) => {
+    const arr = [Math.exp(-lambda)];
+    for (let k = 1; k <= MAXG; k++) arr.push(arr[k - 1] * lambda / k);
+    return arr;
+  };
+  const PH = pmf(muH), PA = pmf(muA);
+  const H1 = pmf(muH * 0.45), A1 = pmf(muA * 0.45);
+  const H2 = pmf(muH * 0.55), A2 = pmf(muA * 0.55);
+  const price = (p) => {
+    if (!(p >= 0.002)) return null;
+    const v = Math.round(((1 / p) / (margin > 1 ? 1.05 : 1)) * 100) / 100;
+    return v >= 1.02 && v <= 500 ? v : null;
+  };
+  const book = [];
+  const add = (id, name, pairs) => {
+    const values = [];
+    for (const [label, p] of pairs) {
+      const odd = price(p);
+      if (odd) values.push({ value: label, odd });
+    }
+    if (values.length >= 2) book.push({ id, name, values });
+  };
+  const gridP = (G1, G2, fn) => {
+    let s = 0;
+    for (let h = 0; h <= MAXG; h++) for (let a = 0; a <= MAXG; a++) if (fn(h, a)) s += G1[h] * G2[a];
+    return s;
+  };
+  const teamP = (G, fn) => { let s = 0; for (let k = 0; k <= MAXG; k++) if (fn(k)) s += G[k]; return s; };
+  const jointP = (fn) => {
+    let s = 0;
+    for (let i = 0; i <= 8; i++) for (let j = 0; j <= 8; j++)
+      for (let d1 = 0; d1 <= 8; d1++) for (let d2 = 0; d2 <= 8; d2++)
+        if (fn(i + d1, j + d2, i, j, d1, d2)) s += H1[i] * A1[j] * H2[d1] * A2[d2];
+    return s;
+  };
+  const res = (h, a) => (h > a ? 'Home' : h < a ? 'Away' : 'Draw');
+  const ouPairs = (G1, G2, lines) => {
+    const pairs = [];
+    for (const line of lines) {
+      pairs.push(['Over ' + line, gridP(G1, G2, (h, a) => h + a > line)]);
+      pairs.push(['Under ' + line, gridP(G1, G2, (h, a) => h + a < line)]);
+    }
+    return pairs;
+  };
+  const handicapPairs = (G1, G2, lines) => {
+    // A line only joins the book complete (all three results priced):
+    // a partial handicap trio would look broken on the page.
+    const pairs = [];
+    for (const line of lines) {
+      const lbl = line > 0 ? '+' + line : String(line);
+      const trio = ['Home', 'Draw', 'Away'].map(r => [r + ' ' + lbl, gridP(G1, G2, (h, a) => res(h + line, a) === r)]);
+      if (trio.every(([, p]) => price(p))) pairs.push(...trio);
+    }
+    return pairs;
+  };
+
+  // Correct Score (full time + first half)
+  const csPairs = [];
+  for (let h = 0; h <= 5; h++) for (let a = 0; a <= 5; a++) csPairs.push([h + ':' + a, PH[h] * PA[a]]);
+  add(10, 'Exact Score', csPairs);
+  const csHtPairs = [];
+  for (let h = 0; h <= 3; h++) for (let a = 0; a <= 3; a++) csHtPairs.push([h + ':' + a, H1[h] * A1[a]]);
+  add(31, 'Correct Score - First Half', csHtPairs);
+  // HT/FT + half winners
+  add(7, 'HT/FT Double', ['Home', 'Draw', 'Away'].flatMap(r1 =>
+    ['Home', 'Draw', 'Away'].map(r2 => [r1 + '/' + r2, jointP((h, a, i, j) => res(i, j) === r1 && res(h, a) === r2)])));
+  add(13, 'First Half Winner', ['Home', 'Draw', 'Away'].map(r => [r, gridP(H1, A1, (h, a) => res(h, a) === r)]));
+  add(3, 'Second Half Winner', ['Home', 'Draw', 'Away'].map(r => [r, gridP(H2, A2, (h, a) => res(h, a) === r)]));
+  add(20, 'Double Chance - First Half', [
+    ['Home/Draw', gridP(H1, A1, (h, a) => h >= a)],
+    ['Home/Away', gridP(H1, A1, (h, a) => h !== a)],
+    ['Draw/Away', gridP(H1, A1, (h, a) => a >= h)],
+  ]);
+  add(6, 'Goals Over/Under First Half', ouPairs(H1, A1, [0.5, 1.5, 2.5]));
+  add(26, 'Goals Over/Under - Second Half', ouPairs(H2, A2, [0.5, 1.5, 2.5]));
+  add(34, 'Both Teams Score - First Half', [
+    ['Yes', gridP(H1, A1, (h, a) => h > 0 && a > 0)],
+    ['No', gridP(H1, A1, (h, a) => h === 0 || a === 0)],
+  ]);
+  add(35, 'Both Teams To Score - Second Half', [
+    ['Yes', gridP(H2, A2, (h, a) => h > 0 && a > 0)],
+    ['No', gridP(H2, A2, (h, a) => h === 0 || a === 0)],
+  ]);
+  // Handicaps + team totals + clean sheets + win to nil
+  add(9, 'Handicap Result', handicapPairs(PH, PA, [-2, -1, 1, 2]));
+  add(18, 'Handicap Result - First Half', handicapPairs(H1, A1, [-1, 1]));
+  add(16, 'Total - Home', [0.5, 1.5, 2.5].flatMap(line => [
+    ['Over ' + line, teamP(PH, k => k > line)], ['Under ' + line, teamP(PH, k => k < line)],
+  ]));
+  add(17, 'Total - Away', [0.5, 1.5, 2.5].flatMap(line => [
+    ['Over ' + line, teamP(PA, k => k > line)], ['Under ' + line, teamP(PA, k => k < line)],
+  ]));
+  add(27, 'Clean Sheet - Home', [['Yes', PA[0]], ['No', 1 - PA[0]]]);
+  add(28, 'Clean Sheet - Away', [['Yes', PH[0]], ['No', 1 - PH[0]]]);
+  add(36, 'Win To Nil', [
+    ['Home', gridP(PH, PA, (h, a) => h > a && a === 0)],
+    ['Away', gridP(PH, PA, (h, a) => a > h && h === 0)],
+  ]);
+  // Odd/even + exact goals
+  add(21, 'Odd/Even', [
+    ['Odd', gridP(PH, PA, (h, a) => (h + a) % 2 === 1)],
+    ['Even', gridP(PH, PA, (h, a) => (h + a) % 2 === 0)],
+  ]);
+  add(23, 'Home Odd/Even', [['Odd', teamP(PH, k => k % 2 === 1)], ['Even', teamP(PH, k => k % 2 === 0)]]);
+  add(60, 'Away Odd/Even', [['Odd', teamP(PA, k => k % 2 === 1)], ['Even', teamP(PA, k => k % 2 === 0)]]);
+  add(38, 'Exact Goals Number', [0, 1, 2, 3, 4, 5, 6].map(n => [String(n), gridP(PH, PA, (h, a) => h + a === n)])
+    .concat([['more 7', gridP(PH, PA, (h, a) => h + a >= 7)]]));
+  add(40, 'Home Team Exact Goals Number', [0, 1, 2].map(n => [String(n), PH[n]])
+    .concat([['more 3', teamP(PH, k => k >= 3)]]));
+  add(41, 'Away Team Exact Goals Number', [0, 1, 2].map(n => [String(n), PA[n]])
+    .concat([['more 3', teamP(PA, k => k >= 3)]]));
+  // Winning margin + result combos
+  add(47, 'Winning Margin', [
+    ['1 by 1', gridP(PH, PA, (h, a) => h - a === 1)], ['1 by 2', gridP(PH, PA, (h, a) => h - a === 2)],
+    ['1 by 3', gridP(PH, PA, (h, a) => h - a === 3)], ['1 by 4+', gridP(PH, PA, (h, a) => h - a >= 4)],
+    ['2 by 1', gridP(PH, PA, (h, a) => a - h === 1)], ['2 by 2', gridP(PH, PA, (h, a) => a - h === 2)],
+    ['2 by 3', gridP(PH, PA, (h, a) => a - h === 3)], ['2 by 4+', gridP(PH, PA, (h, a) => a - h >= 4)],
+    ['Score Draw', gridP(PH, PA, (h, a) => h === a && h > 0)], ['Draw', PH[0] * PA[0]],
+  ]);
+  add(24, 'Results/Both Teams Score', ['Home', 'Draw', 'Away'].flatMap(r => [
+    [r + '/Yes', gridP(PH, PA, (h, a) => res(h, a) === r && h > 0 && a > 0)],
+    [r + '/No', gridP(PH, PA, (h, a) => res(h, a) === r && (h === 0 || a === 0))],
+  ]));
+  add(25, 'Result/Total Goals', ['Home', 'Draw', 'Away'].flatMap(r => [
+    [r + '/Over 2.5', gridP(PH, PA, (h, a) => res(h, a) === r && h + a > 2.5)],
+    [r + '/Under 2.5', gridP(PH, PA, (h, a) => res(h, a) === r && h + a < 2.5)],
+  ]));
+  add(49, 'Total Goals/Both Teams To Score', [
+    ['o/yes 2.5', gridP(PH, PA, (h, a) => h + a > 2.5 && h > 0 && a > 0)],
+    ['o/no 2.5', gridP(PH, PA, (h, a) => h + a > 2.5 && (h === 0 || a === 0))],
+    ['u/yes 2.5', gridP(PH, PA, (h, a) => h + a <= 2.5 && h > 0 && a > 0)],
+    ['u/no 2.5', gridP(PH, PA, (h, a) => h + a <= 2.5 && (h === 0 || a === 0))],
+  ]);
+  add(349, 'Number Of Goals In Match', [
+    ['Under 2 goals', gridP(PH, PA, (h, a) => h + a <= 1)],
+    ['2 or 3 goals', gridP(PH, PA, (h, a) => h + a === 2 || h + a === 3)],
+    ['Over 3 goals', gridP(PH, PA, (h, a) => h + a >= 4)],
+  ]);
+  add(32, 'Win Both Halves', [
+    ['Home', jointP((h, a, i, j, d1, d2) => i > j && d1 > d2)],
+    ['Away', jointP((h, a, i, j, d1, d2) => j > i && d2 > d1)],
+  ]);
+  add(39, 'To Win Either Half', [
+    ['Home', jointP((h, a, i, j, d1, d2) => i > j || d1 > d2)],
+    ['Away', jointP((h, a, i, j, d1, d2) => j > i || d2 > d1)],
+  ]);
+  return book;
+}
+
 function inviteCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = 'OD';
@@ -819,9 +988,17 @@ function ensureMatchColumns() {
 async function settleMatch(matchId, home, away) {
   // Half-time score decides the full-book half markets; without it
   // those selections stay pending instead of being guessed.
-  const htRow = await sql('select score_home_ht, score_away_ht from matches where id = $1', [matchId]);
-  const htH = htRow.length ? htRow[0].score_home_ht : null;
-  const htA = htRow.length ? htRow[0].score_away_ht : null;
+  const htRow = await sql('select score_home_ht, score_away_ht, external_ref, goal_events from matches where id = $1', [matchId]);
+  let htH = htRow.length ? htRow[0].score_home_ht : null;
+  let htA = htRow.length ? htRow[0].score_away_ht : null;
+  if ((htH === null || htH === undefined) && htRow.length && isCustomMatch(htRow[0])) {
+    // Created matches carry no feed half-time score — theirs is in
+    // the goal schedule: everything at minute 45 or earlier (45+2
+    // stoppage goals store minute 45) belongs to the first half.
+    const goals = Array.isArray(htRow[0].goal_events) ? htRow[0].goal_events : [];
+    htH = goals.filter(g => g.side === 'home' && Number(g.minute) <= 45).length;
+    htA = goals.filter(g => g.side === 'away' && Number(g.minute) <= 45).length;
+  }
   const sels = await sql(
     "select id, bet_id, market, pick from bet_selections where match_id = $1 and result = 'pending'",
     [matchId]
@@ -899,4 +1076,4 @@ async function maybeAutoSettle() {
   }
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl };
+module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds };

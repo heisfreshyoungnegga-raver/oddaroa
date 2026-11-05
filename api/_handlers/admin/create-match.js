@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, ensureMatchColumns, expandOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
+const { sql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, ensureMatchColumns, expandOdds, fullBookFromOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
 
 // Super admin only: create a "featured" match that plays like a real
 // one. Two ways in (Prince's design, 2026-11-03):
@@ -97,12 +97,17 @@ module.exports = guard(async (req, res) => {
     cleanGoals.sort((a, b) => a.minute - b.minute);
   }
 
+  // The full market book (Correct Score, HT/FT, half markets,
+  // handicaps, margins...) is derived from the same 1X2 line, so
+  // typed prices and the autofill/randomizer produce it alike
+  // (Prince, 2026-11-05).
+  const oddsFull = fullBookFromOdds(odds);
   const rows = await sql(
-    `insert into matches (league, home_team, away_team, starts_at, odds, external_ref, goal_events, home_logo, away_logo, ht_stoppage, ft_stoppage)
-     values ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8, $9, $10, $11) returning *`,
+    `insert into matches (league, home_team, away_team, starts_at, odds, external_ref, goal_events, home_logo, away_logo, ht_stoppage, ft_stoppage, odds_full)
+     values ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb) returning *`,
     [leagueName.slice(0, 80), home.slice(0, 80), away.slice(0, 80),
      start.toISOString(), JSON.stringify(odds), 'custom:' + crypto.randomUUID(), JSON.stringify(cleanGoals),
-     homeLogo, awayLogo, htStop, ftStop]
+     homeLogo, awayLogo, htStop, ftStop, oddsFull.length ? JSON.stringify(oddsFull) : null]
   );
   send(res, 201, { match: rows[0] });
 });

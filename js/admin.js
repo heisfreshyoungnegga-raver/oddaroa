@@ -385,7 +385,7 @@ function toLocalInput(d) {
 function featuredFormHTML() {
   if (!superTools()) return '';
   return '<div class="card"><h3>Create a featured match (super admin)</h3>' +
-    '<p class="muted">Type only what you care about — anything left blank is generated for you: random team names, auto odds from the favourite, and a goal schedule that matches the odds. The game goes live by itself at kickoff and settles on the final scheduled score.</p>' +
+    '<p class="muted">Type only what you care about — anything left blank is generated for you: random team names, auto odds from the favourite, and a goal schedule that matches the odds. Every game also gets the full market book (Correct Score, HT/FT, half markets, handicaps and more), priced automatically from the 1X2 odds. The game goes live by itself at kickoff and settles on the final scheduled score.</p>' +
     '<form id="featForm" class="stack">' +
     '<label>League <input type="text" id="ffLeague" placeholder="Oddaroa Featured"></label>' +
     '<label>Home team <input type="text" id="ffHome" placeholder="Leave blank for a random team"></label>' +

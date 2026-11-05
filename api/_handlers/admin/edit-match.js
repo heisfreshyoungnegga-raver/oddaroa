@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireSuperAdmin, ensureMatchColumns, isCustomMatch, customMatchState, expandOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
+const { sql, readBody, send, guard, requireSuperAdmin, ensureMatchColumns, isCustomMatch, customMatchState, expandOdds, fullBookFromOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
 
 // Super admin only: edit a game HE created (a featured/custom match
 // or a manual one) — Prince, 2026-11-05. Names, league, crests and
@@ -81,12 +81,17 @@ module.exports = guard(async (req, res) => {
     if (custom && Array.isArray(body.goals)) put('goal_events', JSON.stringify(cleanGoalSchedule(body.goals)), 'jsonb');
     const { o1, ox, o2 } = body;
     if (Number(o1) > 1 && Number(ox) > 1 && Number(o2) > 1) {
+      let newOdds;
       if (custom) {
-        put('odds', JSON.stringify(expandOdds(Number(o1), Number(ox), Number(o2))), 'jsonb');
+        newOdds = expandOdds(Number(o1), Number(ox), Number(o2));
       } else {
         const cur = m.odds && typeof m.odds === 'object' ? m.odds : {};
-        put('odds', JSON.stringify({ ...cur, o1: Number(o1), ox: Number(ox), o2: Number(o2) }), 'jsonb');
+        newOdds = { ...cur, o1: Number(o1), ox: Number(ox), o2: Number(o2) };
       }
+      put('odds', JSON.stringify(newOdds), 'jsonb');
+      // The full book follows the 1X2 line it was derived from.
+      const full = fullBookFromOdds(newOdds);
+      if (full.length) put('odds_full', JSON.stringify(full), 'jsonb');
     }
   }
   if (!sets.length) return send(res, 400, { error: 'nothing_to_update' });
