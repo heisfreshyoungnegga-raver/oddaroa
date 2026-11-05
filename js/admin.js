@@ -144,6 +144,17 @@ function dashboardHTML() {
 // users it brought in. Players who register through the link are
 // active immediately — no confirmation step exists for them. The
 // super admin additionally sees every admin's referral numbers.
+function payoutCardHTML() {
+  const d = state.myDash;
+  if (!d) return '';
+  const c = d.commissions || {};
+  const req = d.payout_request;
+  return '<div class="card"><h3>Commission payout</h3>' + (req
+    ? '<p class="muted">You asked for a payout of <b>' + money(req.amount_ghs) + '</b> · ' + fmtDate(req.created_at) + '. The super admin settles it from their portal — once paid, the money lands in your wallet balance on the site, ready to withdraw.</p>'
+    : Number(c.pending_ghs || 0) > 0
+      ? '<p class="muted">You have <b>' + money(c.pending_ghs) + '</b> waiting. Request a payout and the super admin will settle it into your wallet balance, ready to withdraw from the site Wallet.</p><button class="btn gold" data-request-payout>Request Payout</button>'
+      : '<p class="muted">Nothing waiting right now. When users you invited deposit, your commission gathers here and you can request a payout.</p>') + '</div>';
+}
 function referralCardHTML() {
   const d = state.myDash;
   if (!d) return '';
@@ -157,11 +168,12 @@ function referralCardHTML() {
     '<div class="card-row"><span>Users referred</span><b>' + (d.invited_users || []).length + '</b></div>' +
     '<div class="card-row"><span>Commission earned</span><b>' + money((d.commissions || {}).earned_ghs || 0) + '</b></div>' +
     '<div class="card-row"><span>Pending payout</span><b>' + money((d.commissions || {}).pending_ghs || 0) + '</b></div></div>' +
+    payoutCardHTML() +
     '<div class="card"><h3>Users you referred</h3>' + (invited || '<p class="empty">No referred users yet — share your link.</p>') + '</div>';
   if (superTools() && (d.admins || []).length) {
     const rows = d.admins.map(a =>
       '<div class="txrow"><div><b>' + esc(a.phone) + '</b><div class="muted">' + esc(a.role) + '</div></div>' +
-      '<div>' + a.invited_count + ' referred · earned ' + money(a.earned) + ' · <b>pending ' + money(a.pending) + '</b></div></div>').join('');
+      '<div>' + a.invited_count + ' referred · earned ' + money(a.earned) + ' · <b>pending ' + money(a.pending) + '</b>' + (a.payout_requested_ghs != null ? ' · <b style="color:var(--gold)">payout requested</b>' : '') + '</div></div>').join('');
     html += '<div class="card"><h3>Referrals by admin</h3>' + rows + '</div>';
   }
   return html;
@@ -303,6 +315,7 @@ function earningsHTML() {
     '<div class="manualbox"><div class="mannum" style="font-size:17px; letter-spacing:0">' + esc(siteLink(d.invite_path)) + '</div>' +
     '<button class="btn gold" data-copy="' + esc(siteLink(d.invite_path)) + '">Copy Link</button></div></div>' +
     '<div class="stats">' + stat('Commission earned', money(c.earned_ghs)) + stat('Paid out', money(c.paid_ghs)) + stat('Pending payout', money(c.pending_ghs)) + stat('Users invited', (d.invited_users || []).length) + '</div>' +
+    payoutCardHTML() +
     '<div class="card"><h3>Users you invited</h3>' + (invited || '<p class="empty">No invited users yet — share your link.</p>') + '</div>' +
     '<div class="card"><h3>Recent commissions</h3>' + (recent || '<p class="empty">No commissions yet. They land here when an invited user\'s deposit is confirmed.</p>') + '</div>';
 }
@@ -317,7 +330,8 @@ function controlHTML() {
     '<button class="btn ghost sm" data-remove-admin="' + u.id + '">Remove</button></span></div>').join('');
   const commRows = ((state.myDash && state.myDash.admins) || []).map(a =>
     '<div class="txrow"><div><b>' + esc(a.phone) + '</b><div class="muted">' + esc(a.role) + ' · ' + a.invited_count + ' invited users</div></div>' +
-    '<div>earned ' + money(a.earned) + ' · paid ' + money(a.paid) + ' · <b>pending ' + money(a.pending) + '</b></div>' +
+    '<div>earned ' + money(a.earned) + ' · paid ' + money(a.paid) + ' · <b>pending ' + money(a.pending) + '</b>' +
+    (a.payout_requested_ghs != null ? '<div><b style="color:var(--gold)">Payout requested ' + money(a.payout_requested_ghs) + '</b></div>' : '') + '</div>' +
     (a.pending > 0 ? '<span><button class="btn gold sm" data-payout="' + a.id + '">Pay Out</button></span>' : '') + '</div>').join('');
   const userOpts = state.users.map(u => '<option value="' + u.id + '">' + esc(u.phone) + ' (' + esc(u.role) + ')</option>').join('');
   const inviteRows = state.invites.map(i =>
@@ -552,6 +566,15 @@ document.addEventListener('click', async e => {
     try {
       const data = await api('/admin/payout', { method: 'POST', body: { earner_id: payoutBtn.dataset.payout } });
       toast('Paid out ' + money(data.paid_ghs) + ' (' + data.entries + ' entries).');
+      loadAll();
+    } catch (err) { toast(err.message); }
+    return;
+  }
+  const reqPayoutBtn = e.target.closest('[data-request-payout]');
+  if (reqPayoutBtn) {
+    try {
+      const data = await api('/admin/payout-request', { method: 'POST', body: {} });
+      toast(data.already ? 'Payout already requested — the super admin has it.' : 'Payout requested: ' + money(data.request.amount_ghs) + '.');
       loadAll();
     } catch (err) { toast(err.message); }
     return;
