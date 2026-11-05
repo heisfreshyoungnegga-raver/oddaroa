@@ -121,7 +121,35 @@ function dashboardHTML() {
     ['Pending deposits', s.pending_deposits], ['Pending withdrawals', s.pending_withdrawals],
     ['Open support', s.open_support],
   ].map(([l, v]) => '<div class="stat"><div class="muted">' + l + '</div><div class="stat-v">' + v + '</div></div>').join('') : '<p class="muted">Loading…</p>';
-  return tabsHTML() + '<div class="stats">' + grid + '</div>' + espnHTML() + queueHTML(true);
+  return tabsHTML() + '<div class="stats">' + grid + '</div>' + referralCardHTML() + espnHTML() + queueHTML(true);
+}
+
+// Referral centre, on the Dashboard itself (Prince, 2026-11-05):
+// every admin-tier account's personal user-referral link plus the
+// users it brought in. Players who register through the link are
+// active immediately — no confirmation step exists for them. The
+// super admin additionally sees every admin's referral numbers.
+function referralCardHTML() {
+  const d = state.myDash;
+  if (!d) return '';
+  const invited = (d.invited_users || []).map(u =>
+    '<div class="txrow"><div><b>' + esc(u.phone) + '</b><div class="muted">' + esc(u.display_name || '') + ' · joined ' + fmtDate(u.created_at) + '</div></div>' +
+    '<div>' + money(u.deposits_ghs) + ' deposited</div></div>').join('');
+  let html = '<div class="card"><h3>Your referral link</h3>' +
+    '<p class="muted">Share this link to refer players. Anyone who registers through it joins instantly (no approval needed) and is credited to you for commissions.</p>' +
+    '<div class="manualbox"><div class="mannum" style="font-size:17px; letter-spacing:0">' + esc(siteLink(d.invite_path)) + '</div>' +
+    '<button class="btn gold" data-copy="' + esc(siteLink(d.invite_path)) + '">Copy Link</button></div>' +
+    '<div class="card-row"><span>Users referred</span><b>' + (d.invited_users || []).length + '</b></div>' +
+    '<div class="card-row"><span>Commission earned</span><b>' + money((d.commissions || {}).earned_ghs || 0) + '</b></div>' +
+    '<div class="card-row"><span>Pending payout</span><b>' + money((d.commissions || {}).pending_ghs || 0) + '</b></div></div>' +
+    '<div class="card"><h3>Users you referred</h3>' + (invited || '<p class="empty">No referred users yet — share your link.</p>') + '</div>';
+  if (superTools() && (d.admins || []).length) {
+    const rows = d.admins.map(a =>
+      '<div class="txrow"><div><b>' + esc(a.phone) + '</b><div class="muted">' + esc(a.role) + '</div></div>' +
+      '<div>' + a.invited_count + ' referred · earned ' + money(a.earned) + ' · <b>pending ' + money(a.pending) + '</b></div></div>').join('');
+    html += '<div class="card"><h3>Referrals by admin</h3>' + rows + '</div>';
+  }
+  return html;
 }
 function queueHTML(compact) {
   const rows = state.queue.map(q =>
