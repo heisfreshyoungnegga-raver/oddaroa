@@ -20,6 +20,7 @@ const state = {
   matchId: null, prevView: 'home', game: null,
   fullBooks: {}, // matchId -> the match's full market book (fetched on demand)
   slip: new Map(), // key -> {matchId, matchLabel, league, market, pick, odd}
+  winners: null,
   user: null,
   token: localStorage.getItem('od_token') || '',
   heroIdx: 0,
@@ -66,6 +67,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').repla
 // A drawn padlock (vector), not the emoji — same icon everywhere a
 // price is locked, styled by .lock-symbol in styles.css.
 const LOCK_ICON = '<span class="lock-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" focusable="false"><path d="M7.5 10.5V8a4.5 4.5 0 0 1 9 0v2.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><rect x="5" y="10.5" width="14" height="9" rx="2" fill="currentColor"/><circle cx="12" cy="15" r="1.7" fill="#000" opacity="0.45"/></svg></span>';
+const TROPHY_ICON = '<svg viewBox="0 0 24 24" fill="none" focusable="false" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" fill="currentColor"/><path d="M7 5H4a3 3 0 0 0 3 4M17 5h3a3 3 0 0 1-3 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M12 14v3M8.5 20.5h7M12 17c-1.4 0-2 .8-2.2 3.5h4.4C14 17.8 13.4 17 12 17Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function fmtDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' · ' +
@@ -956,6 +958,7 @@ function viewHTML() {
     case 'wallet': return walletHTML();
     case 'verify': return verifyHTML();
     case 'booking': return bookingHTML();
+    case 'winners': return winnersHTML();
     case 'promos': return promosHTML();
     case 'support': return supportHTML();
     case 'settings': return settingsHTML();
@@ -965,7 +968,7 @@ function viewHTML() {
     case 'virtual':
       return filtersHTML() + matchListHTML();
     default:
-      return heroHTML() + joinHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
+      return heroHTML() + joinHTML() + quickHTML() + cupBannerHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
   }
 }
 function render() {
@@ -992,6 +995,36 @@ function render() {
   if ($('#mmFeeLine')) syncMomoFee();
   syncSiteCountry();
   if (window.OddaroaGames) OddaroaGames.afterRender();
+}
+
+/* ---------- Winning Cup ---------- */
+// Prince, 2026-11-05: a cup for the users who actually win — the
+// biggest settled betslips and casino wins of the last 30 days,
+// ranked. Real data only, from /api/bets/winners; phones masked.
+function cupBannerHTML() {
+  return '<button class="cupbanner" data-nav="winners"><span class="cuptrophy">' + TROPHY_ICON + '</span>' +
+    '<span class="cuptext"><b>Winning Cup</b><span>See the biggest winners on Oddaroa</span></span>' +
+    '<span class="cuparrow">›</span></button>';
+}
+function winnersHTML() {
+  const rows = state.winners;
+  let body;
+  if (!rows) body = '<p class="empty">Loading the winners…</p>';
+  else if (!rows.length) body = '<div class="card center"><p class="empty">No big wins yet this month. Be the first name on the Cup — place a bet or play a game.</p></div>';
+  else body = '<div class="card">' + rows.map((w, i) =>
+    '<div class="winrow"><span class="winrank r' + (i + 1) + '">' + (i + 1) + '</span>' +
+    '<div class="winmain"><b>' + esc(w.who) + '</b><div class="muted">' + esc(w.what) + ' · ' + fmtDate(w.at) + '</div></div>' +
+    '<b class="winamt">' + money(w.won) + '</b></div>').join('') + '</div>';
+  return '<section class="matchwrap"><div class="cuphead"><span class="cuptrophy big">' + TROPHY_ICON + '</span>' +
+    '<h2 class="ptitle" style="margin:0">Winning Cup</h2>' +
+    '<p class="modal-sub">The biggest wins of the last 30 days — betslips and casino games.</p></div>' + body + '</section>';
+}
+async function loadWinners() {
+  try {
+    const d = await api('/bets/winners');
+    state.winners = d.winners || [];
+    if (state.view === 'winners') render();
+  } catch { /* the board retries on the next visit */ }
 }
 
 /* ---------- betslip ---------- */
@@ -1356,6 +1389,7 @@ document.addEventListener('click', e => {
     if (['home', 'live', 'sports', 'virtual'].includes(state.view)) state.sport = 'Soccer';
     render();
     if (state.view === 'bets') loadBets();
+    if (state.view === 'winners') loadWinners();
     if (state.view === 'wallet') loadWallet();
     if (state.view === 'support') loadSupport();
     return;

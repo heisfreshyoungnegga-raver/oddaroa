@@ -25,6 +25,11 @@ const state = {
   stats: null, queue: [], matches: [], users: [], support: [],
   settings: null, myDash: null, invites: [], lastInvite: '',
   offline: false,
+  // Set when this page was opened from a super admin's invite link:
+  // the portal then shows its own admin account-creation page
+  // instead of the login form (Prince, 2026-11-05).
+  invite: new URLSearchParams(location.search).get('admin_invite') || '',
+  inviteDone: '',
 };
 const $ = (s, r = document) => r.querySelector(s);
 const root = $('#adminRoot');
@@ -245,7 +250,7 @@ function controlHTML() {
   const userOpts = state.users.map(u => '<option value="' + u.id + '">' + esc(u.phone) + ' (' + esc(u.role) + ')</option>').join('');
   const inviteRows = state.invites.map(i =>
     '<div class="txrow"><div><b>' + esc(i.kind) + ' invite</b><div class="muted">expires ' + fmtDate(i.expires_at) + '</div></div>' +
-    '<button class="btn ghost sm" data-copy="' + esc(siteLink('/?admin_invite=' + i.token)) + '">Copy Link</button></div>').join('');
+    '<button class="btn ghost sm" data-copy="' + esc(siteLink('/admin.html?admin_invite=' + i.token)) + '">Copy Link</button></div>').join('');
   return tabsHTML() +
     '<div class="card"><h3>Switches</h3>' +
     '<div class="txrow"><div><b>ShinobiPay gateway</b><div class="muted">Off = instant MoMo deposits stop; manual transfer keeps working.</div></div>' +
@@ -313,11 +318,35 @@ function supportHTML() {
     (m.status === 'open' ? '<span><button class="btn gold sm" data-answer="' + m.id + '">Mark Answered</button></span>' : '') + '</div>').join('');
   return tabsHTML() + '<div class="card"><h3>Support inbox</h3>' + (rows || '<p class="empty">No messages.</p>') + '</div>';
 }
+// The page an invited admin lands on: account creation that says
+// plainly what is being created, instead of the player signup.
+function inviteRegisterHTML() {
+  return '<div class="profile"><h2>Create your admin account</h2>' +
+    '<p class="modal-sub">You have been invited to join the Oddaroa admin team. Create your account below — it stays locked until the super admin verifies it, then you can log in here.</p>' +
+    '<form id="adminInviteForm" class="stack">' +
+    '<label>Full name <input type="text" id="invName" required></label>' +
+    '<label>Phone number <input type="tel" id="invPhone" placeholder="05xxxxxxxx" required></label>' +
+    '<label>Email <input type="email" id="invEmail" required></label>' +
+    '<label>Password <input type="password" id="invPass" required></label>' +
+    '<button class="btn gold big" type="submit">Create Admin Account</button></form>' +
+    '<p class="modal-sub">Already have an admin account? <a href="admin.html">Go to login</a>.</p></div>';
+}
+function inviteDoneHTML() {
+  return '<div class="profile"><h2>Account created</h2>' +
+    '<p class="modal-sub">' + (state.inviteDone === 'active'
+      ? 'Your account is active. Continue into the portal below.'
+      : 'Your admin account is created and waiting for verification. The super admin will approve it from their portal — once approved, come back here and log in with your phone number and password.') + '</p>' +
+    (state.inviteDone === 'active'
+      ? '<button class="btn gold big" id="inviteContinue">Continue to the Portal</button>'
+      : '<a class="btn gold big" href="admin.html" style="display:block;text-align:center">Back to Login</a>') + '</div>';
+}
 function render() {
   const head = $('#adminHead');
   if (!state.user) {
     head.innerHTML = '';
-    root.innerHTML = loginHTML();
+    root.innerHTML = state.inviteDone ? inviteDoneHTML() : state.invite ? inviteRegisterHTML() : loginHTML();
+    const cont = $('#inviteContinue');
+    if (cont) cont.addEventListener('click', () => { state.inviteDone = ''; loadAll(); });
     return;
   }
   head.innerHTML = '<span class="userchip">' + esc(state.user.phone || state.user.email || '') + '</span> ' +
@@ -550,6 +579,36 @@ document.addEventListener('submit', async e => {
       state.user = data.user;
       loadAll();
     } catch (err) { toast(err.message); render(); }
+  } else if (e.target.id === 'adminInviteForm') {
+    e.preventDefault();
+    try {
+      const data = await api('/auth/register', {
+        method: 'POST',
+        body: {
+          display_name: $('#invName').value.trim(),
+          phone: $('#invPhone').value.trim(),
+          email: $('#invEmail').value.trim(),
+          password: $('#invPass').value,
+          admin_invite: state.invite
+        }
+      });
+      state.invite = '';
+      history.replaceState(null, '', location.pathname);
+      if (data.pending) {
+        state.inviteDone = 'pending';
+        render();
+      } else if (data.token) {
+        // A super-admin invite activates at once: sign straight in.
+        state.token = data.token;
+        localStorage.setItem('ps_admin_token', data.token);
+        state.user = data.user;
+        state.inviteDone = 'active';
+        render();
+      }
+    } catch (err) {
+      toast(err.message);
+      if (String(err.message).includes('invite')) { state.invite = ''; render(); }
+    }
   } else if (e.target.id === 'ratesForm') {
     e.preventDefault();
     try {
