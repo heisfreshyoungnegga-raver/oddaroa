@@ -1167,3 +1167,27 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Cashout button on open bet cards (full width under the totals) */
 .cashout-btn { width: 100%; margin-top: 10px; }
+
+/* Responsive fixes from the 360px / 768px frame audit (2026-11-05) */
+/* Instant Registration: the phone field must be allowed to shrink,
+   and on small phones the Join button stacks full-width — it was
+   clipped off-screen and unreachable at 360px. */
+.join-phone { min-width: 0; }
+.join-flex .btn { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 480px) {
+  .join-flex { flex-wrap: wrap; }
+  .join-flex .btn { flex: 1 1 100%; }
+}
+/* The top nav strip scrolls sideways at every width — never show
+   its scrollbar (a grey bar was permanently visible at 768px). */
+.mainnav { scrollbar-width: none; }
+.mainnav::-webkit-scrollbar { display: none; }
+/* Banner band columns may not force the band wider than the page. */
+.bannerband > * { min-width: 0; }
+/* Three-button markets (1X2, Double Chance) sit three-across on
+   phones instead of wrapping 2 + 1. */
+@media (max-width: 640px) { .md-odds { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); } }
+/* On phones the floating support button sits bottom-LEFT, over the
+   non-interactive side of match rows, instead of covering the odds
+   buttons on the right. */
+@media (max-width: 860px) { .support-fab { left: 12px; right: auto; bottom: 84px; } }
