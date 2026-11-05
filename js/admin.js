@@ -311,7 +311,7 @@ function featuredFormHTML() {
     '<label>1 (home) <input type="number" step="0.01" min="1.01" id="ff_o1" placeholder="Auto"></label>' +
     '<label>X (draw) <input type="number" step="0.01" min="1.01" id="ff_ox" placeholder="Auto"></label>' +
     '<label>2 (away) <input type="number" step="0.01" min="1.01" id="ff_o2" placeholder="Auto"></label></div>' +
-    '<label>Goal schedule — minute:side, comma separated (blank = auto) <input type="text" id="ffGoals" placeholder="Auto-generated to match the odds"></label>' +
+    '<label>Goal schedule — minute:side, comma separated; stoppage time like 45+2:home or 90+3:away (blank = auto) <input type="text" id="ffGoals" placeholder="e.g. 12:home, 45+2:away, 90+3:home"></label>' +
     '<button class="btn gold big" type="submit">Create Featured Match</button></form></div>';
 }
 function supportHTML() {
@@ -663,8 +663,9 @@ document.addEventListener('submit', async e => {
     const goalsText = $('#ffGoals').value.trim();
     if (goalsText) {
       body.goals = goalsText.split(',').map(x => x.trim()).filter(Boolean).map(part => {
-        const [min, side] = part.split(':').map(y => (y || '').trim());
-        return { minute: Number(min), side: side === 'away' ? 'away' : 'home' };
+        const [minRaw, side] = part.split(':').map(y => (y || '').trim());
+        const mm = /^(\d+)(?:\+(\d+))?$/.exec(minRaw) || [];
+        return { minute: Number(mm[1] || NaN), extra: Number(mm[2] || 0), side: side === 'away' ? 'away' : 'home' };
       }).filter(g => g.minute >= 1 && g.minute <= 90);
     }
     try {

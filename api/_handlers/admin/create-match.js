@@ -71,9 +71,18 @@ module.exports = guard(async (req, res) => {
     for (const g of goals.slice(0, 14)) {
       const minute = Math.round(Number(g && g.minute));
       const side = g && g.side;
-      if (minute >= 1 && minute <= 90 && (side === 'home' || side === 'away')) cleanGoals.push({ minute, side });
+      // Stoppage time (45+X / 90+X) rides in `extra`; it is only
+      // meaningful at the end of a half, anything else is dropped.
+      let extra = Math.round(Number(g && g.extra) || 0);
+      if (minute !== 45 && minute !== 90) extra = 0;
+      extra = Math.min(15, Math.max(0, extra));
+      if (minute >= 1 && minute <= 90 && (side === 'home' || side === 'away')) {
+        const goal = { minute, side };
+        if (extra) goal.extra = extra;
+        cleanGoals.push(goal);
+      }
     }
-    cleanGoals.sort((a, b) => a.minute - b.minute);
+    cleanGoals.sort((a, b) => (a.minute + (a.extra || 0)) - (b.minute + (b.extra || 0)));
   }
   if (!cleanGoals.length) {
     // Auto goal schedule from the priced probabilities: the stronger

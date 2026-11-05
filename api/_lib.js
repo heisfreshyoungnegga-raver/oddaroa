@@ -510,7 +510,12 @@ async function applyDepositRewards(userId, txnId, amountGhs) {
 // A super-admin "featured" match carries a goal schedule. Its displayed
 // state is derived from the clock: before kickoff it is upcoming; from
 // kickoff the minute counts up and each scheduled goal lands at its
-// minute; at 95 minutes it is finished with the full scheduled score.
+// minute; at 100 minutes it is finished with the full scheduled score.
+// A goal may carry stoppage time (Prince, 2026-11-05): {minute: 45,
+// extra: 2} is a 45+2' goal — `minute` stays the regulation minute (so
+// half-time derivation from minute <= 45 stays right) and the goal
+// lands at minute + extra on the live clock.
+function goalEff(g) { return Number(g.minute) + (Number(g.extra) || 0); }
 function isCustomMatch(m) {
   return m && typeof m.external_ref === 'string' && m.external_ref.startsWith('custom:');
 }
@@ -521,8 +526,8 @@ function customMatchState(m, now = new Date()) {
   if (m.status === 'finished') return { status: 'finished', minute: null, score_home: m.score_home, score_away: m.score_away, final_home: m.score_home, final_away: m.score_away };
   const elapsed = Math.floor((now - new Date(m.starts_at)) / 60000);
   if (elapsed < 0) return { status: 'upcoming', minute: null, score_home: 0, score_away: 0, final_home: finH, final_away: finA };
-  if (elapsed >= 95) return { status: 'finished', minute: null, score_home: finH, score_away: finA, final_home: finH, final_away: finA };
-  const shown = goals.filter(g => Number(g.minute) <= elapsed);
+  if (elapsed >= 100) return { status: 'finished', minute: null, score_home: finH, score_away: finA, final_home: finH, final_away: finA };
+  const shown = goals.filter(g => goalEff(g) <= elapsed);
   return {
     status: 'live', minute: Math.min(elapsed, 90),
     score_home: shown.filter(g => g.side === 'home').length,
@@ -773,7 +778,7 @@ async function maybeAutoSettle() {
      from matches m
      where exists (select 1 from bet_selections s where s.match_id = m.id and s.result = 'pending')
        and ((m.status = 'finished' and m.score_home is not null and m.score_away is not null)
-            or (m.external_ref like 'custom:%' and m.starts_at < now() - interval '95 minutes'))
+            or (m.external_ref like 'custom:%' and m.starts_at < now() - interval '100 minutes'))
      limit 5`
   );
   for (const m of rows) {
