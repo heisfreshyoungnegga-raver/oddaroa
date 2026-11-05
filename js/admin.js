@@ -495,6 +495,28 @@ function smsPlatform() {
   if (/Android/i.test(ua)) return 'android';
   return 'generic';
 }
+// The notification sound (Prince, 2026-11-05): a short two-note
+// message chime synthesized live with Web Audio, so there is no
+// audio file to ship. Best-effort only — a silent failure must
+// never break the receipt.
+function smsDing() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = smsDing.ctx || (smsDing.ctx = new AC());
+    if (ctx.state === 'suspended') ctx.resume();
+    const t0 = ctx.currentTime;
+    [[1567.98, 0], [2093.0, 0.09]].forEach(([f, dt]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0 + dt);
+      g.gain.exponentialRampToValueAtTime(0.16, t0 + dt + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.5);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t0 + dt); o.stop(t0 + dt + 0.55);
+    });
+  } catch (e) { /* garnish only */ }
+}
 function showPayoutSms(p) {
   if (document.querySelector('#smsAlert')) return;
   const el = document.createElement('div');
@@ -511,6 +533,7 @@ function showPayoutSms(p) {
   '</div>';
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
+  smsDing();
   const dismiss = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 450); };
   el.querySelector('.sms-x').addEventListener('click', dismiss);
   el.querySelector('.sms-card').addEventListener('click', dismiss);
