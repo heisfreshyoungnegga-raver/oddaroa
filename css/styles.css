@@ -1297,3 +1297,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .pay-actions { display: flex; margin: 20px -22px 0; border-top: 1px solid #ececf0; }
 .pay-actions button { flex: 1; background: none; border: none; padding: 15px 0; font-size: 15px; font-weight: 700; color: #1da356; cursor: pointer; font-family: inherit; }
 .pay-actions button + button { border-left: 1px solid #ececf0; }
+
+/* SMS body truncation (Prince, 2026-11-05): the message clamps to
+   three lines ending in an ellipsis, like a real phone notification,
+   so the card never grows tall however long the text runs. */
+.sms-body p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
