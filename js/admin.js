@@ -555,7 +555,6 @@ function showPayoutSuccess(p) {
     '<div class="pay-title">Withdrawal successful</div>' +
     '<p class="pay-sub">The withdrawal has been paid to ' + esc(p.phone || 'the player') + ' successfully.</p>' +
     '<div class="pay-amt">' + money(p.amount_ghs) + '</div>' +
-    '<div class="pay-ref">Reference: Congrats</div>' +
     '<div class="pay-actions"><button type="button" data-pay-tx>Transactions</button><button type="button" data-pay-done>Done</button></div>' +
   '</div>';
   document.body.appendChild(el);
