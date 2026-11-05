@@ -41,6 +41,13 @@
 }
 
 * { box-sizing: border-box; }
+/* No native tap flash (Prince, 2026-11-05): mobile browsers painted
+   a quick blue highlight over the whole match card whenever an odds
+   button was tapped. Only .bn-item was protected before. Buttons
+   still give feedback via :active scale and the gold selected
+   state; manipulation also drops the double-tap zoom delay. */
+* { -webkit-tap-highlight-color: transparent; }
+button, .odd { touch-action: manipulation; }
 html, body { overflow-x: clip; }
 body {
   margin: 0;
