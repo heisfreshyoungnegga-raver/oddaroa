@@ -44,7 +44,7 @@ module.exports = guard(async (req, res) => {
   if (!auth) return;
   await ensureAdminTables();
   await ensureMatchColumns();
-  const { league, home_team, away_team, starts_at, o1, ox, o2, goals, fav, ht_stoppage, ft_stoppage, home_logo, away_logo } = await readBody(req);
+  const { league, home_team, away_team, starts_at, o1, ox, o2, goals, fav, ht_stoppage, ft_stoppage, home_logo, away_logo, odds_full, betting_locked } = await readBody(req);
   // Match-level stoppage (Prince, 2026-11-05): minutes added to each
   // half, 0-15. Crests ("flags") are a URL or a small data image the
   // portal downscaled; anything else is ignored.
@@ -101,13 +101,36 @@ module.exports = guard(async (req, res) => {
   // handicaps, margins...) is derived from the same 1X2 line, so
   // typed prices and the autofill/randomizer produce it alike
   // (Prince, 2026-11-05).
-  const oddsFull = fullBookFromOdds(odds);
+  const derivedFull = fullBookFromOdds(odds);
+  // Admin-specified prices from the form's market editor override
+  // the derived book market-by-market; anything unspecified keeps
+  // its derived price, so the game always carries the full book.
+  // Only markets the generator itself can settle are accepted.
+  let oddsFull = derivedFull;
+  if (Array.isArray(odds_full) && odds_full.length) {
+    const allowed = new Map(derivedFull.map(b => [b.name, b]));
+    const byName = new Map();
+    for (const mkt of odds_full.slice(0, 40)) {
+      if (!mkt || !allowed.has(mkt.name) || !Array.isArray(mkt.values)) continue;
+      const seen = new Set();
+      const values = [];
+      for (const v of mkt.values.slice(0, 64)) {
+        const value = String(v && v.value != null ? v.value : '').trim().slice(0, 40);
+        const odd = Math.round(Number(v && v.odd) * 100) / 100;
+        if (!value || seen.has(value) || !(odd > 1) || odd > 1000) continue;
+        seen.add(value);
+        values.push({ value, odd });
+      }
+      if (values.length >= 2) byName.set(mkt.name, { id: allowed.get(mkt.name).id, name: mkt.name, values });
+    }
+    if (byName.size) oddsFull = derivedFull.map(b => byName.get(b.name) || b);
+  }
   const rows = await sql(
-    `insert into matches (league, home_team, away_team, starts_at, odds, external_ref, goal_events, home_logo, away_logo, ht_stoppage, ft_stoppage, odds_full)
-     values ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb) returning *`,
+    `insert into matches (league, home_team, away_team, starts_at, odds, external_ref, goal_events, home_logo, away_logo, ht_stoppage, ft_stoppage, odds_full, betting_locked)
+     values ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb, $13) returning *`,
     [leagueName.slice(0, 80), home.slice(0, 80), away.slice(0, 80),
      start.toISOString(), JSON.stringify(odds), 'custom:' + crypto.randomUUID(), JSON.stringify(cleanGoals),
-     homeLogo, awayLogo, htStop, ftStop, oddsFull.length ? JSON.stringify(oddsFull) : null]
+     homeLogo, awayLogo, htStop, ftStop, oddsFull.length ? JSON.stringify(oddsFull) : null, !!betting_locked]
   );
   send(res, 201, { match: rows[0] });
 });

@@ -1154,3 +1154,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .winrank.r3 { background: #b0722f; color: #fff4e6; }
 .winmain { flex: 1; min-width: 0; }
 .winamt { color: #3fae5a; white-space: nowrap; }
+
+/* Featured-form goal script chips + full-book editor (admin portal) */
+.goalchip { display: inline-flex; align-items: center; gap: 6px; background: #12241a; border: 1px solid #1f3a2a; border-radius: 999px; padding: 3px 6px 3px 10px; margin: 0 6px 6px 0; font-size: 13px; }
+.goalx { background: none; border: none; color: #ffb020; font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.bookmkt { margin-top: 14px; }
+.bookmkt h4 { margin: 0 0 6px; font-size: 14px; }
+.bookedit summary { cursor: pointer; font-weight: 600; padding: 6px 0; }

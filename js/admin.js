@@ -394,11 +394,18 @@ function featuredFormHTML() {
     '<label>Who is favourite? <select id="ffFav"><option value="even">Even match</option><option value="home">Home — slight favourite</option><option value="home_strong">Home — strong favourite</option><option value="away">Away — slight favourite</option><option value="away_strong">Away — strong favourite</option></select></label>' +
     '<label>Kickoff <input type="datetime-local" id="ffStart"></label>' +
     '<div><button class="btn ghost sm" type="button" data-kick="15">In 15 min</button> <button class="btn ghost sm" type="button" data-kick="60">In 1 hour</button> <button class="btn ghost sm" type="button" data-kick="tonight">Tonight 7 PM</button></div>' +
+    '<label class="checkrow"><input type="checkbox" id="ffStartNow"> Start the match now</label>' +
+    '<label class="checkrow"><input type="checkbox" id="ffLockBet"> Lock betting — players can see the game but cannot bet on it</label>' +
     '<div class="oddsgrid">' +
     '<label>1 (home) <input type="number" step="0.01" min="1.01" id="ff_o1" placeholder="Auto"></label>' +
     '<label>X (draw) <input type="number" step="0.01" min="1.01" id="ff_ox" placeholder="Auto"></label>' +
     '<label>2 (away) <input type="number" step="0.01" min="1.01" id="ff_o2" placeholder="Auto"></label></div>' +
-    '<label>Goal schedule — minute:side, comma separated; stoppage time like 45+2:home or 90+3:away (blank = auto) <input type="text" id="ffGoals" placeholder="e.g. 12:home, 45+2:away, 90+3:home"></label>' +
+    '<div><span class="muted">Goal script — <span id="ffScriptSummary"></span></span>' +
+    '<div id="ffGoalList" style="margin-top:6px"></div>' +
+    '<div><input type="text" id="ffMinute" placeholder="Minute — e.g. 12 or 45+2" style="max-width:200px"> ' +
+    '<button class="btn ghost sm" type="button" data-goaladd="home">+ Home</button> ' +
+    '<button class="btn ghost sm" type="button" data-goaladd="away">+ Away</button></div>' +
+    '<p class="muted">Leave the script empty and one is generated from the odds.</p></div>' +
     '<div class="oddsgrid">' +
     '<label>1st half stoppage (min) <input type="number" min="0" max="15" step="1" id="ffHtStop" value="0"></label>' +
     '<label>2nd half stoppage (min) <input type="number" min="0" max="15" step="1" id="ffFtStop" value="0"></label></div>' +
@@ -407,6 +414,10 @@ function featuredFormHTML() {
     '<label>…or upload the home crest <input type="file" id="ffHomeFlag" data-crest="home" accept="image/*"></label>' +
     '<label>Away crest (flag) — image URL <input type="url" id="ffAwayLogo" placeholder="https://…"></label>' +
     '<label>…or upload the away crest <input type="file" id="ffAwayFlag" data-crest="away" accept="image/*"></label>' +
+    '<details class="bookedit"><summary>All markets — specify or randomize prices</summary>' +
+    '<p class="muted">The full book (Correct Score, HT/FT, half markets, handicaps and more) is generated from the 1X2 odds when you save. Randomize to fill every price here first, then tweak any of them — your prices win over the generated ones.</p>' +
+    '<button class="btn ghost" type="button" id="ffRandomize">🎲 Randomize all odds</button>' +
+    '<div id="ffBook"></div></details>' +
     '<button class="btn gold big" type="submit">Create Featured Match</button></form></div>';
 }
 function supportHTML() {
@@ -468,6 +479,8 @@ function render() {
     state.tab === 'users' ? usersHTML() :
     state.tab === 'earnings' ? earningsHTML() :
     state.tab === 'control' ? controlHTML() : supportHTML();
+  renderFfGoals();
+  renderFfBook();
 }
 async function loadAll() {
   try {
@@ -514,6 +527,43 @@ document.addEventListener('click', async e => {
     const input = $('#' + diceBtn.dataset.dice);
     const other = $('#' + (diceBtn.dataset.dice === 'ffHome' ? 'ffAway' : 'ffHome'));
     if (input) input.value = randomTeamName(other ? other.value : '');
+    return;
+  }
+  const goalAdd = e.target.closest('[data-goaladd]');
+  if (goalAdd) {
+    const raw = ($('#ffMinute') || {}).value || '';
+    const mm = /^(\d{1,3})(?:\+(\d{1,2}))?$/.exec(String(raw).trim());
+    if (!mm) { toast('Type the minute first — e.g. 12 or 45+2.'); return; }
+    const minute = Number(mm[1]);
+    if (minute < 1 || minute > 120) { toast('Minute must be between 1 and 120.'); return; }
+    const g = { minute, side: goalAdd.dataset.goaladd };
+    if (mm[2] && (minute === 45 || minute === 90)) g.extra = Math.min(15, Number(mm[2]));
+    ffGoals.push(g);
+    ffGoals.sort((x, y) => (x.minute + (x.extra || 0)) - (y.minute + (y.extra || 0)));
+    renderFfGoals();
+    return;
+  }
+  const goalDel = e.target.closest('[data-goaldel]');
+  if (goalDel) {
+    ffGoals.splice(Number(goalDel.dataset.goaldel), 1);
+    renderFfGoals();
+    return;
+  }
+  if (e.target.id === 'ffRandomize') {
+    const btn = e.target;
+    btn.disabled = true;
+    try {
+      const o1 = Number($('#ff_o1').value), ox = Number($('#ff_ox').value), o2 = Number($('#ff_o2').value);
+      const body = (o1 > 1 && ox > 1 && o2 > 1) ? { o1, ox, o2 } : { fav: $('#ffFav').value };
+      const data = await api('/admin/odds-preview', { method: 'POST', body });
+      $('#ff_o1').value = data.odds.o1;
+      $('#ff_ox').value = data.odds.ox;
+      $('#ff_o2').value = data.odds.o2;
+      ffBook = data.odds_full;
+      renderFfBook();
+      toast('Full book randomized — ' + ffBook.length + ' markets. Tweak any price, then create.');
+    } catch (err) { toast(err.message); }
+    btn.disabled = false;
     return;
   }
   const kickBtn = e.target.closest('[data-kick]');
@@ -700,6 +750,45 @@ document.addEventListener('click', async e => {
 // downscaled in the browser (max 256px) and held here until submit,
 // so a phone photo never becomes a multi-MB database value.
 const crestUploads = { home: '', away: '' };
+// Featured-form goal script + specified book (Prince, 2026-11-05,
+// from the form he shared): goals are built with +Home/+Away
+// buttons instead of typed syntax, and the market editor can
+// randomize or hand-specify every price in the full book.
+let ffGoals = [];
+let ffBook = null;
+function ffGoalLabel(g) { return g.minute + (g.extra ? '+' + g.extra : '') + '′ ' + (g.side === 'home' ? 'Home' : 'Away'); }
+function renderFfGoals() {
+  const list = $('#ffGoalList'), sum = $('#ffScriptSummary');
+  if (!list || !sum) return;
+  const h = ffGoals.filter(g => g.side === 'home').length, a = ffGoals.length - h;
+  sum.textContent = ffGoals.length
+    ? 'final score ' + h + '–' + a + ' · ' + ffGoals.length + (ffGoals.length === 1 ? ' goal' : ' goals') + ' — the match ends ' + h + '–' + a + '.'
+    : 'final score 0–0. No goals; the match ends 0–0.';
+  list.innerHTML = ffGoals.map((g, i) =>
+    '<span class="goalchip">' + esc(ffGoalLabel(g)) + ' <button type="button" class="goalx" data-goaldel="' + i + '" aria-label="Remove goal">×</button></span>').join('');
+}
+function renderFfBook() {
+  const box = $('#ffBook');
+  if (!box) return;
+  if (!ffBook) {
+    box.innerHTML = '<p class="muted">No prices specified yet — the full book is generated from the 1X2 odds when you save. Press Randomize to fill every price here first.</p>';
+    return;
+  }
+  box.innerHTML = ffBook.map(m =>
+    '<div class="bookmkt"><h4>' + esc(m.name === 'Exact Score' ? 'Correct Score' : m.name) + '</h4><div class="oddsgrid">' +
+    m.values.map(v => '<label>' + esc(v.value) + ' <input type="number" step="0.01" min="1.01" data-market="' + esc(m.name) + '" data-pick="' + esc(v.value) + '" value="' + v.odd + '"></label>').join('') +
+    '</div></div>').join('');
+}
+function collectFfBook() {
+  const byName = new Map();
+  document.querySelectorAll('#ffBook input[data-market]').forEach(inp => {
+    const odd = Math.round(Number(inp.value) * 100) / 100;
+    if (!(odd > 1)) return;
+    if (!byName.has(inp.dataset.market)) byName.set(inp.dataset.market, []);
+    byName.get(inp.dataset.market).push({ value: inp.dataset.pick, odd });
+  });
+  return [...byName.entries()].filter(([, values]) => values.length >= 2).map(([name, values]) => ({ name, values }));
+}
 document.addEventListener('change', e => {
   const side = e.target.dataset ? e.target.dataset.crest : null;
   if (!side) return;
@@ -838,11 +927,14 @@ document.addEventListener('submit', async e => {
       league: $('#ffLeague').value.trim(), home_team: $('#ffHome').value.trim(), away_team: $('#ffAway').value.trim(),
       fav: $('#ffFav').value
     };
-    if ($('#ffStart').value) body.starts_at = new Date($('#ffStart').value).toISOString();
+    if ($('#ffStartNow') && $('#ffStartNow').checked) body.starts_at = new Date().toISOString();
+    else if ($('#ffStart').value) body.starts_at = new Date($('#ffStart').value).toISOString();
     const o1 = Number($('#ff_o1').value), ox = Number($('#ff_ox').value), o2 = Number($('#ff_o2').value);
     if (o1 > 1 && ox > 1 && o2 > 1) { body.o1 = o1; body.ox = ox; body.o2 = o2; }
-    const goalsText = $('#ffGoals').value.trim();
-    if (goalsText) body.goals = parseGoalsText(goalsText);
+    if (ffGoals.length) body.goals = ffGoals.map(g => ({ ...g }));
+    body.betting_locked = !!($('#ffLockBet') && $('#ffLockBet').checked);
+    const specBook = collectFfBook();
+    if (specBook.length) body.odds_full = specBook;
     body.ht_stoppage = Number($('#ffHtStop').value) || 0;
     body.ft_stoppage = Number($('#ffFtStop').value) || 0;
     const homeLogo = $('#ffHomeLogo').value.trim() || crestUploads.home;
@@ -852,6 +944,7 @@ document.addEventListener('submit', async e => {
     try {
       const data = await api('/admin/create-match', { method: 'POST', body });
       crestUploads.home = ''; crestUploads.away = '';
+      ffGoals = []; ffBook = null;
       toast('Created: ' + data.match.home_team + ' vs ' + data.match.away_team + ' — it plays by the clock from kickoff.');
       loadAll();
     } catch (err) { toast(err.message); }

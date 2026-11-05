@@ -26,7 +26,7 @@ module.exports = guard(async (req, res) => {
   if (ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
     return send(res, 400, { error: 'invalid_match_id' });
   }
-  const matchRows = await sql('select id, status, odds, odds_full, starts_at, external_ref, goal_events, score_home, score_away from matches where id = any($1::uuid[])', [ids]);
+  const matchRows = await sql('select id, status, odds, odds_full, starts_at, external_ref, goal_events, score_home, score_away, betting_locked from matches where id = any($1::uuid[])', [ids]);
   const byId = new Map(matchRows.map(m => [m.id, m]));
 
   const clean = [];
@@ -46,6 +46,9 @@ module.exports = guard(async (req, res) => {
     if (isCustomMatch(m) && customMatchState(m).status === 'live') return send(res, 400, { error: 'match_live_locked' });
     if (m.status === 'postponed') return send(res, 400, { error: 'match_postponed' });
     if (isCustomMatch(m) && customMatchState(m).status === 'postponed') return send(res, 400, { error: 'match_postponed' });
+    // Operator-locked games are visible but not bettable (the
+    // featured form's "Lock betting" switch, Prince, 2026-11-05).
+    if (m.betting_locked) return send(res, 400, { error: 'betting_locked' });
     if (seenMatches.has(m.id)) return send(res, 400, { error: 'one_selection_per_match' });
     seenMatches.add(m.id);
     const key = keyFor(s.market, s.pick);

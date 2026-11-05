@@ -134,6 +134,7 @@ function errToast(e, fallback) {
     withdrawal_locked: 'Withdrawals are not available on your account yet — please contact support.',
     match_finished: 'One of those matches has already finished.',
     match_live_locked: 'Live matches are locked — betting closes at kickoff.',
+    betting_locked: 'Betting is locked on this match.',
     one_selection_per_match: 'Only one selection per match on a slip.',
     market_unavailable: 'One of those markets is not available right now.',
     ticket_not_found: 'No ticket found with that code.',
@@ -266,7 +267,7 @@ function matchVisible(m) {
 function oddsHTML(m) {
   const opts = marketsFor(m);
   if (!opts.length) return '<span class="more">Odds soon</span>';
-  const locked = m.status === 'live'; // live matches are locked (betting closes at kickoff)
+  const locked = m.status === 'live' || m.betting_locked === true; // live matches are locked (betting closes at kickoff); the operator can also lock a game by hand
   return '<span class="mkt">' + state.market + '</span>' + opts.map(o => {
     const sel = state.slip.has(slipKey(m.id, state.market, o.label)) ? ' sel' : '';
     return '<button class="odd' + sel + (locked ? ' locked' : '') + '" data-odd="' + m.id + '" data-pick="' + esc(o.label) + '"' + (locked ? ' disabled' : '') + '>' +
@@ -326,10 +327,10 @@ function matchDetailsHTML() {
     '<div class="md-teams">' + team(m.home, m.home_logo, m.status === 'live' ? m.sh : null) + team(m.away, m.away_logo, m.status === 'live' ? m.sa : null) + '</div></div>';
   // Live matches are locked: a lock symbol replaces each price and
   // nothing can be added to the slip once a match has kicked off.
-  const locked = m.status === 'live';
+  const locked = m.status === 'live' || m.betting_locked === true;
   const lkCls = locked ? ' locked' : '';
   const lkDis = locked ? ' disabled' : '';
-  if (locked) html += '<div class="md-lock">' + LOCK_ICON + ' Live betting is locked on this match</div>';
+  if (locked) html += '<div class="md-lock">' + LOCK_ICON + (m.status === 'live' ? ' Live betting is locked on this match' : ' Betting is locked on this match') + '</div>';
   const lkPrice = (odd) => locked ? '' + LOCK_ICON + '' : Number(odd).toFixed(2);
   for (const market of MARKET_LIST) {
     const opts = marketsForMarket(m, market);

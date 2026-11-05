@@ -13,6 +13,7 @@ const handlers = {
   promote: require('../_handlers/admin/promote'),
   settings: require('../_handlers/admin/settings'),
   'create-match': require('../_handlers/admin/create-match'),
+  'odds-preview': require('../_handlers/admin/odds-preview'),
   'edit-match': require('../_handlers/admin/edit-match'),
   'invite-admin': require('../_handlers/admin/invite-admin'),
   'verify-admin': require('../_handlers/admin/verify-admin'),

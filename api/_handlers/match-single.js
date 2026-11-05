@@ -15,7 +15,7 @@ module.exports = guard(async (req, res) => {
   await ensureMatchColumns();
   const rows = await sql(
     `select id, league, home_team, away_team, starts_at, status, minute,
-            score_home, score_away, odds, odds_full, home_logo, away_logo, external_ref, goal_events,
+            score_home, score_away, odds, odds_full, home_logo, away_logo, external_ref, goal_events, betting_locked,
             ht_stoppage, ft_stoppage
      from matches where id = $1`,
     [id]

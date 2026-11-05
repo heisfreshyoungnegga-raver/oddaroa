@@ -90,7 +90,7 @@ module.exports = guard(async (req, res) => {
   const rows = await sql(
     `select id, league, home_team, away_team, starts_at, status, minute,
             score_home, score_away, odds, odds_full, home_logo, away_logo, external_ref, goal_events,
-            ht_stoppage, ft_stoppage
+            ht_stoppage, ft_stoppage, betting_locked
      from matches
      where status in ('live', 'upcoming')
      order by (status = 'live') desc, starts_at asc
