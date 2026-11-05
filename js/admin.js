@@ -517,13 +517,14 @@ function smsDing() {
     });
   } catch (e) { /* garnish only */ }
 }
+const SMS_APP_ICON = '<svg class="sms-face" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9.2" r="3.6" fill="#fff"/><path d="M4.8 19.4c1.2-3.1 3.9-4.7 7.2-4.7s6 1.6 7.2 4.7c.2.6-.2 1.1-.8 1.1H5.6c-.6 0-1-.5-.8-1.1Z" fill="#fff"/></svg><span class="sms-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4C6.6 4 2.2 7.5 2.2 12c0 2.5 1.4 4.8 3.7 6.1-.2 1.1-.8 2.4-1.6 3.4 0 0 2.8-.1 4.8-1.3.9.2 1.9.3 2.9.3 5.4 0 9.8-3.5 9.8-8S17.4 4 12 4Z" fill="#fff"/></svg></span>';
 function showPayoutSms(p) {
   if (document.querySelector('#smsAlert')) return;
   const el = document.createElement('div');
   el.className = 'sms-alert';
   el.id = 'smsAlert';
   el.innerHTML = '<div class="sms-card ' + smsPlatform() + '">' +
-    '<div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>' +
+    '<div class="sms-ic">' + SMS_APP_ICON + '</div>' +
     '<div class="sms-body">' +
       '<div class="sms-head"><b>MobileMoney</b><span>now</span></div>' +
       '<div class="sms-title">Withdrawal Paid</div>' +

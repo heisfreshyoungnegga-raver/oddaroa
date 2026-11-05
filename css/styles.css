@@ -1199,7 +1199,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .sms-alert { position: fixed; top: 10px; left: 10px; right: 10px; z-index: 95; display: flex; justify-content: center; pointer-events: none; }
 .sms-card { pointer-events: auto; display: flex; gap: 10px; align-items: flex-start; width: 100%; max-width: 430px; background: rgba(28, 28, 30, 0.97); color: #f5f5f5; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 22px; padding: 12px 14px; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5); transform: translateY(-130%); opacity: 0; transition: transform 0.55s cubic-bezier(0.22, 1.36, 0.36, 1), opacity 0.3s ease; cursor: pointer; text-align: left; }
 .sms-alert.show .sms-card { transform: translateY(0); opacity: 1; }
-.sms-ic { flex: 0 0 38px; width: 38px; height: 38px; border-radius: 10px; background: #ffcc00; color: #1a1a1a; display: flex; align-items: center; justify-content: center; }
+.sms-ic { flex: 0 0 38px; width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(180deg, #c6d0ec, #8ea3d6); color: #ffffff; display: flex; align-items: center; justify-content: center; position: relative; }
 .sms-ic svg { width: 22px; height: 22px; }
 .sms-body { flex: 1; min-width: 0; }
 .sms-head { display: flex; justify-content: space-between; align-items: baseline; color: #bdbdc2; font-size: 12px; }
@@ -1216,14 +1216,14 @@ button:disabled { opacity: .45; cursor: not-allowed; }
    Material messages card. The base .sms-card above is the neutral
    dark fallback for desktops and everything else. */
 .sms-card.ios { background: rgba(250, 250, 252, 0.94); color: #16161a; border-color: rgba(0, 0, 0, 0.08); border-radius: 26px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
-.sms-card.ios .sms-ic { background: #34c759; color: #ffffff; border-radius: 50%; }
+.sms-card.ios .sms-ic { background: linear-gradient(180deg, #c6d0ec, #8ea3d6); color: #ffffff; border-radius: 50%; }
 .sms-card.ios .sms-head { color: #8a8a8e; }
 .sms-card.ios .sms-head b { color: #3a3a3c; }
 .sms-card.ios .sms-body p { color: #26262b; }
 .sms-card.ios .sms-body p b { color: #16161a; }
 .sms-card.ios .sms-x { color: #8a8a8e; }
 .sms-card.android { background: #ffffff; color: #1f1f1f; border-color: rgba(0, 0, 0, 0.06); border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); }
-.sms-card.android .sms-ic { background: #2b7fff; color: #ffffff; border-radius: 50%; }
+.sms-card.android .sms-ic { background: linear-gradient(180deg, #c6d0ec, #8ea3d6); color: #ffffff; border-radius: 50%; }
 .sms-card.android .sms-head { color: #5f6368; }
 .sms-card.android .sms-head b { color: #1f1f1f; }
 .sms-card.android .sms-body p { color: #3c4043; }
@@ -1253,9 +1253,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.65), inset 0 -1px 0 rgba(255, 255, 255, 0.14);
 }
 .sms-card.ios .sms-ic {
-  background: linear-gradient(180deg, #63e075, #28c840);
+  background: linear-gradient(180deg, #c6d0ec, #8ea3d6);
   color: #ffffff;
-  border-radius: 24%;
+  border-radius: 50%;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 4px 10px rgba(0, 0, 0, 0.25);
 }
 .sms-card.ios .sms-head { color: rgba(255, 255, 255, 0.75); }
@@ -1304,3 +1304,12 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .sms-body p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* deploy nudge 2026-11-05 */
+
+/* Same app icon as the real MobileMoney banner: avatar + green Messages badge */
+.sms-ic svg.sms-face { width: 29px; height: 29px; }
+.sms-ic .sms-badge { position: absolute; right: -4px; bottom: -4px; width: 17px; height: 17px; border-radius: 5px; background: #35c759; border: 1.5px solid #ffffff; display: flex; align-items: center; justify-content: center; }
+.sms-ic .sms-badge svg { width: 11px; height: 11px; }
+/* The real generated Winning Cup (transparent PNG) */
+.cupimg { height: 86px; width: auto; flex: none; filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.55)); }
+.cupimg.big { height: 158px; }
+.cuphead .cupimg { display: block; margin: 0 auto 8px; }

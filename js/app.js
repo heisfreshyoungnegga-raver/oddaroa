@@ -432,10 +432,21 @@ const heroUrls = {};
 function sniffImageUrl(buf) {
   const bytes = new Uint8Array(buf);
   if (bytes[0] === 0xFF && bytes[1] === 0xD8) return URL.createObjectURL(new Blob([buf], { type: 'image/jpeg' }));
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return URL.createObjectURL(new Blob([buf], { type: 'image/png' }));
   const text = new TextDecoder().decode(buf).replace(/\s+/g, '');
-  return text.length > 100 && /^[A-Za-z0-9+/]+={0,2}$/.test(text) ? 'data:image/jpeg;base64,' + text : null;
+  if (text.length > 100 && /^[A-Za-z0-9+/]+={0,2}$/.test(text)) return 'data:image/' + (text.indexOf('iVBOR') === 0 ? 'png' : 'jpeg') + ';base64,' + text;
+  return null;
 }
 function loadHeroImages() {
+  [{ img: 'assets/winning-cup.png' }].forEach(s => {
+    if (heroUrls[s.img]) return;
+    heroUrls[s.img] = s.img;
+    fetch(s.img).then(r => (r.ok ? r.arrayBuffer() : null)).then(buf => {
+      if (!buf) return;
+      const u = sniffImageUrl(buf);
+      if (u) { heroUrls[s.img] = u; if (state.view === 'home' || state.view === 'winners') render(); }
+    }).catch(() => {});
+  });
   HERO_SLIDES.forEach(s => {
     if (!s.img || heroUrls[s.img]) return;
     heroUrls[s.img] = s.img;
@@ -685,13 +696,14 @@ function smsDing() {
     });
   } catch (e) { /* garnish only */ }
 }
+const SMS_APP_ICON = '<svg class="sms-face" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9.2" r="3.6" fill="#fff"/><path d="M4.8 19.4c1.2-3.1 3.9-4.7 7.2-4.7s6 1.6 7.2 4.7c.2.6-.2 1.1-.8 1.1H5.6c-.6 0-1-.5-.8-1.1Z" fill="#fff"/></svg><span class="sms-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4C6.6 4 2.2 7.5 2.2 12c0 2.5 1.4 4.8 3.7 6.1-.2 1.1-.8 2.4-1.6 3.4 0 0 2.8-.1 4.8-1.3.9.2 1.9.3 2.9.3 5.4 0 9.8-3.5 9.8-8S17.4 4 12 4Z" fill="#fff"/></svg></span>';
 function showPayoutSms(p) {
   if (document.querySelector('#smsAlert')) return;
   const el = document.createElement('div');
   el.className = 'sms-alert';
   el.id = 'smsAlert';
   el.innerHTML = '<div class="sms-card ' + smsPlatform() + '">' +
-    '<div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>' +
+    '<div class="sms-ic">' + SMS_APP_ICON + '</div>' +
     '<div class="sms-body">' +
       '<div class="sms-head"><b>MobileMoney</b><span>now</span></div>' +
       '<div class="sms-title">Withdrawal Paid</div>' +
@@ -1129,7 +1141,7 @@ function render() {
 // biggest settled betslips and casino wins of the last 30 days,
 // ranked. Real data only, from /api/bets/winners; phones masked.
 function cupBannerHTML() {
-  return '<button class="cupbanner" data-nav="winners"><span class="cuptrophy">' + TROPHY_ICON + '</span>' +
+  return '<button class="cupbanner" data-nav="winners"><img class="cupimg" src="' + (heroUrls['assets/winning-cup.png'] || 'assets/winning-cup.png') + '" alt="Oddaroa Winning Cup">' +
     '<span class="cuptext"><b>Winning Cup</b><span>See the biggest winners on Oddaroa</span></span>' +
     '<span class="cuparrow">›</span></button>';
 }
@@ -1142,7 +1154,7 @@ function winnersHTML() {
     '<div class="winrow"><span class="winrank r' + (i + 1) + '">' + (i + 1) + '</span>' +
     '<div class="winmain"><b>' + esc(w.who) + '</b><div class="muted">' + esc(w.what) + ' · ' + fmtDate(w.at) + '</div></div>' +
     '<b class="winamt">' + money(w.won) + '</b></div>').join('') + '</div>';
-  return '<section class="matchwrap"><div class="cuphead"><span class="cuptrophy big">' + TROPHY_ICON + '</span>' +
+  return '<section class="matchwrap"><div class="cuphead"><img class="cupimg big" src="' + (heroUrls['assets/winning-cup.png'] || 'assets/winning-cup.png') + '" alt="Oddaroa Winning Cup">' +
     '<h2 class="ptitle" style="margin:0">Winning Cup</h2>' +
     '<p class="modal-sub">The biggest wins of the last 30 days — betslips and casino games.</p></div>' + body + '</section>';
 }
