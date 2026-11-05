@@ -437,6 +437,9 @@ function sniffImageUrl(buf) {
   if (text.length > 100 && /^[A-Za-z0-9+/]+={0,2}$/.test(text)) return 'data:image/' + (text.indexOf('iVBOR') === 0 ? 'png' : 'jpeg') + ';base64,' + text;
   return null;
 }
+function fetchAssetUrl(path) {
+  return fetch(path).then(r => (r.ok ? r.arrayBuffer() : null)).then(buf => (buf ? sniffImageUrl(buf) : null)).catch(() => null);
+}
 function loadHeroImages() {
   [{ img: 'assets/winning-cup.png' }, { img: 'assets/win-cup.jpg' }].forEach(s => {
     if (heroUrls[s.img]) return;
@@ -785,6 +788,12 @@ function showWinCelebration(bet) {
       '</div>' +
     '</div>';
   document.body.appendChild(el);
+  const artImg = el.querySelector('.win-art img');
+  if (artImg && !/^(data:|blob:)/.test(artImg.src)) {
+    fetchAssetUrl('assets/win-cup.jpg').then(u => {
+      if (u) { heroUrls['assets/win-cup.jpg'] = u; if (artImg.isConnected) artImg.src = u; }
+    });
+  }
   winChime();
   document.getElementById('winContinue').addEventListener('click', closeWinCelebration);
   document.getElementById('winViewBet').addEventListener('click', () => { closeWinCelebration(); go('bets'); });
