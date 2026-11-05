@@ -20,14 +20,37 @@ module.exports = guard(async (req, res) => {
   if (!custom && m.external_ref) {
     return send(res, 400, { error: 'not_a_created_match', detail: 'Only games you created can be edited — this one came from a feed.' });
   }
+  // Lifecycle actions (Prince, 2026-11-05): postpone and delete.
+  if (body.action === 'delete') {
+    const cnt = await sql('select count(*)::int as n from bet_selections where match_id = $1', [id]);
+    if (cnt[0].n > 0) {
+      return send(res, 409, { error: 'match_has_bets', detail: 'This game has ' + cnt[0].n + ' bet(s) on it — postpone it instead. Deleting would break those bet records.' });
+    }
+    await sql('delete from matches where id = $1', [id]);
+    return send(res, 200, { ok: true, deleted: true });
+  }
+  if (body.action === 'postpone') {
+    const st = custom ? customMatchState(m) : null;
+    if ((custom && st.status === 'finished') || (!custom && m.status === 'finished')) {
+      return send(res, 409, { error: 'match_finished', detail: 'This game has already finished.' });
+    }
+    if (m.status === 'postponed') return send(res, 409, { error: 'already_postponed', detail: 'This game is already postponed.' });
+    // Snapshot the current score so the frozen game shows where it
+    // stopped; the derived clock respects the stored status.
+    const snapH = custom ? st.score_home : m.score_home;
+    const snapA = custom ? st.score_away : m.score_away;
+    const upd = await sql("update matches set status = 'postponed', score_home = $2, score_away = $3 where id = $1 returning *", [id, snapH, snapA]);
+    return send(res, 200, { ok: true, match: upd[0] });
+  }
   let kickedOff, finished;
+  const startedAlready = new Date(m.starts_at) <= new Date();
   if (custom) {
     const st = customMatchState(m);
     finished = st.status === 'finished';
-    kickedOff = st.status !== 'upcoming';
+    kickedOff = st.status === 'live' || (st.status === 'postponed' && startedAlready);
   } else {
     finished = m.status === 'finished';
-    kickedOff = m.status !== 'upcoming';
+    kickedOff = m.status === 'live' || (m.status === 'postponed' && startedAlready);
   }
   if (finished) return send(res, 409, { error: 'match_finished', detail: 'This game has finished and can no longer be edited.' });
   if (kickedOff && (body.starts_at !== undefined || body.goals !== undefined || body.o1 !== undefined || body.ox !== undefined || body.o2 !== undefined)) {
@@ -52,6 +75,8 @@ module.exports = guard(async (req, res) => {
       const d = new Date(body.starts_at);
       if (Number.isNaN(d.getTime())) return send(res, 400, { error: 'invalid_start_time' });
       put('starts_at', d.toISOString());
+      // A postponed game given a new kickoff comes back to life.
+      if (m.status === 'postponed') put('status', 'upcoming');
     }
     if (custom && Array.isArray(body.goals)) put('goal_events', JSON.stringify(cleanGoalSchedule(body.goals)), 'jsonb');
     const { o1, ox, o2 } = body;

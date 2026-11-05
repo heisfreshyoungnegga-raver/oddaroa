@@ -44,6 +44,8 @@ module.exports = guard(async (req, res) => {
     // see. Betting closes at kickoff, on every match.
     if (m.status === 'live') return send(res, 400, { error: 'match_live_locked' });
     if (isCustomMatch(m) && customMatchState(m).status === 'live') return send(res, 400, { error: 'match_live_locked' });
+    if (m.status === 'postponed') return send(res, 400, { error: 'match_postponed' });
+    if (isCustomMatch(m) && customMatchState(m).status === 'postponed') return send(res, 400, { error: 'match_postponed' });
     if (seenMatches.has(m.id)) return send(res, 400, { error: 'one_selection_per_match' });
     seenMatches.add(m.id);
     const key = keyFor(s.market, s.pick);

@@ -554,6 +554,9 @@ function customMatchState(m, now = new Date()) {
   const finH = goals.filter(g => g.side === 'home').length;
   const finA = goals.filter(g => g.side === 'away').length;
   if (m.status === 'finished') return { status: 'finished', minute: null, score_home: m.score_home, score_away: m.score_away, final_home: m.score_home, final_away: m.score_away };
+  // A postponed custom match freezes: the stored status wins over
+  // the clock, and the score snapshotted at postpone time is shown.
+  if (m.status === 'postponed') return { status: 'postponed', minute: null, score_home: m.score_home || 0, score_away: m.score_away || 0, final_home: finH, final_away: finA };
   const elapsed = Math.floor((now - new Date(m.starts_at)) / 60000);
   if (elapsed < 0) return { status: 'upcoming', minute: null, score_home: 0, score_away: 0, final_home: finH, final_away: finA };
   // Real football timing (Prince, 2026-11-05, from his reference):

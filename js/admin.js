@@ -206,20 +206,24 @@ function createdGamesHTML() {
     const statusLine = m.status === 'live'
       ? '<b style="color:#e5484d">LIVE ' + esc(m.minute_label || (m.minute + "'")) + '</b> · ' + m.score_home + '-' + m.score_away
       : m.status === 'finished' ? 'Full time · ' + m.score_home + '-' + m.score_away
+      : m.status === 'postponed' ? 'Postponed · stopped at ' + m.score_home + '-' + m.score_away
       : 'Kicks off ' + fmtDate(m.starts_at);
     return '<div class="txrow"><div><b>' + esc(m.home_team) + ' vs ' + esc(m.away_team) + '</b>' +
       '<div class="muted">' + (custom ? 'Featured' : 'Manual') + ' · ' + esc(m.league) + '</div>' +
       '<div>' + statusLine + '</div></div>' + chip(m.status) +
-      '<span>' + (m.status !== 'finished' ? '<button class="btn gold sm" data-edit-match="' + m.id + '">' + (state.editingMatch === m.id ? 'Close' : 'Edit') + '</button>' : '') + '</span></div>' +
+      '<span>' + (m.status !== 'finished' ? '<button class="btn gold sm" data-edit-match="' + m.id + '">' + (state.editingMatch === m.id ? 'Close' : 'Edit') + '</button> ' : '') +
+      (m.status === 'upcoming' || m.status === 'live' ? '<button class="btn ghost sm" data-postpone-match="' + m.id + '">Postpone</button> ' : '') +
+      '<button class="btn ghost sm" data-delete-match="' + m.id + '">Delete</button></span></div>' +
       (state.editingMatch === m.id ? editMatchFormHTML(m, custom) : '');
   }).join('');
   return '<div class="card"><h3>Created by you</h3>' + rows + '</div>';
 }
 function editMatchFormHTML(m, custom) {
-  const kicked = m.status !== 'upcoming';
+  const kicked = m.status === 'live';
   const o = m.odds || {};
   return '<form id="editMatchForm" data-mid="' + m.id + '" class="stack" style="margin:10px 0">' +
-    (kicked ? '<p class="muted">This game has kicked off — kickoff, odds and the goal schedule are locked. Names, crests and stoppages can still change.</p>' : '') +
+    (m.status === 'postponed' ? '<p class="muted">This game is postponed. Set a new kickoff below to bring it back.</p>'
+      : kicked ? '<p class="muted">This game has kicked off — kickoff, odds and the goal schedule are locked. Names, crests and stoppages can still change.</p>' : '') +
     '<label>League <input type="text" id="emLeague" value="' + esc(m.league) + '"></label>' +
     '<label>Home team <input type="text" id="emHome" value="' + esc(m.home_team) + '"></label>' +
     '<label>Away team <input type="text" id="emAway" value="' + esc(m.away_team) + '"></label>' +
@@ -610,6 +614,20 @@ document.addEventListener('click', async e => {
     render();
     return;
   }
+  const postponeBtn = e.target.closest('[data-postpone-match]');
+  if (postponeBtn) {
+    if (!confirm('Postpone this game? It disappears from the site and no new bets can be placed on it. You can bring it back later by editing its kickoff.')) return;
+    try { await api('/admin/edit-match', { method: 'POST', body: { id: postponeBtn.dataset.postponeMatch, action: 'postpone' } }); toast('Game postponed.'); loadAll(); }
+    catch (err) { toast(err.message); }
+    return;
+  }
+  const deleteMatchBtn = e.target.closest('[data-delete-match]');
+  if (deleteMatchBtn) {
+    if (!confirm('Permanently delete this game? This cannot be undone.')) return;
+    try { await api('/admin/edit-match', { method: 'POST', body: { id: deleteMatchBtn.dataset.deleteMatch, action: 'delete' } }); state.editingMatch = ''; toast('Game deleted.'); loadAll(); }
+    catch (err) { toast(err.message); }
+    return;
+  }
   const liveBtn = e.target.closest('[data-golive]');
   if (liveBtn) {
     try { await api('/admin/matches', { method: 'PATCH', body: { id: liveBtn.dataset.golive, status: 'live', minute: 0 } }); toast('Match is live.'); loadAll(); }
@@ -720,7 +738,7 @@ document.addEventListener('submit', async e => {
     e.preventDefault();
     const id = e.target.dataset.mid;
     const m = (state.createdMatches || []).find(x => x.id === id) || state.matches.find(x => x.id === id);
-    const kicked = !m || m.status !== 'upcoming';
+    const kicked = !m || m.status === 'live';
     const custom = !!m && String(m.external_ref || '').indexOf('custom:') === 0;
     const body = {
       id,
