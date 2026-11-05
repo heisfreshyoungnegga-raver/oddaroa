@@ -1074,9 +1074,10 @@ async function maybeAutoSettle() {
   const rows = await sql(
     `select m.id, m.score_home, m.score_away, m.external_ref, m.starts_at, m.status, m.goal_events
      from matches m
-     where exists (select 1 from bet_selections s where s.match_id = m.id and s.result = 'pending')
-       and ((m.status = 'finished' and m.score_home is not null and m.score_away is not null)
-            or (m.external_ref like 'custom:%' and m.starts_at + make_interval(mins => 106 + coalesce(m.ht_stoppage, 0) + coalesce(m.ft_stoppage, 0)) < now()))
+     where (exists (select 1 from bet_selections s where s.match_id = m.id and s.result = 'pending')
+            and m.status = 'finished' and m.score_home is not null and m.score_away is not null)
+        or (m.external_ref like 'custom:%' and m.status <> 'finished'
+            and m.starts_at + make_interval(mins => 106 + coalesce(m.ht_stoppage, 0) + coalesce(m.ft_stoppage, 0)) < now())
      limit 5`
   );
   for (const m of rows) {
@@ -1085,6 +1086,12 @@ async function maybeAutoSettle() {
         const st = customMatchState(m);
         if (st.status !== 'finished') continue;
         await settleMatch(m.id, st.final_home, st.final_away);
+        // Stamp the row so a created match formally ends with the
+        // exact score the super admin scripted — including matches
+        // nobody bet on, which the old exists() filter skipped
+        // forever (same fix as PrimeStake, 2026-11-05).
+        await sql("update matches set status = 'finished', score_home = $2, score_away = $3 where id = $1",
+          [m.id, st.final_home, st.final_away]);
       } else {
         await settleMatch(m.id, Number(m.score_home), Number(m.score_away));
       }
