@@ -124,6 +124,8 @@ function errToast(e, fallback) {
     network_error: 'Network problem — check your connection and try again.',
     insufficient_balance: 'Insufficient balance for that stake.',
     wrong_phone_or_password: 'Wrong phone number or password.',
+    invalid_invite: 'That invite link is invalid or has expired. Ask the super admin for a fresh one.',
+    server_error: 'Something went wrong on our side — please try again in a moment.',
     phone_already_registered: 'That phone number is already registered — log in instead.',
     password_too_short: 'Password must be at least 6 characters.',
     invalid_phone: 'Enter a valid phone number.',
@@ -140,7 +142,7 @@ function errToast(e, fallback) {
     ticket_not_found: 'No ticket found with that code.',
     transaction_id_required: 'Enter the MoMo transaction ID from your confirmation.',
   };
-  toast(map[e.code] || fallback || ('Something went wrong: ' + (e.detail || e.code || 'error')));
+  toast(map[e.code] || e.detail || fallback || ('Something went wrong: ' + (e.code || 'error')));
 }
 
 /* ---------- matches ---------- */
@@ -1811,6 +1813,12 @@ $('#authForm').addEventListener('submit', async e => {
     if (state.view === 'wallet') loadWallet();
     if (state.view === 'bets') loadBets();
   } catch (err) {
+    // A saved admin-invite token that no longer validates would
+    // poison EVERY later sign-up on this browser — and its error
+    // was not in the friendly map, so it surfaced as a bare
+    // 'Something went wrong.' (Gold's phone, 2026-11-05). Clear
+    // the dead token: the next tap registers cleanly as a player.
+    if (err.code === 'invalid_invite') localStorage.removeItem('od_admin_invite');
     errToast(err, 'Something went wrong.');
   } finally {
     btn.disabled = false;
