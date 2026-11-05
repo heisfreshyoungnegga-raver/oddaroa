@@ -1235,3 +1235,46 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .st-live { background: var(--live); color: var(--live-ink); animation: stpulse 1.6s ease-in-out infinite; }
 @keyframes stpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 .legstate { white-space: nowrap; }
+
+/* iOS Liquid Glass (Prince, 2026-11-05 — modelled on real iOS 26
+   notification screenshots): NOT an opaque white card, but tinted
+   translucent glass the page shows through, with a bright specular
+   top edge, squircle icon, white text, and a droplet entrance —
+   squash, overshoot and a tiny settle wobble, finished with a
+   light sheen sweeping the glass. */
+.sms-card { position: relative; overflow: hidden; }
+.sms-card.ios {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.40), rgba(255, 255, 255, 0.17) 46%, rgba(255, 255, 255, 0.10));
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 30px;
+  color: #ffffff;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.65), inset 0 -1px 0 rgba(255, 255, 255, 0.14);
+}
+.sms-card.ios .sms-ic {
+  background: linear-gradient(180deg, #63e075, #28c840);
+  color: #ffffff;
+  border-radius: 24%;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+.sms-card.ios .sms-head { color: rgba(255, 255, 255, 0.75); }
+.sms-card.ios .sms-head b { color: #ffffff; }
+.sms-card.ios .sms-body p { color: rgba(255, 255, 255, 0.9); }
+.sms-card.ios .sms-body p b { color: #ffffff; }
+.sms-card.ios .sms-x { color: rgba(255, 255, 255, 0.8); }
+.sms-card.ios::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(115deg, transparent 32%, rgba(255, 255, 255, 0.20) 48%, transparent 62%);
+  transform: translateX(-130%);
+}
+.sms-alert.show .sms-card.ios { animation: smsLiquidIn 0.72s cubic-bezier(0.28, 1.2, 0.36, 1) both; }
+.sms-alert.show .sms-card.ios::after { animation: smsSheen 1.5s 0.5s ease forwards; }
+@keyframes smsLiquidIn {
+  0% { transform: translateY(-135%) scale(1.07, 0.9); opacity: 0; }
+  55% { transform: translateY(7px) scale(0.982, 1.018); opacity: 1; }
+  76% { transform: translateY(-2px) scale(1.005, 0.997); }
+  100% { transform: translateY(0) scale(1, 1); opacity: 1; }
+}
+@keyframes smsSheen { to { transform: translateX(130%); } }
+@media (prefers-reduced-motion: reduce) { .sms-alert.show .sms-card.ios { animation: none; } .sms-card.ios::after { display: none; } }
