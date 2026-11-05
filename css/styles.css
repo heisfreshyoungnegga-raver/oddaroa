@@ -1057,3 +1057,16 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .slipfab { display: none; }
   body { padding-bottom: 62px; }
 }
+
+/* Betslip types (Single / Multiple / System), book-code + load rows — 2026-11-05 */
+.slip-tabs { display: flex; gap: 6px; }
+.slip-tab { flex: 1; padding: 9px 4px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: #fff; color: var(--ink); font-weight: 700; }
+.slip-tab.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.slip-tab[disabled] { opacity: .45; }
+.sel .s-stake { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 13px; margin-top: 4px; }
+.sel .s-stake input { width: 100px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.drawer-foot select { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; }
+.slip-code { display: flex; align-items: center; gap: 8px; }
+.slip-code .bigcode.sm { font-size: 12px; letter-spacing: 1px; padding: 6px 8px; word-break: break-all; flex: 1; }
+.slip-load { display: flex; gap: 8px; }
+.slip-load input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); min-width: 0; }

@@ -128,19 +128,41 @@ function normMatch(m) {
     home_logo: m.home_logo || '', away_logo: m.away_logo || '',
   };
 }
+// Signature of everything the match views actually paint. The old
+// loader re-rendered the whole page on every poll whether or not
+// anything had changed, which read as the site auto-refreshing under
+// the user (Prince's report, 2026-11-05): flicker, lost scroll, and
+// taps swallowed mid-rebuild. Now a poll that changes nothing paints
+// nothing, and a poll that does change something keeps the reader's
+// scroll position.
+let lastMatchSig = null;
+function matchSig(list) {
+  const rows = state.view === 'match' ? list.filter(m => m.id === state.matchId) : list;
+  return rows.map(m => [m.id, m.status, m.minute, m.sh, m.sa, JSON.stringify(m.odds)].join(':')).join('|');
+}
 async function loadMatches() {
+  let changed = true;
   try {
     const data = await api('/matches');
-    state.matches = data.matches.map(normMatch);
+    const fresh = data.matches.map(normMatch);
+    const sig = matchSig(fresh);
+    changed = sig !== lastMatchSig;
+    lastMatchSig = sig;
+    state.matches = fresh;
     state.matchesLoaded = true;
     state.offline = false;
   } catch (e) {
     state.matches = [];
     state.matchesLoaded = true;
+    lastMatchSig = null;
     if (e.code !== 'backend_not_configured') console.warn('matches load failed', e.code);
   }
   state.lastSync = new Date();
-  if (['home', 'live', 'sports', 'virtual', 'match'].includes(state.view)) render();
+  if (changed && ['home', 'live', 'sports', 'virtual', 'match'].includes(state.view)) {
+    const y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
+  }
 }
 // The full market book for one match is too heavy for the list
 // payload, so the details page pulls it on open (matches whose row
@@ -662,6 +684,8 @@ function betCardHTML(b) {
   return '<div class="card"><div class="card-head"><b>' + esc(b.code) + '</b>' + statusChip(b.status) + '</div>' +
     '<p class="muted">' + fmtDate(b.placed_at) + '</p>' + legs +
     '<div class="card-row"><span>Stake</span><b>' + money(b.stake_ghs) + '</b></div>' +
+    '<div class="card-row"><span>Type</span><b>' + esc(b.kind === 'system' ? 'System ' + (b.system_label || '') : b.kind === 'single' ? 'Single' : 'Multiple') + '</b></div>' +
+    (Number(b.bonus_pct) > 0 ? '<div class="card-row"><span>Winnings bonus</span><b>+' + Number(b.bonus_pct) + '%</b></div>' : '') +
     '<div class="card-row"><span>Total odds</span><b>' + Number(b.total_odds).toFixed(2) + '</b></div>' +
     '<div class="card-row"><span>Potential win</span><b>' + money(b.potential_ghs) + '</b></div></div>';
 }
@@ -949,6 +973,57 @@ function render() {
 }
 
 /* ---------- betslip ---------- */
+/* ---------- betslip types (Single / Multiple / System) ---------- */
+// Prince, 2026-11-05, from the GoalsVault slip he shared. Multiples
+// and system tickets earn the winnings bonus — the ladder mirrors
+// WIN_BONUS in api/_lib.js (authoritative there); this copy only
+// drives the slip's display math.
+let slipType = 'multiple';
+let sysK = 2;
+const singleStakes = {};
+const SLIP_BONUS = [[3, 5], [4, 10], [5, 15], [6, 20], [7, 25], [8, 30], [9, 40], [10, 50], [11, 60], [12, 70], [13, 80], [14, 90], [15, 100], [16, 110], [17, 120], [18, 130], [19, 140], [20, 150]];
+function slipBonusPct(legs) { let p = 0; for (const [n, v] of SLIP_BONUS) if (legs >= n) p = v; return p; }
+function comboCount(n, k) { if (k < 1 || k > n) return 0; let r = 1; for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1); return Math.round(r); }
+function comboOddsSum(sels, k) {
+  if (k < 1 || k > sels.length) return 0;
+  let sum = 0;
+  const idx = Array.from({ length: k }, (_, i) => i);
+  for (;;) {
+    sum += idx.reduce((a, i) => a * sels[i].odd, 1);
+    let i = k - 1;
+    while (i >= 0 && idx[i] === sels.length - k + i) i--;
+    if (i < 0) break;
+    idx[i]++;
+    for (let j = i + 1; j < k; j++) idx[j] = idx[j - 1] + 1;
+  }
+  return sum;
+}
+function genSlipCode() {
+  const payload = [...state.slip.values()].map(s => ({ m: s.matchId, k: s.market, p: s.pick }));
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+// Load a slip code into the slip at CURRENT prices. Full-book picks
+// resolve through priceForPick once the match's book is loaded — the
+// old loader only knew the classic markets and silently dropped the
+// rest of the slip.
+async function applySlipCode(raw) {
+  const payload = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))));
+  await Promise.all([...new Set(payload.map(i => i.m))].map(id => loadMatchFull(id)));
+  let added = 0;
+  state.slip.clear();
+  payload.forEach(item => {
+    const m = state.matches.find(x => x.id === item.m);
+    if (!m) return;
+    const o = priceForPick(m, item.k, item.p);
+    if (!o) return;
+    state.slip.set(slipKey(m.id, item.k, item.p), {
+      matchId: m.id, matchLabel: m.home + ' vs ' + m.away,
+      league: m.league, market: item.k, pick: item.p, odd: o.odd,
+    });
+    added++;
+  });
+  return added;
+}
 function renderSlip() {
   $('#slipCount').textContent = state.slip.size;
   const bnCount = $('#bnSlipCount');
@@ -957,40 +1032,142 @@ function renderSlip() {
   const foot = $('#slipFoot');
   if (!state.slip.size) {
     body.innerHTML = '<p class="empty">Your betslip is empty.<br>Tap any odd to add a selection.</p>';
-    foot.innerHTML = '';
+    // The booking-code loader stays available on an empty slip too
+    // (the GoalsVault slip keeps it visible at all times).
+    foot.innerHTML = '<div class="slip-load"><input type="text" id="slipLoadIn" placeholder="Load booking code"><button class="btn ghost" id="slipLoadBtn">Load</button></div>';
+    bindSlip();
     return;
   }
-  body.innerHTML = [...state.slip.entries()].map(([key, s]) =>
+  const entries = [...state.slip.entries()];
+  const n = entries.length;
+  if (sysK > n - 1) sysK = Math.max(2, n - 1);
+  if (sysK < 2) sysK = 2;
+  const tabs = '<div class="slip-tabs">' + ['single', 'multiple', 'system'].map(t =>
+    '<button class="slip-tab' + (slipType === t ? ' on' : '') + '" data-stype="' + t + '"' +
+    (t === 'system' && n < 3 ? ' disabled title="System needs at least 3 selections"' : '') + '>' +
+    t[0].toUpperCase() + t.slice(1) + '</button>').join('') + '</div>';
+  body.innerHTML = tabs + entries.map(([key, s]) =>
     '<div class="sel"><div class="s-top"><span class="s-match">' + esc(s.matchLabel) + '</span>' +
     '<button class="rm" data-rm="' + esc(key) + '">Remove</button></div>' +
-    '<span class="s-pick">' + esc(s.league) + ' · ' + esc(s.market) + ' · ' + esc(s.pick) + '</span>' +
-    '<span class="s-odd">' + s.odd.toFixed(2) + '</span></div>'
+    '<span class="s-pick">' + esc(s.league) + ' \u00B7 ' + esc(s.market) + ' \u00B7 ' + esc(s.pick) + '</span>' +
+    '<span class="s-odd">' + s.odd.toFixed(2) + '</span>' +
+    (slipType === 'single'
+      ? '<span class="s-stake">Stake (GHS) <input type="number" class="sstake" data-sstake="' + esc(key) + '" min="1" value="' + (singleStakes[key] || 10) + '"></span>'
+      : '') +
+    '</div>'
   ).join('');
-  const total = [...state.slip.values()].reduce((acc, s) => acc * s.odd, 1);
-  foot.innerHTML =
-    '<div class="row"><span>Stake (GHS)</span><input type="number" id="stakeIn" min="1" value="10"></div>' +
-    '<div class="row"><span>Total odds</span><b>' + total.toFixed(2) + '</b></div>' +
-    '<div class="row"><span>Potential win</span><b id="potWin">' + money(10 * total) + '</b></div>' +
-    '<button class="btn gold big" id="placeBet">Place Bet</button>';
-  $('#stakeIn').addEventListener('input', e => {
-    const v = parseFloat(e.target.value) || 0;
-    $('#potWin').textContent = money(v * total);
+  foot.innerHTML = slipFootHTML();
+  bindSlip();
+}
+function slipFootHTML() {
+  const sels = [...state.slip.values()];
+  const n = sels.length;
+  let rows = '';
+  if (slipType === 'single') {
+    rows = '<div class="row"><span>Total stake</span><b id="totStake">\u2014</b></div>' +
+      '<div class="row"><span>Potential win</span><b id="potWin">\u2014</b></div>';
+  } else if (slipType === 'system') {
+    const combos = comboCount(n, sysK);
+    const pct = slipBonusPct(sysK);
+    const opts = [];
+    for (let k = 2; k <= n - 1; k++) opts.push('<option value="' + k + '"' + (k === sysK ? ' selected' : '') + '>' + k + ' of ' + n + ' \u2014 ' + comboCount(n, k) + ' bets</option>');
+    rows = '<div class="row"><span>System</span><select id="sysSel">' + opts.join('') + '</select></div>' +
+      '<div class="row"><span>Stake per bet (GHS)</span><input type="number" id="stakeIn" min="1" value="2"></div>' +
+      '<div class="row"><span>Combinations</span><b>' + combos + '</b></div>' +
+      '<div class="row"><span>Total stake</span><b id="totStake">\u2014</b></div>' +
+      (pct ? '<div class="row"><span>Winnings bonus (' + sysK + ' legs)</span><b>+' + pct + '%</b></div>' : '') +
+      '<div class="row"><span>Potential win</span><b id="potWin">\u2014</b></div>';
+  } else {
+    const total = sels.reduce((a, s) => a * s.odd, 1);
+    const pct = slipBonusPct(n);
+    rows = '<div class="row"><span>Stake (GHS)</span><input type="number" id="stakeIn" min="1" value="10"></div>' +
+      '<div class="row"><span>Total odds</span><b>' + total.toFixed(2) + '</b></div>' +
+      (pct ? '<div class="row"><span>Winnings bonus (' + n + ' legs)</span><b>+' + pct + '%</b></div>' : '') +
+      '<div class="row"><span>Potential win</span><b id="potWin">\u2014</b></div>';
+  }
+  return rows +
+    '<button class="btn gold big" id="placeBet">Place Bet' + (slipType === 'single' && n > 1 ? 's (' + n + ')' : '') + '</button>' +
+    '<div class="slip-code"><button class="btn ghost" id="slipBookBtn">Book code</button>' +
+    (state.slipCode ? '<span class="bigcode sm">' + esc(state.slipCode) + '</span>' : '') + '</div>' +
+    '<div class="slip-load"><input type="text" id="slipLoadIn" placeholder="Load booking code"><button class="btn ghost" id="slipLoadBtn">Load</button></div>';
+}
+function refreshSlipTotals() {
+  const sels = [...state.slip.values()];
+  const stake = parseFloat(($('#stakeIn') || {}).value) || 0;
+  if (slipType === 'single') {
+    let ts = 0, pot = 0;
+    for (const s of sels) {
+      const v = Number(singleStakes[slipKey(s.matchId, s.market, s.pick)]) || 10;
+      ts += v; pot += v * s.odd;
+    }
+    if ($('#totStake')) $('#totStake').textContent = money(ts);
+    if ($('#potWin')) $('#potWin').textContent = money(pot);
+  } else if (slipType === 'system') {
+    const pct = slipBonusPct(sysK);
+    if ($('#totStake')) $('#totStake').textContent = money(stake * comboCount(sels.length, sysK));
+    if ($('#potWin')) $('#potWin').textContent = money(stake * comboOddsSum(sels, sysK) * (1 + pct / 100));
+  } else {
+    const total = sels.reduce((a, s) => a * s.odd, 1);
+    const pct = slipBonusPct(sels.length);
+    if ($('#potWin')) $('#potWin').textContent = money(stake * total * (1 + pct / 100));
+  }
+}
+function bindSlip() {
+  document.querySelectorAll('[data-stype]').forEach(b => b.addEventListener('click', () => { slipType = b.dataset.stype; renderSlip(); }));
+  document.querySelectorAll('[data-sstake]').forEach(inp => inp.addEventListener('input', e => {
+    singleStakes[e.target.dataset.sstake] = parseFloat(e.target.value) || 0;
+    refreshSlipTotals();
+  }));
+  const stakeIn = $('#stakeIn');
+  if (stakeIn) stakeIn.addEventListener('input', refreshSlipTotals);
+  const sysSel = $('#sysSel');
+  if (sysSel) sysSel.addEventListener('change', e => { sysK = Number(e.target.value); renderSlip(); });
+  const pb = $('#placeBet');
+  if (pb) pb.addEventListener('click', placeBet);
+  const bb = $('#slipBookBtn');
+  if (bb) bb.addEventListener('click', () => {
+    state.slipCode = genSlipCode();
+    renderSlip();
+    toast('Slip code generated \u2014 share it to recreate this slip anywhere');
   });
-  $('#placeBet').addEventListener('click', placeBet);
+  const lb = $('#slipLoadBtn');
+  if (lb) lb.addEventListener('click', async () => {
+    const raw = (($('#slipLoadIn') || {}).value || '').trim();
+    if (!raw) { toast('Paste a slip code first'); return; }
+    try {
+      const added = await applySlipCode(raw);
+      renderSlip();
+      toast(added ? 'Slip loaded \u2014 ' + added + ' selection(s) at current odds' : 'That code has no selections for matches currently listed.');
+    } catch (e) { toast('That slip code could not be read.'); }
+  });
+  refreshSlipTotals();
 }
 async function placeBet() {
   if (!state.user) { closeSlip(); openAuth('login'); toast('Log in to place a bet'); return; }
-  const stake = parseFloat(($('#stakeIn') || {}).value) || 0;
-  if (!(stake > 0)) { toast('Enter a stake amount'); return; }
+  const entries = [...state.slip.entries()];
+  let body;
+  if (slipType === 'single') {
+    if (entries.some(([key]) => !((Number(singleStakes[key]) || 10) > 0))) { toast('Enter a stake for every selection'); return; }
+    body = { mode: 'single', selections: entries.map(([key, s]) => ({ match_id: s.matchId, market: s.market, pick: s.pick, stake_ghs: Number(singleStakes[key]) || 10 })) };
+  } else if (slipType === 'system') {
+    const per = parseFloat(($('#stakeIn') || {}).value) || 0;
+    if (!(per > 0)) { toast('Enter a stake per bet'); return; }
+    body = { mode: 'system', system_k: sysK, stake_ghs: per, selections: entries.map(([, s]) => ({ match_id: s.matchId, market: s.market, pick: s.pick })) };
+  } else {
+    const stake = parseFloat(($('#stakeIn') || {}).value) || 0;
+    if (!(stake > 0)) { toast('Enter a stake amount'); return; }
+    body = { mode: 'multiple', stake_ghs: stake, selections: entries.map(([, s]) => ({ match_id: s.matchId, market: s.market, pick: s.pick })) };
+  }
   const btn = $('#placeBet');
-  btn.disabled = true; btn.textContent = 'Placing…';
+  btn.disabled = true; btn.textContent = 'Placing\u2026';
   try {
-    const selections = [...state.slip.values()].map(s => ({ match_id: s.matchId, market: s.market, pick: s.pick }));
-    const data = await api('/bets/place', { method: 'POST', body: { selections, stake_ghs: stake } });
+    const data = await api('/bets/place', { method: 'POST', body });
     state.slip.clear();
+    Object.keys(singleStakes).forEach(k => delete singleStakes[k]);
+    state.slipCode = '';
     renderSlip();
     closeSlip();
-    toast('Bet placed — your ticket code is ' + data.code);
+    toast(data.count > 1 ? data.count + ' bets placed \u2014 first code ' + data.code : 'Bet placed \u2014 your ticket code is ' + data.code);
     await refreshUser();
     state.view = 'bets';
     render();
@@ -1239,7 +1416,7 @@ document.addEventListener('click', e => {
     return;
   }
   const rm = e.target.closest('[data-rm]');
-  if (rm) { state.slip.delete(rm.dataset.rm); renderSlip(); render(); return; }
+  if (rm) { state.slip.delete(rm.dataset.rm); delete singleStakes[rm.dataset.rm]; renderSlip(); render(); return; }
   const amtChip = e.target.closest('[data-amt]');
   if (amtChip) {
     const inp = $('#mmAmt');
@@ -1282,8 +1459,7 @@ document.addEventListener('click', e => {
   if (e.target.closest('[data-open-auth]')) { openAuth('login'); return; }
   if (e.target.closest('[data-gen-code]')) {
     if (!state.slip.size) { toast('Add at least one odd to your slip first'); return; }
-    const payload = [...state.slip.values()].map(s => ({ m: s.matchId, k: s.market, p: s.pick }));
-    state.slipCode = btoa(unescape(encodeURIComponent(JSON.stringify(payload)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    state.slipCode = genSlipCode();
     render();
     toast('Slip code generated — share it to recreate this slip anywhere');
     return;
@@ -1410,23 +1586,7 @@ document.addEventListener('submit', async e => {
     e.preventDefault();
     const raw = $('#loadCode').value.trim();
     try {
-      const payload = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))));
-      let added = 0;
-      state.slip.clear();
-      payload.forEach(item => {
-        const m = state.matches.find(x => x.id === item.m);
-        if (!m) return;
-        const prevMarket = state.market;
-        state.market = item.k;
-        const o = marketsFor(m).find(x => x.label === item.p);
-        state.market = prevMarket;
-        if (!o) return;
-        state.slip.set(slipKey(m.id, item.k, item.p), {
-          matchId: m.id, matchLabel: m.home + ' vs ' + m.away,
-          league: m.league, market: item.k, pick: item.p, odd: o.odd,
-        });
-        added++;
-      });
+      const added = await applySlipCode(raw);
       renderSlip();
       if (added) { toast('Slip loaded — ' + added + ' selection(s) at current odds'); openSlip(); }
       else toast('That code has no selections for matches currently listed.');
@@ -1632,11 +1792,18 @@ function tickClock() {
 }
 tickClock();
 setInterval(tickClock, 1000);
-// hero auto-advance
+// hero auto-advance: rotate ONLY the hero element in place. This
+// used to call render(), rebuilding the entire home page — matches
+// included — every 6 seconds, the biggest half of the "site keeps
+// auto-refreshing" report (2026-11-05).
 setInterval(() => {
-  if (state.view !== 'home') return;
+  if (state.view !== 'home' || document.hidden) return;
+  const cur = $('.hero');
+  if (!cur) return;
   state.heroIdx = (state.heroIdx + 1) % HERO_SLIDES.length;
-  if ($('.hero')) render();
+  const tmp = document.createElement('div');
+  tmp.innerHTML = heroHTML();
+  if (tmp.firstElementChild) cur.replaceWith(tmp.firstElementChild);
 }, 6000);
 
 // Live scores keep moving while a match view is open: re-pull the feed

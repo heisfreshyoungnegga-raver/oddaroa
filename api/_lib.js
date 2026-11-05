@@ -653,4 +653,45 @@ async function settleAttempt(attempt) {
   return 'already';
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode };
+// Winnings bonus (Prince, 2026-11-05, from the GoalsVault slip he
+// shared): multiples and system combinations earn a percentage bonus
+// on top of their full potential win, scaled by the number of legs in
+// the ticket. Singles earn none. The server is authoritative — the
+// client mirrors this table only so the slip displays the same
+// numbers before placing.
+const WIN_BONUS = [[3, 5], [4, 10], [5, 15], [6, 20], [7, 25], [8, 30], [9, 40], [10, 50], [11, 60], [12, 70], [13, 80], [14, 90], [15, 100], [16, 110], [17, 120], [18, 130], [19, 140], [20, 150]];
+function winBonusPct(legs) {
+  let pct = 0;
+  for (const [n, p] of WIN_BONUS) if (legs >= n) pct = p;
+  return pct;
+}
+// All k-combinations of arr, order-stable.
+function combinations(arr, k) {
+  const out = [];
+  if (k < 1 || k > arr.length) return out;
+  const idx = Array.from({ length: k }, (_, i) => i);
+  for (;;) {
+    out.push(idx.map(i => arr[i]));
+    let i = k - 1;
+    while (i >= 0 && idx[i] === arr.length - k + i) i--;
+    if (i < 0) break;
+    idx[i]++;
+    for (let j = i + 1; j < k; j++) idx[j] = idx[j - 1] + 1;
+  }
+  return out;
+}
+// Bet-type columns (kind / bonus_pct / system_label) for the
+// Single-Multiple-System slip. Added lazily like the payment tables.
+let betColsReady = null;
+function ensureBetColumns() {
+  if (!betColsReady) {
+    betColsReady = (async () => {
+      await sql(`alter table bets add column if not exists kind text not null default 'multiple'`);
+      await sql(`alter table bets add column if not exists bonus_pct numeric not null default 0`);
+      await sql(`alter table bets add column if not exists system_label text`);
+    })();
+  }
+  return betColsReady;
+}
+
+module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns };

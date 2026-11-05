@@ -4,7 +4,7 @@ module.exports = guard(async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
   const rows = await sql(
-    `select b.id, b.code, b.stake_ghs, b.total_odds, b.potential_ghs, b.status, b.placed_at,
+    `select b.id, b.code, b.stake_ghs, b.total_odds, b.potential_ghs, b.status, b.placed_at, b.kind, b.bonus_pct, b.system_label,
             coalesce(json_agg(json_build_object(
               'match_id', s.match_id, 'market', s.market, 'pick', s.pick,
               'odds', s.odds, 'result', s.result,
