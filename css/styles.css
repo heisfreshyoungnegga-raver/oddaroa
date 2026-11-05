@@ -1278,3 +1278,22 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 @keyframes smsSheen { to { transform: translateX(130%); } }
 @media (prefers-reduced-motion: reduce) { .sms-alert.show .sms-card.ios { animation: none; } .sms-card.ios::after { display: none; } }
+
+/* Withdrawal success card (Prince, 2026-11-05 — modelled on the MoMo
+   app's confirmation popup in his screenshot): white card, green
+   check, big green amount, two footer actions. Admin portals only;
+   appears together with the SMS banner on a withdrawal confirm. */
+.pay-overlay { position: fixed; inset: 0; z-index: 96; background: rgba(8, 10, 8, 0.5); display: flex; align-items: center; justify-content: center; padding: 18px; opacity: 0; transition: opacity 0.25s ease; }
+.pay-overlay.show { opacity: 1; }
+.pay-card { background: #ffffff; color: #1c1c1e; width: min(400px, 100%); border-radius: 18px; padding: 28px 22px 0; text-align: center; box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4); transform: scale(0.92) translateY(10px); transition: transform 0.32s cubic-bezier(0.22, 1.3, 0.36, 1); overflow: hidden; }
+.pay-overlay.show .pay-card { transform: scale(1) translateY(0); }
+.pay-check { width: 66px; height: 66px; margin: 0 auto 14px; border-radius: 50%; background: #e4f7ea; color: #22a550; display: flex; align-items: center; justify-content: center; animation: payPop 0.45s 0.1s cubic-bezier(0.22, 1.5, 0.36, 1) both; }
+.pay-check svg { width: 34px; height: 34px; }
+@keyframes payPop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.pay-title { font-size: 20px; font-weight: 800; }
+.pay-sub { color: #6b6b70; font-size: 14px; line-height: 1.5; margin: 8px 0 0; }
+.pay-amt { color: #1da356; font-size: 31px; font-weight: 800; margin-top: 16px; }
+.pay-ref { color: #8a8a8e; font-size: 13px; margin-top: 6px; }
+.pay-actions { display: flex; margin: 20px -22px 0; border-top: 1px solid #ececf0; }
+.pay-actions button { flex: 1; background: none; border: none; padding: 15px 0; font-size: 15px; font-weight: 700; color: #1da356; cursor: pointer; font-family: inherit; }
+.pay-actions button + button { border-left: 1px solid #ececf0; }
