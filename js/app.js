@@ -77,7 +77,7 @@ function money(n) { return 'GHS ' + Number(n || 0).toFixed(2); }
 // Headline balances respect the header eye toggle (Prince,
 // 2026-11-05): hidden shows a masked amount. Transaction history
 // amounts are records, not "the balance", and stay visible.
-function balMoney(n) { return state.hideBal ? 'GHS ••••' : money(n); }
+function balMoney(n) { return money(n); } // Eye/mask retired 2026-11-05 (Prince: balance normal as first)
 // Icons: EYE_OPEN / EYE_SHUT are shared with the password eye
 // (declared with the auth wiring below; same visible/hidden sense).
 function eyeBtnHTML() {
@@ -1201,7 +1201,7 @@ function viewHTML() {
     case 'virtual':
       return filtersHTML() + matchListHTML();
     default:
-      return heroHTML() + joinHTML() + quickHTML() + cupBannerHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
+      return heroHTML() + joinHTML() + quickHTML() + promoStripHTML() + trustStripHTML() + filtersHTML() + matchListHTML() + bannerBandHTML();
   }
 }
 function render() {
@@ -1599,18 +1599,11 @@ function syncHeader() {
     // the balance instead; the number lives in Me). The button's
     // own listener primes the wallet on the deposit section before the
     // shared nav handler switches the view.
-    ha.innerHTML = '<span class="userchip">' + balMoney(state.user.balance_ghs) + '</span>' + eyeBtnHTML() +
+    ha.innerHTML = '<span class="userchip">' + money(state.user.balance_ghs) + '</span>' +
       '<button class="btn gold" id="headDeposit" data-nav="wallet">Deposit</button>';
     $('#headDeposit').addEventListener('click', () => {
       state.walletSection = 'deposit';
       state.walletTab = 'instant';
-    });
-    $('#eyeToggle').addEventListener('click', () => {
-      state.hideBal = !state.hideBal;
-      localStorage.setItem('od_hidebal', state.hideBal ? '1' : '0');
-      syncHeader();
-      // The Me and Wallet pages print the headline balance too.
-      if (state.view === 'wallet' || state.view === 'profile') render();
     });
   } else {
     ha.innerHTML = '<button class="btn ghost" id="loginBtn">Login</button>' +
