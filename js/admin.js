@@ -96,7 +96,11 @@ function loginHTML() {
     '</div>';
 }
 function tabsHTML() {
-  const tabs = [['dashboard', 'Dashboard'], ['queue', 'Payout Queue'], ['matches', 'Matches'], ['users', 'Users'], ['support', 'Support'], ['earnings', 'My Earnings']];
+  const tabs = [['dashboard', 'Dashboard'], ['queue', 'Payout Queue'], ['users', 'Users'], ['support', 'Support'], ['earnings', 'My Earnings']];
+  // Matches live ONLY in the Super Portal (Prince, 2026-11-05:
+  // "there should be no matches" on the admin dashboard) — creating,
+  // going live and settling are super admin work.
+  if (isSuperPortal) tabs.splice(2, 0, ['matches', 'Matches']);
   if (superTools()) tabs.push(['control', 'Platform Control']);
   return '<div class="wtabs">' + tabs.map(([k, label]) =>
     '<button class="' + (state.tab === k ? 'on' : '') + '" data-atab="' + k + '">' + label + '</button>').join('') + '</div>';
@@ -359,6 +363,9 @@ function render() {
     localStorage.removeItem('ps_admin_token');
     render();
   });
+  // The Admin Portal has no Matches tab; a stale tab state (or a
+  // hand-typed switch) lands on the Dashboard instead.
+  if (state.tab === 'matches' && !isSuperPortal) state.tab = 'dashboard';
   root.innerHTML =
     state.tab === 'dashboard' ? dashboardHTML() :
     state.tab === 'queue' ? tabsHTML() + queueHTML(false) :
