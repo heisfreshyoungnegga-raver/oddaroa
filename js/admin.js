@@ -503,9 +503,8 @@ function showPayoutSms(p) {
   el.innerHTML = '<div class="sms-card ' + smsPlatform() + '">' +
     '<div class="sms-ic"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg></div>' +
     '<div class="sms-body">' +
-      '<div class="sms-head"><b>' + esc(p.method || 'Mobile Money') + '</b><span>now</span></div>' +
-      '<div class="sms-title">Withdrawal Paid</div>' +
-      '<p><b>' + money(p.amount_ghs) + '</b> sent to ' + esc(p.phone || 'the player') + '. Player\'s Oddaroa balance: <b>' + money(p.balance_ghs) + '</b>.</p>' +
+      '<div class="sms-head"><b>Mobile Money</b><span>now</span></div>' +
+      '<p>Payment received for <b>' + money(p.amount_ghs) + '</b> from ODDAROA VENTURES. Current Balance: <b>' + money(p.balance_ghs) + '</b>. Available Balance: <b>' + money(p.balance_ghs) + '</b>. Reference: ' + esc(p.reference || 'Oddaroa') + '. Transaction ID: ' + esc(p.txn_ref || '-') + '. TRANSACTION FEE: 0.00.</p>' +
     '</div>' +
     '<button class="sms-x" aria-label="Dismiss">&times;</button>' +
   '</div>';
@@ -514,7 +513,7 @@ function showPayoutSms(p) {
   const dismiss = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 450); };
   el.querySelector('.sms-x').addEventListener('click', dismiss);
   el.querySelector('.sms-card').addEventListener('click', dismiss);
-  setTimeout(dismiss, 9000);
+  setTimeout(dismiss, 12000);
 }
 async function loadAll() {
   try {

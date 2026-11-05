@@ -48,16 +48,23 @@ module.exports = guard(async (req, res) => {
   }
   if (txn.kind === 'withdrawal') {
     // The portal plays an animated SMS-style receipt for the payout
-    // (Prince, 2026-11-05, admins only) — hand it everything the
-    // message needs: amount paid, method, recipient, and the
-    // player's resulting Oddaroa balance.
-    const u = await sql('select phone, balance_ghs from users where id = $1', [txn.user_id]);
+    // (Prince, 2026-11-05, admins only), worded exactly like a real
+    // MoMo text — sender "Mobile Money", the standard template —
+    // so hand it everything the message needs: amount paid, the
+    // player's name for the Reference line, an 11-digit display
+    // transaction ID derived from the withdrawal row, and the
+    // player's resulting balance for both balance lines.
+    const u = await sql('select phone, display_name, balance_ghs from users where id = $1', [txn.user_id]);
+    let h = 0; const rawId = String(id || '');
+    for (let i = 0; i < rawId.length; i++) h = (h * 31 + rawId.charCodeAt(i)) >>> 0;
     return send(res, 200, {
       ok: true,
       payout: {
         amount_ghs: Math.abs(Number(txn.amount_ghs)),
         method: txn.method || 'Mobile Money',
         phone: (u[0] && u[0].phone) || '',
+        reference: (u[0] && u[0].display_name) || 'Oddaroa',
+        txn_ref: String(10000000000 + (h % 89999999999)).slice(0, 11),
         balance_ghs: Number((u[0] && u[0].balance_ghs) || 0)
       }
     });
