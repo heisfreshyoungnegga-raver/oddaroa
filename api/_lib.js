@@ -765,6 +765,11 @@ function ensureMatchColumns() {
     matchColsReady = (async () => {
       await sql(`alter table matches add column if not exists ht_stoppage int not null default 0`);
       await sql(`alter table matches add column if not exists ft_stoppage int not null default 0`);
+      // 'postponed' joined the status vocabulary with the created-
+      // games lifecycle (2026-11-05); the original CHECK only knew
+      // upcoming/live/finished and rejected postponed games.
+      await sql(`alter table matches drop constraint if exists matches_status_check`);
+      await sql(`alter table matches add constraint matches_status_check check (status in ('upcoming', 'live', 'finished', 'postponed'))`);
     })();
   }
   return matchColsReady;
