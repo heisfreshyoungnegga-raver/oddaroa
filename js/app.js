@@ -1223,7 +1223,12 @@ document.addEventListener('click', e => {
     if (q === 'Soccer') { state.sport = 'Soccer'; state.view = 'sports'; render(); }
     else if (q === 'Today') { state.sport = 'Soccer'; state.view = 'home'; state.date = 'Today'; render(); }
     else if (q === 'Live') { state.sport = 'Soccer'; state.view = 'live'; render(); }
-    else if (q === 'Aviator') { state.view = 'games'; render(); }
+    else if (q === 'Aviator') {
+      // The tile is named Aviator, so it opens Aviator itself — sending it
+      // to the games lobby read exactly like the old click bug to users.
+      if (!state.user) { openAuth('login'); toast('Log in to play Aviator'); }
+      else { state.game = 'Aviator'; state.view = 'game'; render(); window.scrollTo(0, 0); }
+    }
     else if (q === 'Basketball') { state.sport = 'Basketball'; state.view = 'sports'; render(); }
     else if (q === 'Verify Bet') { state.view = 'verify'; render(); }
     else if (q === 'Booking Code') { state.view = 'booking'; render(); }
