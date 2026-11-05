@@ -1304,6 +1304,23 @@ function syncAuth() {
   show('#authCountryRow', true);
   show('#authEmailRow', !login);
   show('#authRefRow', !login);
+  // A referral code that arrived through an admin's link is
+  // pre-entered and LOCKED (Prince, 2026-11-05): the person
+  // registering sees whose link they came through and cannot
+  // change or clear the code, so the admin always gets the credit.
+  // With no link, the field stays a normal optional input.
+  const refInput = $('#authRef'), refNote = $('#authRefNote');
+  if (refInput) {
+    const linked = !login && localStorage.getItem('od_ref');
+    if (linked) {
+      refInput.value = linked;
+      refInput.readOnly = true;
+      if (refNote) refNote.textContent = '(from your invite link — locked)';
+    } else {
+      refInput.readOnly = false;
+      if (refNote) refNote.textContent = '(optional)';
+    }
+  }
   show('#forgotLink', login);
   const phoneLabel = $('#authPhoneLabel');
   if (phoneLabel) phoneLabel.textContent = 'Mobile number';
@@ -1766,7 +1783,9 @@ $('#authForm').addEventListener('submit', async e => {
       const nameEl = $('#authName');
       if (nameEl && nameEl.value.trim()) body.display_name = nameEl.value.trim();
       const refField = $('#authRef').value.trim().toUpperCase();
-      const ref = refField || localStorage.getItem('od_ref');
+      // A linked code wins over the field — the lock is real, not
+      // just a readonly attribute (Prince, 2026-11-05).
+      const ref = localStorage.getItem('od_ref') || refField;
       const inv = localStorage.getItem('od_admin_invite');
       if (ref) body.ref = ref;
       if (inv) body.admin_invite = inv;

@@ -1161,3 +1161,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .bookmkt { margin-top: 14px; }
 .bookmkt h4 { margin: 0 0 6px; font-size: 14px; }
 .bookedit summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+
+/* Locked referral code on the register form (arrived via a link) */
+#authRef[readonly] { opacity: .55; }
