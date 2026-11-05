@@ -1317,7 +1317,9 @@ function syncAuth() {
     if (linked) {
       refInput.value = linked;
       refInput.readOnly = true;
-      if (refNote) refNote.textContent = '(from your invite link — locked)';
+      // No visible note (Prince, 2026-11-05): the field simply
+      // shows the code, locked, with no explanation text.
+      if (refNote) refNote.textContent = '';
     } else {
       refInput.readOnly = false;
       if (refNote) refNote.textContent = '(optional)';
