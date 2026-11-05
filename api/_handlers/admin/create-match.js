@@ -75,26 +75,17 @@ module.exports = guard(async (req, res) => {
   }
   if (!odds.o1) return send(res, 400, { error: 'valid_1x2_odds_required', detail: 'Home, draw and away odds must all be above 1.00.' });
 
+  // Goals are COMPULSORY (Prince's order, 2026-11-05): a created
+  // match runs ONLY the script the super admin built — the server
+  // no longer invents a schedule when none is supplied. An empty
+  // array is the explicit 0-0 script (the form sends it only when
+  // the "No goals" box is ticked).
+  if (!Array.isArray(goals)) {
+    return send(res, 400, { error: 'goals_required', detail: 'The goal script is compulsory — build the goals in the form (or tick "No goals" for a 0-0 match). The match must run exactly what the super admin set.' });
+  }
   let cleanGoals = cleanGoalSchedule(goals);
-  if (!cleanGoals.length) {
-    // Auto goal schedule from the priced probabilities: the stronger
-    // side's expected goals rise, the weaker side's fall.
-    const inv = [1 / odds.o1, 1 / odds.ox, 1 / odds.o2];
-    const invSum = inv.reduce((a, b) => a + b, 0);
-    const lambdaHome = 0.4 + 2.8 * (inv[0] / invSum);
-    const lambdaAway = 0.4 + 2.8 * (inv[2] / invSum);
-    const hg = Math.min(5, poisson(lambdaHome));
-    const ag = Math.min(5, poisson(lambdaAway));
-    const minutes = new Set();
-    const nextMinute = () => {
-      let m = 2 + crypto.randomInt(89);
-      while (minutes.has(m)) m = 2 + crypto.randomInt(89);
-      minutes.add(m);
-      return m;
-    };
-    for (let i = 0; i < hg; i++) cleanGoals.push({ minute: nextMinute(), side: 'home' });
-    for (let i = 0; i < ag; i++) cleanGoals.push({ minute: nextMinute(), side: 'away' });
-    cleanGoals.sort((a, b) => a.minute - b.minute);
+  if (goals.length && !cleanGoals.length) {
+    return send(res, 400, { error: 'invalid_goals', detail: 'No valid goals in the script — minutes must be 1-90 (stoppage like 45+2 is fine), sides home or away.' });
   }
 
   // The full market book (Correct Score, HT/FT, half markets,

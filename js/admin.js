@@ -401,12 +401,13 @@ function featuredFormHTML() {
     '<label>1 (home) <input type="number" step="0.01" min="1.01" id="ff_o1" placeholder="Auto"></label>' +
     '<label>X (draw) <input type="number" step="0.01" min="1.01" id="ff_ox" placeholder="Auto"></label>' +
     '<label>2 (away) <input type="number" step="0.01" min="1.01" id="ff_o2" placeholder="Auto"></label></div>' +
-    '<div><span class="muted">Goal script — <span id="ffScriptSummary"></span></span>' +
+    '<div><span class="muted">Goal script (required) — <span id="ffScriptSummary"></span></span>' +
     '<div id="ffGoalList" style="margin-top:6px"></div>' +
     '<div><input type="text" id="ffMinute" placeholder="Minute — e.g. 12 or 45+2" style="max-width:200px"> ' +
     '<button class="btn ghost sm" type="button" data-goaladd="home">+ Home</button> ' +
     '<button class="btn ghost sm" type="button" data-goaladd="away">+ Away</button></div>' +
-    '<p class="muted">Leave the script empty and one is generated from the odds.</p></div>' +
+    '<label class="sm"><input type="checkbox" id="ffNoGoals"> No goals — this match ends 0-0</label>' +
+    '<p class="muted">The goal script is COMPULSORY: the match runs exactly what you build here — nothing is ever generated. Tick "No goals" only when the match truly ends 0-0.</p></div>' +
     '<div class="oddsgrid">' +
     '<label>1st half stoppage (min) <input type="number" min="0" max="15" step="1" id="ffHtStop" value="0"></label>' +
     '<label>2nd half stoppage (min) <input type="number" min="0" max="15" step="1" id="ffFtStop" value="0"></label></div>' +
@@ -1021,7 +1022,14 @@ document.addEventListener('submit', async e => {
     else if ($('#ffStart').value) body.starts_at = new Date($('#ffStart').value).toISOString();
     const o1 = Number($('#ff_o1').value), ox = Number($('#ff_ox').value), o2 = Number($('#ff_o2').value);
     if (o1 > 1 && ox > 1 && o2 > 1) { body.o1 = o1; body.ox = ox; body.o2 = o2; }
-    if (ffGoals.length) body.goals = ffGoals.map(g => ({ ...g }));
+    // Goals are COMPULSORY (Prince's order, 2026-11-05): the match
+    // runs only the script built here; an empty script is allowed
+    // solely as an explicitly ticked 0-0.
+    if (!ffGoals.length && !($('#ffNoGoals') && $('#ffNoGoals').checked)) {
+      toast('Goal script is compulsory — add the goals, or tick "No goals" for a 0-0 match.');
+      return;
+    }
+    body.goals = ffGoals.map(g => ({ ...g }));
     body.betting_locked = !!($('#ffLockBet') && $('#ffLockBet').checked);
     const specBook = collectFfBook();
     if (specBook.length) body.odds_full = specBook;
