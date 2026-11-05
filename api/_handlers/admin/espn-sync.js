@@ -1,4 +1,4 @@
-const { readBody, send, guard, requireAdmin } = require('../../_lib');
+const { readBody, send, guard, requireSuperAdmin } = require('../../_lib');
 const { LEAGUES, syncLeagues } = require('../../_espn');
 const { afEnabled, refreshAf } = require('../../_apifootball');
 
@@ -9,7 +9,7 @@ const { afEnabled, refreshAf } = require('../../_apifootball');
 // manual syncs are kept fresh automatically by the public match list.
 module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
-  const auth = requireAdmin(req, res);
+  const auth = requireSuperAdmin(req, res);
   if (!auth) return;
   if (afEnabled()) {
     const { imported, priced } = await refreshAf();

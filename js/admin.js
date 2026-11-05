@@ -132,7 +132,11 @@ function dashboardHTML() {
     ['Pending deposits', s.pending_deposits], ['Pending withdrawals', s.pending_withdrawals],
     ['Open support', s.open_support],
   ].map(([l, v]) => '<div class="stat"><div class="muted">' + l + '</div><div class="stat-v">' + v + '</div></div>').join('') : '<p class="muted">Loading…</p>';
-  return tabsHTML() + '<div class="stats">' + grid + '</div>' + referralCardHTML() + espnHTML() + queueHTML(true);
+  // The ESPN fixture sync is a super admin tool (Prince, 2026-11-05:
+  // "dont let the admin show the super admin option on thier pages")
+  // — it renders only for the super_admin ROLE, on either portal.
+  const isSuperRole = !!state.user && state.user.role === 'super_admin';
+  return tabsHTML() + '<div class="stats">' + grid + '</div>' + referralCardHTML() + (isSuperRole ? espnHTML() : '') + queueHTML(true);
 }
 
 // Referral centre, on the Dashboard itself (Prince, 2026-11-05):
