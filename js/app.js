@@ -747,6 +747,45 @@ function winChime() {
     });
   } catch (e) { /* sound is best-effort */ }
 }
+/* ---------- bet placed: booking code share panel ----------
+   Prince, 2026-11-06: the booking code shows AFTER staking — one
+   unique code for these games on this account, stable across
+   re-stakes. Oddaroa's own panel (dark + gold): big code, copy and
+   share. Deliberately NOT a copy of any other bookmaker's sheet. */
+function showBetPlaced(data) {
+  closeBetPlaced();
+  const el = document.createElement('div');
+  el.className = 'bp-overlay';
+  el.id = 'bpOverlay';
+  el.innerHTML =
+    '<div class="bp-card">' +
+      '<div class="bp-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L19.5 7"/></svg></div>' +
+      '<h3>Bet placed</h3>' +
+      '<p class="bp-sub">Ticket <b>' + esc(data.code) + '</b>' + (data.count > 1 ? ' \u00B7 ' + data.count + ' bets' : '') + ' \u00B7 ' + money(data.total_stake_ghs) + '</p>' +
+      '<div class="bp-codebox"><span class="bp-label">YOUR BOOKING CODE</span>' +
+      '<span class="bp-code">' + esc(data.booking_code) + '</span>' +
+      '<span class="bp-note">Share this code \u2014 anyone can load these same games into their slip and stake them too.</span></div>' +
+      '<div class="bp-actions"><button class="btn ghost" id="bpCopy">Copy code</button><button class="btn gold" id="bpShare">Share</button></div>' +
+      '<button class="bp-done" id="bpDone">Done</button>' +
+    '</div>';
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  const shareText = 'Stake my Oddaroa games \u2014 booking code ' + data.booking_code + '. Open oddaroa.com, open the betslip and enter it under Load booking code.';
+  document.getElementById('bpCopy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(data.booking_code); toast('Booking code copied'); }
+    catch (e) { toast('Your booking code is ' + data.booking_code); }
+  });
+  document.getElementById('bpShare').addEventListener('click', async () => {
+    if (navigator.share) { try { await navigator.share({ title: 'Oddaroa booking code', text: shareText }); } catch (e) {} }
+    else {
+      try { await navigator.clipboard.writeText(shareText); toast('Share text copied'); }
+      catch (e) { toast('Your booking code is ' + data.booking_code); }
+    }
+  });
+  document.getElementById('bpDone').addEventListener('click', closeBetPlaced);
+  el.addEventListener('click', e => { if (e.target === el) closeBetPlaced(); });
+}
+function closeBetPlaced() { const el = document.getElementById('bpOverlay'); if (el) el.remove(); }
 function maybeCelebrateWin(bets) {
   try {
     if (!Array.isArray(bets) || !state.user) return;
@@ -915,6 +954,7 @@ function betCardHTML(b) {
     (Number(b.bonus_pct) > 0 ? '<div class="card-row"><span>Winnings bonus</span><b>+' + Number(b.bonus_pct) + '%</b></div>' : '') +
     '<div class="card-row"><span>Total odds</span><b>' + Number(b.total_odds).toFixed(2) + '</b></div>' +
     '<div class="card-row"><span>Potential win</span><b>' + money(b.potential_ghs) + '</b></div>' +
+    (b.booking_code ? '<div class="card-row"><span>Booking code</span><b class="bkcode">' + esc(b.booking_code) + '</b></div>' : '') +
     // Cashout (Prince, 2026-11-05): the button exists only while
     // the server quotes a value. When any leg is live there is no
     // quote, so there is no button and no message — it comes back
@@ -1488,7 +1528,7 @@ async function placeBet() {
     const data = await api('/bets/place', { method: 'POST', body });
     state.slip.clear();
     Object.keys(singleStakes).forEach(k => delete singleStakes[k]);
-    state.slipCode = '';
+    state.slipCode = data.booking_code || '';
     renderSlip();
     closeSlip();
     toast(data.count > 1 ? data.count + ' bets placed \u2014 first code ' + data.code : 'Bet placed \u2014 your ticket code is ' + data.code);
@@ -1496,6 +1536,7 @@ async function placeBet() {
     state.view = 'bets';
     render();
     loadBets();
+    if (data.booking_code) showBetPlaced(data);
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Place Bet';
     errToast(e, 'Bet could not be placed.');

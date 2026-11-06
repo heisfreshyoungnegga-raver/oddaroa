@@ -1140,4 +1140,41 @@ function cashoutQuoteFor(bet, legs, marginPct) {
   return value >= 0.10 ? value : null;
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor };
+// Booking codes (Prince, 2026-11-06): 5-character mixed codes
+// (letters + digits, confusables 0/O and 1/I left out). ONE unique
+// code per account + set of games: the dedupe hash makes repeat
+// bookings and repeat stakes of the same games return the SAME
+// code — a code never changes under its owner.
+const BOOKING_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function genBookingCode() {
+  let code = '';
+  do {
+    code = Array.from({ length: 5 }, () => BOOKING_ALPHABET[Math.floor(Math.random() * BOOKING_ALPHABET.length)]).join('');
+  } while (!/[A-Z]/.test(code) || !/[0-9]/.test(code));
+  return code;
+}
+function canonicalSelections(sels) {
+  return (sels || [])
+    .map(x => ({ match_id: String(x.match_id), market: String(x.market), pick: String(x.pick) }))
+    .sort((a, b) => (a.match_id + '|' + a.market + '|' + a.pick).localeCompare(b.match_id + '|' + b.market + '|' + b.pick));
+}
+async function ensureBookingCode(userId, selections) {
+  const clean = canonicalSelections(selections);
+  if (!clean.length) return null;
+  const dedupe = crypto.createHash('sha256').update((userId || 'anon') + '|' + JSON.stringify(clean)).digest('hex');
+  const found = await sql('select code from booking_codes where dedupe = $1', [dedupe]);
+  if (found.length) return found[0].code;
+  for (let i = 0; i < 10; i++) {
+    const code = genBookingCode();
+    const rows = await sql(
+      'insert into booking_codes (code, selections, user_id, dedupe) values ($1, $2::jsonb, $3, $4) on conflict do nothing returning code',
+      [code, JSON.stringify(clean), userId || null, dedupe]
+    );
+    if (rows.length) return code;
+    const again = await sql('select code from booking_codes where dedupe = $1', [dedupe]);
+    if (again.length) return again[0].code;
+  }
+  return null;
+}
+
+module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode };

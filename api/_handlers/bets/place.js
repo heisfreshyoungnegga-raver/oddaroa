@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns, ensureBookingCode } = require('../../_lib');
 
 // Place bet(s) from the slip: Single (one ticket per selection, each
 // with its own stake), Multiple (one accumulator ticket) or System
@@ -99,9 +99,15 @@ module.exports = guard(async (req, res) => {
   totalStake = Math.round(totalStake * 100) / 100;
   totalPotential = Math.round(totalPotential * 100) / 100;
 
-  // $1 user, $2 total stake; ticket values follow, then selection
-  // values. Selections join their ticket by code.
-  const params = [auth.uid, totalStake];
+  // One booking code for this slip's games on this account,
+  // minted at staking (Prince, 2026-11-06): the same account
+  // staking the same games always gets the same code, and it is
+  // stamped on every ticket so it shows on the Bets page.
+  let bookingCode = null;
+  try { bookingCode = await ensureBookingCode(auth.uid, clean); } catch (e) { bookingCode = null; }
+  // $1 user, $2 total stake, $3 booking code; ticket values follow,
+  // then selection values. Selections join their ticket by code.
+  const params = [auth.uid, totalStake, bookingCode];
   const ticketVals = [];
   tickets.forEach(t => {
     const b = params.length + 1;
@@ -123,8 +129,8 @@ module.exports = guard(async (req, res) => {
        returning id
      ),
      bt as (
-       insert into bets (code, user_id, stake_ghs, total_odds, potential_ghs, kind, bonus_pct, system_label)
-       select v.code, $1, v.stake, v.odds, v.pot, v.kind, v.bonus, v.label
+       insert into bets (code, user_id, stake_ghs, total_odds, potential_ghs, kind, bonus_pct, system_label, booking_code)
+       select v.code, $1, v.stake, v.odds, v.pot, v.kind, v.bonus, v.label, $3
        from bal, (values ${ticketVals.join(', ')}) as v(code, stake, odds, pot, kind, bonus, label)
        returning id, code
      ),
@@ -150,5 +156,6 @@ module.exports = guard(async (req, res) => {
     mode,
     total_stake_ghs: totalStake,
     total_potential_ghs: totalPotential,
+    booking_code: bookingCode,
   });
 });

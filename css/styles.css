@@ -1343,3 +1343,20 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .win-btn.go { background: #22c55e; border: 0; color: #04150a; }
 .win-share { margin-top: 13px; background: none; border: 0; color: #c9d1c9; font: inherit; font-size: 13.5px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .win-confetti i { animation: none; } .win-card { animation: none; } }
+
+/* Bet placed — booking code share panel (2026-11-06, Oddaroa original) */
+.bp-overlay { position: fixed; inset: 0; z-index: 98; background: rgba(3,6,4,.72); display: flex; align-items: center; justify-content: center; padding: 18px; opacity: 0; transition: opacity .18s ease; }
+.bp-overlay.show { opacity: 1; }
+.bp-card { background: linear-gradient(165deg, #12241a, #070a08); border: 1px solid #6d5518; border-radius: 18px; color: #f2f2ea; max-width: 400px; width: 100%; padding: 26px 22px 14px; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,.55); animation: payPop .38s cubic-bezier(.2,1.6,.4,1); }
+.bp-check { width: 58px; height: 58px; margin: 0 auto 10px; border-radius: 50%; border: 2px solid #f5b301; color: #f5b301; display: flex; align-items: center; justify-content: center; }
+.bp-check svg { width: 30px; height: 30px; }
+.bp-card h3 { margin: 4px 0 2px; font-size: 22px; }
+.bp-sub { color: #9aa79a; margin: 0 0 16px; font-size: 13.5px; }
+.bp-codebox { border: 1px dashed #6d5518; border-radius: 14px; padding: 14px 12px 12px; display: flex; flex-direction: column; gap: 4px; background: rgba(245,179,1,.06); }
+.bp-label { font-size: 11px; letter-spacing: .14em; color: #c9a227; font-weight: 700; }
+.bp-code { font-size: 34px; font-weight: 800; letter-spacing: .12em; color: #ffd94d; line-height: 1.15; }
+.bp-note { font-size: 12.5px; color: #9aa79a; }
+.bp-actions { display: flex; gap: 10px; margin-top: 16px; }
+.bp-actions .btn { flex: 1; }
+.bp-done { margin-top: 10px; background: none; border: 0; color: #c9c9c9; font-weight: 700; cursor: pointer; padding: 8px; }
+.bkcode { letter-spacing: .08em; color: #ffd94d; }
