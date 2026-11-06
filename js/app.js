@@ -943,8 +943,12 @@ function betCardHTML(b) {
     } else {
       res = '<span class="legres">' + esc(l.result || '') + '</span>';
     }
-    return '<div class="leg"><span>' + esc(l.home_team || '') + ' vs ' + esc(l.away_team || '') + '</span>' +
-      '<span>' + esc(l.pick) + ' · ' + esc(mktName(l.market)) + ' · <b>' + Number(l.odds).toFixed(2) + '</b></span>' +
+    const nowTag = l.now_odds && (!l.result || l.result === 'pending')
+      ? ' <span class="nowodds ' + (Number(l.now_odds) > Number(l.odds) ? 'now-up' : Number(l.now_odds) < Number(l.odds) ? 'now-down' : '') + '">now ' + Number(l.now_odds).toFixed(2) + '</span>'
+      : '';
+    return '<div class="leg"><span>' + esc(l.home_team || '') + ' vs ' + esc(l.away_team || '') +
+      (l.starts_at ? '<br><span class="legtime">' + fmtDate(l.starts_at) + '</span>' : '') + '</span>' +
+      '<span>' + esc(l.pick) + ' · ' + esc(mktName(l.market)) + ' · <b>' + Number(l.odds).toFixed(2) + '</b>' + nowTag + '</span>' +
       '<span class="legstate">' + res + '</span></div>';
   }).join('');
   return '<div class="card"><div class="card-head"><b>' + esc(b.code) + '</b>' + statusChip(b.status) + '</div>' +
@@ -954,6 +958,7 @@ function betCardHTML(b) {
     (Number(b.bonus_pct) > 0 ? '<div class="card-row"><span>Winnings bonus</span><b>+' + Number(b.bonus_pct) + '%</b></div>' : '') +
     '<div class="card-row"><span>Total odds</span><b>' + Number(b.total_odds).toFixed(2) + '</b></div>' +
     '<div class="card-row"><span>Potential win</span><b>' + money(b.potential_ghs) + '</b></div>' +
+    (b.live_potential_ghs != null ? '<div class="card-row"><span>Live potential</span><b class="goldval">' + money(b.live_potential_ghs) + '</b></div>' : '') +
     (b.booking_code ? '<div class="card-row"><span>Booking code</span><b class="bkcode">' + esc(b.booking_code) + '</b></div>' : '') +
     // Cashout (Prince, 2026-11-05): the button exists only while
     // the server quotes a value. When any leg is live there is no

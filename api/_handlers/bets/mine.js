@@ -1,4 +1,4 @@
-const { sql, send, guard, requireAuth, getSettings, cashoutQuoteFor, isCustomMatch, customMatchState } = require('../../_lib');
+const { sql, send, guard, requireAuth, getSettings, cashoutQuoteFor, isCustomMatch, customMatchState, livePriceFor, currentPickOdds } = require('../../_lib');
 
 module.exports = guard(async (req, res) => {
   const auth = requireAuth(req, res);
@@ -8,7 +8,7 @@ module.exports = guard(async (req, res) => {
             coalesce(json_agg(json_build_object(
               'match_id', s.match_id, 'market', s.market, 'pick', s.pick,
               'odds', s.odds, 'result', s.result,
-              'home_team', m.home_team, 'away_team', m.away_team, 'league', m.league
+              'home_team', m.home_team, 'away_team', m.away_team, 'league', m.league, 'starts_at', m.starts_at
             ) order by s.id) filter (where s.id is not null), '[]') as selections
      from bets b
      left join bet_selections s on s.bet_id = b.id
@@ -61,9 +61,43 @@ module.exports = guard(async (req, res) => {
           s.match_status = m.status;
           s.live_home = m.score_home;
           s.live_away = m.score_away;
-          s.live_minute = null;
+          // Feed matches DO carry a live clock: both ingests keep
+          // matches.minute current while a game is in play (Prince's
+          // reference shows the time on the ticket, 2026-11-06).
+          s.live_minute = m.minute != null ? Number(m.minute) : null;
           s.live_label = null;
         }
+        // The pick's CURRENT price (Prince, 2026-11-06: the odds
+        // must move as the match is live, based on the score): for
+        // a live match it is the modelled in-play price, for an
+        // upcoming one the book's current stored price.
+        if (!s.result || s.result === 'pending') {
+          try {
+            if (s.match_status === 'live') {
+              const src = isCustomMatch(m)
+                ? { ...m, status: 'live', score_home: s.live_home, score_away: s.live_away, minute: s.live_minute }
+                : m;
+              s.now_odds = livePriceFor(src, s.market, s.pick);
+            } else if (s.match_status === 'upcoming') {
+              s.now_odds = currentPickOdds(m, s.market, s.pick);
+            } else s.now_odds = null;
+          } catch (e) { s.now_odds = null; }
+        }
+      }
+      // Live potential (Prince, 2026-11-06): what this ticket
+      // returns if the live prices froze now — the user's stake
+      // carried by the moving odds. Singles and multiples only;
+      // system tickets price per combination, so they keep the
+      // static potential.
+      if ((b.kind === 'multiple' || b.kind === 'single') &&
+          (b.selections || []).some(x => x.match_status === 'live')) {
+        let prod = 1, dead = false;
+        for (const s of b.selections) {
+          if (s.result === 'lost') { dead = true; break; }
+          prod *= s.result === 'won' ? (Number(s.odds) || 1) : (Number(s.now_odds || s.odds) || 1);
+        }
+        b.live_potential_ghs = dead ? 0
+          : Math.round(Number(b.stake_ghs) * prod * (1 + (Number(b.bonus_pct) || 0) / 100) * 100) / 100;
       }
     }
   }

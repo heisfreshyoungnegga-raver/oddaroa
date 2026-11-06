@@ -1360,3 +1360,10 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .bp-actions .btn { flex: 1; }
 .bp-done { margin-top: 10px; background: none; border: 0; color: #c9c9c9; font-weight: 700; cursor: pointer; padding: 8px; }
 .bkcode { letter-spacing: .08em; color: #ffd94d; }
+
+/* Bets: live leg extras (2026-11-06) */
+.legtime { color: #8a978d; font-size: 11.5px; }
+.nowodds { font-weight: 700; font-size: 12.5px; }
+.now-up { color: #e5484d; }
+.now-down { color: #2fbf71; }
+.goldval { color: #ffd94d; }

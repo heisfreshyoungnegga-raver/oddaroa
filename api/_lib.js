@@ -1124,6 +1124,95 @@ function currentPickOdds(m, market, pick) {
   }
   return odds > 1 ? odds : null;
 }
+// Translate classic slip labels ('1X2' pick '1', 'Over/Under 2.5',
+// 'Handicap +0.5') into the API-Football names afPickWon speaks, so
+// one evaluator settles and reprices both books.
+function afEquivalent(market, pick) {
+  if (market === '1X2') {
+    const p = { '1': 'Home', 'X': 'Draw', '2': 'Away' }[pick];
+    return p ? ['Match Winner', p] : null;
+  }
+  if (market === 'Double Chance') {
+    const p = { '1X': 'Home/Draw', '12': 'Home/Away', 'X2': 'Draw/Away' }[pick];
+    return p ? ['Double Chance', p] : null;
+  }
+  if (/^Over\/Under \d+\.\d$/.test(market)) return ['Goals Over/Under', pick];
+  if (/^Handicap [+-]?\d+\.\d$/.test(market)) return ['Handicap Result', pick];
+  return [market, pick];
+}
+
+// Live in-play reprice (Prince, 2026-11-06): while a match is live,
+// a pending pick's price must MOVE with the score and the clock —
+// reducing or adding as the game turns. The feed carries pre-match
+// prices only, so the live price is modelled with the same Poisson
+// goal model the house builds its books with (total mu 2.7 split by
+// implied win strength, see expandOdds), re-based on the goals
+// already scored and the fraction of the match remaining, then
+// priced with the house margin convention ((1/p) / 1.05). Returns
+// null when the pick cannot be decided from the final score alone,
+// and the client then simply shows no live price.
+function livePriceFor(match, market, pick) {
+  if (!match || match.status !== 'live') return null;
+  const odds = fillOdds(match.odds || {});
+  if (!(odds.o1 > 1 && odds.ox > 1 && odds.o2 > 1)) return null;
+  const eq = afEquivalent(market, pick);
+  if (!eq) return null;
+  // Fit the goal means so the full-time Poisson grid reproduces
+  // the market's own implied 1X2 probabilities — the now price
+  // then starts at the placed price and moves only because the
+  // score and the clock moved it.
+  const raw = [1 / odds.o1, 1 / odds.ox, 1 / odds.o2];
+  const margin = raw[0] + raw[1] + raw[2];
+  const tH = raw[0] / margin, tD = raw[1] / margin, tA = raw[2] / margin;
+  const gridProbs = (lh, la) => {
+    const g = (lambda) => {
+      const arr = [Math.exp(-lambda)];
+      for (let k = 1; k <= 10; k++) arr.push(arr[k - 1] * lambda / k);
+      return arr;
+    };
+    const PH = g(lh), PA = g(la);
+    let h = 0, d = 0, a = 0;
+    for (let i = 0; i <= 10; i++) for (let j = 0; j <= 10; j++) {
+      const w = PH[i] * PA[j];
+      if (i > j) h += w; else if (i === j) d += w; else a += w;
+    }
+    return [h, d, a];
+  };
+  let muH = 1.35, muA = 1.35, bestErr = Infinity;
+  for (let muT = 1.9; muT <= 3.9; muT += 0.1) {
+    for (let share = 0.3; share <= 0.78; share += 0.02) {
+      const [h, d, a] = gridProbs(muT * share, muT * (1 - share));
+      const err = (h - tH) ** 2 + (d - tD) ** 2 + (a - tA) ** 2;
+      if (err < bestErr) { bestErr = err; muH = muT * share; muA = muT * (1 - share); }
+    }
+  }
+  let minute = match.minute != null ? Number(match.minute) : NaN;
+  if (!Number.isFinite(minute) && match.starts_at) minute = Math.floor((Date.now() - new Date(match.starts_at).getTime()) / 60000);
+  if (!Number.isFinite(minute)) minute = 45;
+  const r = Math.min(1, Math.max(0.01, (95 - minute) / 95));
+  const MAXG = 10;
+  const pmf = (lambda) => {
+    const arr = [Math.exp(-lambda)];
+    for (let k = 1; k <= MAXG; k++) arr.push(arr[k - 1] * lambda / k);
+    return arr;
+  };
+  const PH = pmf(muH * r), PA = pmf(muA * r);
+  const sh = Number(match.score_home) || 0, sa = Number(match.score_away) || 0;
+  const hH = match.score_home_ht != null ? Number(match.score_home_ht) : null;
+  const hA = match.score_away_ht != null ? Number(match.score_away_ht) : null;
+  let p = 0;
+  for (let i = 0; i <= MAXG; i++) for (let j = 0; j <= MAXG; j++) {
+    const w = afPickWon(eq[0], eq[1], sh + i, sa + j, hH, hA);
+    if (w === null) return null;
+    if (w) p += PH[i] * PA[j];
+  }
+  if (!(p > 0)) return null;
+  if (p <= 0.0002) return 500;
+  if (p > 0.995) return 1.01;
+  const v = Math.round(((1 / p) / 1.05) * 100) / 100;
+  return Math.min(500, Math.max(1.01, v));
+}
+
 function cashoutQuoteFor(bet, legs, marginPct) {
   if (!bet || bet.status !== 'open' || !Array.isArray(legs) || !legs.length) return null;
   let p = 1;
@@ -1177,4 +1266,4 @@ async function ensureBookingCode(userId, selections) {
   return null;
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode };
+module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };
