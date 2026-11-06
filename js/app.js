@@ -1131,12 +1131,12 @@ function momoPanelHTML() {
     '<form id="momoForm" class="stack">' +
     '<div class="amtrow">' + presets.map(a =>
       '<button type="button" class="amtchip' + (a === 300 ? ' on' : '') + '" data-amt="' + a + '">GHS ' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
-    '<label>Amount (GHS) <input type="number" id="mmAmt" min="1" max="5000" step="0.01" value="300" required></label>' +
+    '<label>Amount (GHS) <input type="number" id="mmAmt" min="300" max="5000" step="0.01" value="300" required></label>' +
     '<label>MoMo number <input type="tel" id="mmPhone" value="' + esc(phone) + '" required></label>' +
     '<label>Network <select id="mmNet"><option value="MTN">MTN Mobile Money</option><option value="TELECEL">Telecel Cash</option><option value="AIRTELTIGO">AT Money</option></select></label>' +
     '<p class="muted" id="mmFeeLine"></p>' +
     '<button class="btn gold big" type="submit">Send Payment Prompt</button></form>' +
-    '<p class="muted">A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
+    '<p class="muted">Minimum deposit is GHS 300. A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
 }
 
 function walletHTML() {
