@@ -943,6 +943,16 @@ function betsHTML() {
   return '<h2>Bets</h2>' +
     (state.myBets.length ? state.myBets.map(betCardHTML).join('') : '<p class="empty">No bets yet — add odds to your slip and place your first bet.</p>');
 }
+// Little red count on the bottom-nav Bets button: how many of the
+// user's staked bets are still open (Prince, 2026-11-06 — the same
+// badge the reference app puts on My Bets). Hidden when none are open.
+function syncBetsBadge() {
+  const el = $('#bnBetsCount');
+  if (!el) return;
+  const n = (state.myBets || []).filter(b => b.status === 'open').length;
+  el.textContent = n;
+  el.hidden = !n;
+}
 async function loadBets() {
   try {
     const data = await api('/bets/mine');
@@ -950,6 +960,7 @@ async function loadBets() {
     maybeCelebrateWin(data.bets);
   } catch (e) { state.myBets = []; }
   if (state.view === 'bets') render();
+  syncBetsBadge();
   // While any leg is live, keep the Bets view fresh on its own so
   // the score and clock move without the player refreshing.
   clearTimeout(state.betsTimer);
@@ -1643,6 +1654,7 @@ async function refreshUser() {
     if (e.code === 'not_logged_in') { state.user = null; state.token = ''; localStorage.removeItem('od_token'); }
   }
   syncHeader();
+  if (state.user) loadBets();
 }
 
 
@@ -1825,6 +1837,7 @@ document.addEventListener('click', e => {
     localStorage.removeItem('od_token');
     state.wallet = null;
     state.myBets = [];
+    syncBetsBadge();
     syncHeader();
     render();
     toast('Logged out');

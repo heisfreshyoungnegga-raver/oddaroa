@@ -1092,6 +1092,8 @@ button:disabled { opacity: .45; cursor: not-allowed; }
     background: #e01e26; color: #fff; border: 2px solid #0b0b0d; border-radius: 999px;
     font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 5px;
   }
+  .bn-badge[hidden] { display: none; }
+  .bn-bets { top: -2px; right: calc(50% - 21px); }
   .slipfab { display: none; }
   body { padding-bottom: 62px; }
 }
