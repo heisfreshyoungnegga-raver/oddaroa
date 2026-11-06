@@ -226,7 +226,7 @@ function afPickWon(market, pick, H, A, hH, hA) {
     case 'Clean Sheet - Home': return p === 'Yes' ? A === 0 : p === 'No' ? A > 0 : null;
     case 'Clean Sheet - Away': return p === 'Yes' ? H === 0 : p === 'No' ? H > 0 : null;
     case 'Handicap Result': return handicap(H, A, p);
-    case 'Exact Score': {
+    case 'Exact Score': case 'Correct Score': {
       const m = /^(\d+):(\d+)$/.exec(p);
       return m ? (H === Number(m[1]) && A === Number(m[2])) : null;
     }
@@ -765,7 +765,7 @@ function fullBookFromOdds(odds) {
   // Correct Score (full time + first half)
   const csPairs = [];
   for (let h = 0; h <= 5; h++) for (let a = 0; a <= 5; a++) csPairs.push([h + ':' + a, PH[h] * PA[a]]);
-  add(10, 'Exact Score', csPairs);
+  add(10, 'Correct Score', csPairs);
   const csHtPairs = [];
   for (let h = 0; h <= 3; h++) for (let a = 0; a <= 3; a++) csHtPairs.push([h + ':' + a, H1[h] * A1[a]]);
   add(31, 'Correct Score - First Half', csHtPairs);

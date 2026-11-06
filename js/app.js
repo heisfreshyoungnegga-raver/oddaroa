@@ -78,6 +78,9 @@ function money(n) { return 'GHS ' + Number(n || 0).toFixed(2); }
 // 2026-11-05): hidden shows a masked amount. Transaction history
 // amounts are records, not "the balance", and stay visible.
 function balMoney(n) { return state.hideBal ? 'GHS ••••' : money(n); }
+// The market's proper name is Correct Score — the feed's stored
+// name 'Exact Score' must never reach the screen (Prince, 2026-11-06).
+function mktName(n) { return n === 'Exact Score' ? 'Correct Score' : n; }
 // Icons: EYE_OPEN / EYE_SHUT are shared with the password eye
 // (declared with the auth wiring below; same visible/hidden sense).
 function eyeBtnHTML() {
@@ -902,7 +905,7 @@ function betCardHTML(b) {
       res = '<span class="legres">' + esc(l.result || '') + '</span>';
     }
     return '<div class="leg"><span>' + esc(l.home_team || '') + ' vs ' + esc(l.away_team || '') + '</span>' +
-      '<span>' + esc(l.pick) + ' · ' + esc(l.market) + ' · <b>' + Number(l.odds).toFixed(2) + '</b></span>' +
+      '<span>' + esc(l.pick) + ' · ' + esc(mktName(l.market)) + ' · <b>' + Number(l.odds).toFixed(2) + '</b></span>' +
       '<span class="legstate">' + res + '</span></div>';
   }).join('');
   return '<div class="card"><div class="card-head"><b>' + esc(b.code) + '</b>' + statusChip(b.status) + '</div>' +
@@ -1122,12 +1125,12 @@ function verifyHTML() {
 function bookingHTML() {
   return '<h2>Booking Codes</h2>' +
     '<div class="card"><h3>Generate from your betslip</h3>' +
-    '<p class="muted">A slip code packs your current selections into one code that recreates them on any device. ' +
+    '<p class="muted">Your selections are saved behind one 5-digit booking code that recreates this slip on any device. ' +
     (state.slip.size ? state.slip.size + ' selection(s) on your slip.' : 'Your slip is empty — add odds first.') + '</p>' +
     '<button class="btn gold big" data-gen-code>Generate Slip Code</button>' +
     (state.slipCode ? '<p class="bigcode">' + esc(state.slipCode) + '</p>' : '') + '</div>' +
     '<div class="card"><h3>Load a code</h3><form id="bookingLoadForm" class="stack">' +
-    '<label>Slip code <input type="text" id="loadCode" placeholder="Paste a slip code" required></label>' +
+    '<label>Booking code <input type="text" id="loadCode" inputmode="numeric" placeholder="Enter the 5-digit code" required></label>' +
     '<button class="btn gold big" type="submit">Load Code</button></form></div>';
 }
 function promosHTML() {
@@ -1285,16 +1288,27 @@ function comboOddsSum(sels, k) {
   }
   return sum;
 }
-function genSlipCode() {
-  const payload = [...state.slip.values()].map(s => ({ m: s.matchId, k: s.market, p: s.pick }));
-  return btoa(unescape(encodeURIComponent(JSON.stringify(payload)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+// Booking codes (Prince, 2026-11-06): the slip is stored server-side
+// behind a 5-digit code. The old base64 blob is gone from generation;
+// legacy blob codes can still be loaded below.
+async function bookSlip() {
+  const selections = [...state.slip.values()].map(s => ({ match_id: s.matchId, market: s.market, pick: s.pick }));
+  const data = await api('/bets/book', { method: 'POST', body: { selections } });
+  state.slipCode = data.code;
+  return data.code;
 }
 // Load a slip code into the slip at CURRENT prices. Full-book picks
 // resolve through priceForPick once the match's book is loaded — the
 // old loader only knew the classic markets and silently dropped the
 // rest of the slip.
 async function applySlipCode(raw) {
-  const payload = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))));
+  let payload;
+  if (/^\d{5}$/.test(raw)) {
+    const data = await api('/bets/load-code', { method: 'POST', body: { code: raw } });
+    payload = (data.selections || []).map(x => ({ m: x.match_id, k: x.market, p: x.pick }));
+  } else {
+    payload = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))));
+  }
   await Promise.all([...new Set(payload.map(i => i.m))].map(id => loadMatchFull(id)));
   let added = 0;
   state.slip.clear();
@@ -1346,7 +1360,7 @@ function renderSlip() {
   body.innerHTML = tabs + entries.map(([key, s]) =>
     '<div class="sel"><div class="s-top"><span class="s-match">' + esc(s.matchLabel) + '</span>' +
     '<button class="rm" data-rm="' + esc(key) + '">Remove</button></div>' +
-    '<span class="s-pick">' + esc(s.league) + ' \u00B7 ' + esc(s.market) + ' \u00B7 ' + esc(s.pick) + '</span>' +
+    '<span class="s-pick">' + esc(s.league) + ' \u00B7 ' + esc(mktName(s.market)) + ' \u00B7 ' + esc(s.pick) + '</span>' +
     '<span class="s-odd">' + s.odd.toFixed(2) + '</span>' +
     (slipType === 'single'
       ? '<span class="s-stake">Stake (GHS) <input type="number" class="sstake" data-sstake="' + esc(key) + '" min="1" value="' + (singleStakes[key] || 10) + '"></span>'
@@ -1422,10 +1436,12 @@ function bindSlip() {
   const pb = $('#placeBet');
   if (pb) pb.addEventListener('click', placeBet);
   const bb = $('#slipBookBtn');
-  if (bb) bb.addEventListener('click', () => {
-    state.slipCode = genSlipCode();
-    renderSlip();
-    toast('Slip code generated \u2014 share it to recreate this slip anywhere');
+  if (bb) bb.addEventListener('click', async () => {
+    try {
+      await bookSlip();
+      renderSlip();
+      toast('Your booking code is ' + state.slipCode + ' \u2014 anyone can load this slip with it');
+    } catch (e) { toast('Booking code could not be created. Try again.'); }
   });
   const lb = $('#slipLoadBtn');
   if (lb) lb.addEventListener('click', async () => {
@@ -1786,9 +1802,8 @@ document.addEventListener('click', e => {
   if (e.target.closest('[data-open-auth]')) { openAuth('login'); return; }
   if (e.target.closest('[data-gen-code]')) {
     if (!state.slip.size) { toast('Add at least one odd to your slip first'); return; }
-    state.slipCode = genSlipCode();
-    render();
-    toast('Slip code generated — share it to recreate this slip anywhere');
+    bookSlip().then(() => { render(); toast('Your booking code is ' + state.slipCode + ' — anyone can load this slip with it'); })
+      .catch(() => toast('Booking code could not be created. Try again.'));
     return;
   }
   const wsec = e.target.closest('[data-wsec]');

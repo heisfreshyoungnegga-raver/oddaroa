@@ -147,7 +147,7 @@ function fullFromAf(bm) {
     const values = (bet.values || [])
       .map(v => ({ value: String(v.value), odd: Math.round(Number(v.odd) * 100) / 100 }))
       .filter(v => Number.isFinite(v.odd) && v.odd > 1);
-    if (values.length) full.push({ id: bet.id, name: bet.name, values });
+    if (values.length) full.push({ id: bet.id, name: bet.name === 'Exact Score' ? 'Correct Score' : bet.name, values });
   }
   return full;
 }

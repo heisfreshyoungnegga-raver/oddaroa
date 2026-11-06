@@ -5,6 +5,8 @@ const handlers = {
   mine: require('../_handlers/bets/mine'),
   verify: require('../_handlers/bets/verify'),
   winners: require('../_handlers/bets/winners'),
+  book: require('../_handlers/bets/book'),
+  'load-code': require('../_handlers/bets/load-code'),
 };
 module.exports = (req, res) => {
   const action = (req.query && req.query.action) || String(req.url || '').split('?')[0].split('/').pop();
