@@ -1136,12 +1136,12 @@ function verifyHTML() {
 function bookingHTML() {
   return '<h2>Booking Codes</h2>' +
     '<div class="card"><h3>Generate from your betslip</h3>' +
-    '<p class="muted">Your selections are saved behind one 5-digit booking code that recreates this slip on any device. ' +
+    '<p class="muted">Your selections are saved behind one 5-character booking code that recreates this slip on any device. ' +
     (state.slip.size ? state.slip.size + ' selection(s) on your slip.' : 'Your slip is empty — add odds first.') + '</p>' +
     '<button class="btn gold big" data-gen-code>Generate Slip Code</button>' +
     (state.slipCode ? '<p class="bigcode">' + esc(state.slipCode) + '</p>' : '') + '</div>' +
     '<div class="card"><h3>Load a code</h3><form id="bookingLoadForm" class="stack">' +
-    '<label>Booking code <input type="text" id="loadCode" inputmode="numeric" placeholder="Enter the 5-digit code" required></label>' +
+    '<label>Booking code <input type="text" id="loadCode" inputmode="numeric" placeholder="Enter the code, e.g. X5E8L" required></label>' +
     '<button class="btn gold big" type="submit">Load Code</button></form></div>';
 }
 function promosHTML() {
@@ -1314,8 +1314,8 @@ async function bookSlip() {
 // rest of the slip.
 async function applySlipCode(raw) {
   let payload;
-  if (/^\d{5}$/.test(raw)) {
-    const data = await api('/bets/load-code', { method: 'POST', body: { code: raw } });
+  if (/^[A-Za-z0-9]{5}$/.test(raw)) {
+    const data = await api('/bets/load-code', { method: 'POST', body: { code: raw.toUpperCase() } });
     payload = (data.selections || []).map(x => ({ m: x.match_id, k: x.market, p: x.pick }));
   } else {
     payload = JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))));
