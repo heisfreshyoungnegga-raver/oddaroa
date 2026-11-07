@@ -1,4 +1,4 @@
-const { sql, send, guard, requireAdmin, ensureAdminTables, ensureInviteCode } = require('../../_lib');
+const { sql, send, guard, requireAdmin, ensureAdminTables, ensureInviteCode, getSettings } = require('../../_lib');
 
 // Every admin's own dashboard: their user invite link, the users they
 // brought in, and their commission money — earned so far, already paid
@@ -14,7 +14,7 @@ module.exports = guard(async (req, res) => {
   if (!myCode) return send(res, 404, { error: 'account_not_found' });
   const me = [{ invite_code: myCode }];
 
-  const [invited, totals, recent] = await Promise.all([
+  const [invited, totals, recent, daily, withDep] = await Promise.all([
     sql(`select u.id, u.phone, u.display_name, u.created_at,
                 coalesce((select sum(t.amount_ghs) from wallet_transactions t
                           where t.user_id = u.id and t.kind = 'deposit' and t.status = 'completed'), 0) as deposits_ghs
@@ -25,8 +25,22 @@ module.exports = guard(async (req, res) => {
          from commissions where earner_id = $1`, [auth.uid]),
     sql(`select c.amount_ghs, c.pct, c.basis_ghs, c.paid_at, c.created_at, u.phone as from_phone
          from commissions c join users u on u.id = c.source_user_id
-         where c.earner_id = $1 order by c.created_at desc limit 20`, [auth.uid])
+         where c.earner_id = $1 order by c.created_at desc limit 20`, [auth.uid]),
+    // Daily earnings history (Prince, 2026-11-07, from his reference
+    // screenshot): commission grouped by Accra day, newest first —
+    // today's total rolls into this history at day rollover and the
+    // balance itself is never reset.
+    sql(`select (created_at at time zone 'Africa/Accra')::date::text as day,
+                count(*)::int as deposits_n,
+                coalesce(sum(amount_ghs), 0) as earned_ghs
+         from commissions where earner_id = $1
+         group by day order by day desc limit 30`, [auth.uid]),
+    sql(`select count(*)::int as n from users u
+         where u.invited_by = $1
+           and exists (select 1 from wallet_transactions t
+                       where t.user_id = u.id and t.kind = 'deposit' and t.status = 'completed')`, [auth.uid])
   ]);
+  const settings = await getSettings(['admin_commission_pct']);
   const myReqRows = await sql(
     `select id, amount_ghs, created_at from commission_payout_requests
      where earner_id = $1 and status = 'pending'`, [auth.uid]);
@@ -41,7 +55,10 @@ module.exports = guard(async (req, res) => {
       pending_ghs: Number(t.pending || 0)
     },
     recent: recent.map(r => ({ ...r, amount_ghs: Number(r.amount_ghs), basis_ghs: Number(r.basis_ghs), pct: Number(r.pct) })),
-    payout_request: myReqRows.length ? { ...myReqRows[0], amount_ghs: Number(myReqRows[0].amount_ghs) } : null
+    payout_request: myReqRows.length ? { ...myReqRows[0], amount_ghs: Number(myReqRows[0].amount_ghs) } : null,
+    daily_earnings: daily.map(r => ({ date: r.day, deposits_n: Number(r.deposits_n), earned_ghs: Number(r.earned_ghs) })),
+    referrals_with_deposit: withDep.length ? Number(withDep[0].n) : 0,
+    commission_pct: Number(settings.admin_commission_pct || 0)
   };
 
   if (auth.role === 'super_admin') {

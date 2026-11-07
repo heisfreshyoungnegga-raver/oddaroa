@@ -215,6 +215,29 @@ function payoutCardHTML() {
       ? '<p class="muted">You have <b>' + money(c.pending_ghs) + '</b> waiting. Request a payout and the super admin will settle it into your wallet balance, ready to withdraw from the site Wallet.</p><button class="btn gold" data-request-payout>Request Payout</button>'
       : '<p class="muted">Nothing waiting right now. When users you invited deposit, your commission gathers here and you can request a payout.</p>') + '</div>';
 }
+// Daily earnings (Prince, 2026-11-07, his reference screenshot):
+// today's commission on top, then what was earned each past day —
+// the day rolls into history at midnight and the balance is never
+// reset. Shared by the Dashboard referral centre and My Earnings.
+function dayLabel(dateStr, todayStr) {
+  if (dateStr === todayStr) return 'Today';
+  const t = new Date(todayStr + 'T00:00:00Z');
+  t.setUTCDate(t.getUTCDate() - 1);
+  if (dateStr === t.toISOString().slice(0, 10)) return 'Yesterday';
+  return new Date(dateStr + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+function dailyEarningsHTML(d) {
+  const days = (d && d.daily_earnings) || [];
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Accra' });
+  const todayRow = days.find(x => x.date === todayStr);
+  const rows = days.map(x =>
+    '<div class="txrow"><div><b>' + dayLabel(x.date, todayStr) + '</b><div class="muted">' + x.deposits_n + (x.deposits_n === 1 ? ' deposit' : ' deposits') + '</div></div>' +
+    '<div><b>+' + money(x.earned_ghs) + '</b></div></div>').join('');
+  return '<div class="card"><h3>Daily earnings</h3>' +
+    '<p class="muted">What you earned each day. Today\'s total rolls into history when the next day starts — your balance is never reset.</p>' +
+    '<div class="card-row"><span>Today\'s commission</span><b>' + (todayRow ? '+' + money(todayRow.earned_ghs) + ' · ' + todayRow.deposits_n + (todayRow.deposits_n === 1 ? ' deposit' : ' deposits') + ' today' : '0 deposits today') + '</b></div>' +
+    (rows || '<p class="empty">No earnings yet.</p>') + '</div>';
+}
 function referralCardHTML() {
   const d = state.myDash;
   if (!d) return '';
@@ -227,8 +250,11 @@ function referralCardHTML() {
     '<button class="btn gold" data-copy="' + esc(siteLink(d.invite_path)) + '">Copy Link</button></div>' +
     '<div class="card-row"><span>Users referred</span><b>' + (d.invited_users || []).length + '</b></div>' +
     '<div class="card-row"><span>Commission earned</span><b>' + money((d.commissions || {}).earned_ghs || 0) + '</b></div>' +
-    '<div class="card-row"><span>Pending payout</span><b>' + money((d.commissions || {}).pending_ghs || 0) + '</b></div></div>' +
+    '<div class="card-row"><span>Pending payout</span><b>' + money((d.commissions || {}).pending_ghs || 0) + '</b></div>' +
+    '<div class="card-row"><span>Referrals with a deposit</span><b>' + (d.referrals_with_deposit || 0) + '</b></div>' +
+    '<p class="muted">You earn ' + (d.commission_pct || 0) + '% commission on every deposit from each referred user.</p></div>' +
     payoutCardHTML() +
+    dailyEarningsHTML(d) +
     '<div class="card"><h3>Users you referred</h3>' + (invited || '<p class="empty">No referred users yet — share your link.</p>') + '</div>';
   if (superTools() && (d.admins || []).length) {
     const rows = d.admins.map(a =>
@@ -374,8 +400,9 @@ function earningsHTML() {
     '<p class="muted">Share this link — every user who registers through it is attributed to you, and you earn the commission rate the super admin sets on their deposits.</p>' +
     '<div class="manualbox"><div class="mannum" style="font-size:17px; letter-spacing:0">' + esc(siteLink(d.invite_path)) + '</div>' +
     '<button class="btn gold" data-copy="' + esc(siteLink(d.invite_path)) + '">Copy Link</button></div></div>' +
-    '<div class="stats">' + stat('Commission earned', money(c.earned_ghs)) + stat('Paid out', money(c.paid_ghs)) + stat('Pending payout', money(c.pending_ghs)) + stat('Users invited', (d.invited_users || []).length) + '</div>' +
+    '<div class="stats">' + stat('Commission earned', money(c.earned_ghs)) + stat('Paid out', money(c.paid_ghs)) + stat('Pending payout', money(c.pending_ghs)) + stat('Users invited', (d.invited_users || []).length) + stat('Referrals with a deposit', d.referrals_with_deposit || 0) + '</div>' +
     payoutCardHTML() +
+    dailyEarningsHTML(d) +
     '<div class="card"><h3>Users you invited</h3>' + (invited || '<p class="empty">No invited users yet — share your link.</p>') + '</div>' +
     '<div class="card"><h3>Recent commissions</h3>' + (recent || '<p class="empty">No commissions yet. They land here when an invited user\'s deposit is confirmed.</p>') + '</div>';
 }
