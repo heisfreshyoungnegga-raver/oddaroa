@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAdmin, ensureMatchColumns, isCustomMatch, customMatchState, fillOdds, fullBookFromOdds } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireAdmin, ensureMatchColumns, isCustomMatch, customMatchState, fillOdds, fullBookFromOdds } = require('../../_lib');
 
 // Admin match manager: list all matches, create new ones, and update
 // live state (status, minute, score). Custom (featured) matches carry
@@ -15,8 +15,8 @@ module.exports = guard(async (req, res) => {
     // would fall off the end and vanish from their own section.
     const onlyCreated = req.query && String(req.query.created || '') === '1';
     const rows = onlyCreated
-      ? await sql("select * from matches where external_ref like 'custom:%' or external_ref is null order by starts_at desc limit 200")
-      : await sql('select * from matches order by starts_at desc limit 200');
+      ? await msql("select * from matches where external_ref like 'custom:%' or external_ref is null order by starts_at desc limit 200")
+      : await msql('select * from matches order by starts_at desc limit 200');
     const now = new Date();
     const out = rows.map(m => {
       if (!isCustomMatch(m)) return m;
@@ -32,7 +32,7 @@ module.exports = guard(async (req, res) => {
     // Manual matches get the same derived full book as featured
     // ones, priced from the completed 1X2 line (Prince, 2026-11-05).
     const full = fullBookFromOdds(fillOdds(odds || {}));
-    const rows = await sql(
+    const rows = await msql(
       'insert into matches (league, home_team, away_team, starts_at, odds, odds_full) values ($1, $2, $3, $4, $5::jsonb, $6::jsonb) returning *',
       [league, home_team, away_team, starts_at, JSON.stringify(odds || {}), full.length ? JSON.stringify(full) : null]
     );
@@ -42,7 +42,7 @@ module.exports = guard(async (req, res) => {
     const { id, status, minute, score_home, score_away, odds } = body;
     // A price change re-derives the full book from the new 1X2 line.
     const full = odds ? fullBookFromOdds(fillOdds(odds)) : null;
-    const rows = await sql(
+    const rows = await msql(
       `update matches set
          status = coalesce($2, status),
          minute = coalesce($3, minute),

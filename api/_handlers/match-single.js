@@ -1,4 +1,4 @@
-const { sql, send, guard, fillOdds, isCustomMatch, customMatchState, ensureMatchColumns } = require('../_lib');
+const { msql: sql, send, guard, fillOdds, isCustomMatch, customMatchState, ensureMatchColumns } = require('../_lib');
 
 // One match, in full: the list endpoint ships a has_full flag and
 // keeps the heavy market book out of the list payload; the details

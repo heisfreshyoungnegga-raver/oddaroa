@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireSuperAdmin, ensureMatchColumns, isCustomMatch, customMatchState, expandOdds, fullBookFromOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireSuperAdmin, ensureMatchColumns, isCustomMatch, customMatchState, expandOdds, fullBookFromOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
 
 // Super admin only: edit a game HE created (a featured/custom match
 // or a manual one) — Prince, 2026-11-05. Names, league, crests and
@@ -13,7 +13,7 @@ module.exports = guard(async (req, res) => {
   const body = await readBody(req);
   const id = String(body.id || '');
   if (!id) return send(res, 400, { error: 'match_required' });
-  const rows = await sql('select * from matches where id = $1', [id]);
+  const rows = await msql('select * from matches where id = $1', [id]);
   if (!rows.length) return send(res, 404, { error: 'match_not_found' });
   const m = rows[0];
   const custom = isCustomMatch(m);
@@ -26,7 +26,7 @@ module.exports = guard(async (req, res) => {
     if (cnt[0].n > 0) {
       return send(res, 409, { error: 'match_has_bets', detail: 'This game has ' + cnt[0].n + ' bet(s) on it — postpone it instead. Deleting would break those bet records.' });
     }
-    await sql('delete from matches where id = $1', [id]);
+    await msql('delete from matches where id = $1', [id]);
     return send(res, 200, { ok: true, deleted: true });
   }
   if (body.action === 'postpone') {
@@ -39,7 +39,7 @@ module.exports = guard(async (req, res) => {
     // stopped; the derived clock respects the stored status.
     const snapH = custom ? st.score_home : m.score_home;
     const snapA = custom ? st.score_away : m.score_away;
-    const upd = await sql("update matches set status = 'postponed', score_home = $2, score_away = $3 where id = $1 returning *", [id, snapH, snapA]);
+    const upd = await msql("update matches set status = 'postponed', score_home = $2, score_away = $3 where id = $1 returning *", [id, snapH, snapA]);
     return send(res, 200, { ok: true, match: upd[0] });
   }
   let kickedOff, finished;
@@ -96,6 +96,6 @@ module.exports = guard(async (req, res) => {
   }
   if (!sets.length) return send(res, 400, { error: 'nothing_to_update' });
   vals.push(id);
-  const upd = await sql('update matches set ' + sets.join(', ') + ' where id = $' + vals.length + ' returning *', vals);
+  const upd = await msql('update matches set ' + sets.join(', ') + ' where id = $' + vals.length + ' returning *', vals);
   send(res, 200, { match: upd[0] });
 });

@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth, getSettings, cashoutQuoteFor } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, getSettings, cashoutQuoteFor, matchesById } = require('../../_lib');
 
 // Cashout (Prince, 2026-11-05): an open ticket can be sold back to
 // the house for its current mathematical value — potential payout
@@ -18,12 +18,12 @@ module.exports = guard(async (req, res) => {
   if (!bets.length) return send(res, 404, { error: 'bet_not_found' });
   const bet = bets[0];
   if (bet.status !== 'open') return send(res, 409, { error: 'bet_not_open' });
-  const legs = await sql(
-    `select s.market, s.pick, s.result, to_jsonb(m) as match
-     from bet_selections s join matches m on m.id = s.match_id
-     where s.bet_id = $1`,
+  const selLegs = await sql(
+    'select match_id, market, pick, result from bet_selections where bet_id = $1',
     [bet.id]
   );
+  const legMatches = await matchesById(selLegs.map(r => r.match_id)).catch(() => new Map());
+  const legs = selLegs.map(r => ({ market: r.market, pick: r.pick, result: r.result, match: legMatches.get(r.match_id) || null }));
   const settings = await getSettings(['cashout_margin_pct']);
   const quote = cashoutQuoteFor(bet, legs, settings.cashout_margin_pct);
   if (quote === null) return send(res, 400, { error: 'cashout_unavailable' });

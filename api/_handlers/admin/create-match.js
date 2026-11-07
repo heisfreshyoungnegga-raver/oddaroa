@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, ensureMatchColumns, expandOdds, fullBookFromOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, ensureMatchColumns, expandOdds, fullBookFromOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
 
 // Super admin only: create a "featured" match that plays like a real
 // one. Two ways in (Prince's design, 2026-11-03):
@@ -116,7 +116,7 @@ module.exports = guard(async (req, res) => {
     }
     if (byName.size) oddsFull = derivedFull.map(b => byName.get(b.name) || b);
   }
-  const rows = await sql(
+  const rows = await msql(
     `insert into matches (league, home_team, away_team, starts_at, odds, external_ref, goal_events, home_logo, away_logo, ht_stoppage, ft_stoppage, odds_full, betting_locked)
      values ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb, $13) returning *`,
     [leagueName.slice(0, 80), home.slice(0, 80), away.slice(0, 80),

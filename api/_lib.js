@@ -20,7 +20,21 @@ function missingConfig() {
 // (which carries the DB password) is sent as a header to the database
 // host only, and never logged.
 async function sql(query, params = []) {
-  const { databaseUrl } = config();
+  return runSql(config().databaseUrl, query, params);
+}
+// Matches live in their OWN Neon project (Prince, 2026-11-07): the
+// Free plan's 5 GB monthly transfer allowance is PER PROJECT, and
+// the match catalog — hundreds of rows with full odds books, swept
+// every two minutes and read by every visitor — burned the core
+// project's whole allowance in four days and got its compute
+// suspended. The catalog is ephemeral feed data, so it moved to a
+// fresh project (MATCHES_DATABASE_URL) with its own allowance,
+// while users, wallets and bets stay on the core project. Until the
+// variable is set, msql IS sql and nothing changes.
+async function msql(query, params = []) {
+  return runSql(process.env.MATCHES_DATABASE_URL || config().databaseUrl, query, params);
+}
+async function runSql(databaseUrl, query, params = []) {
   const host = new URL(databaseUrl.replace(/^postgres(ql)?:\/\//, 'https://')).host;
   const res = await fetch(`https://${host}/sql`, {
     method: 'POST',
@@ -454,7 +468,7 @@ function ensureAdminTables() {
         decided_by uuid references users (id)
       )`);
       await sql(`create unique index if not exists cpr_open_idx on commission_payout_requests (earner_id) where status = 'pending'`);
-      await sql(`alter table matches add column if not exists goal_events jsonb not null default '[]'::jsonb`);
+      await msql(`alter table matches add column if not exists goal_events jsonb not null default '[]'::jsonb`);
       await sql(`insert into operator_settings (key, value) values
         ('gateway_enabled', '1'), ('payouts_frozen', '0'),
         ('admin_commission_pct', '0'), ('user_cashback_pct', '0'),
@@ -982,17 +996,39 @@ let matchColsReady = null;
 function ensureMatchColumns() {
   if (!matchColsReady) {
     matchColsReady = (async () => {
-      await sql(`alter table matches add column if not exists ht_stoppage int not null default 0`);
-      await sql(`alter table matches add column if not exists ft_stoppage int not null default 0`);
-      await sql(`alter table matches add column if not exists betting_locked boolean not null default false`);
+      await msql(`alter table matches add column if not exists ht_stoppage int not null default 0`);
+      await msql(`alter table matches add column if not exists ft_stoppage int not null default 0`);
+      await msql(`alter table matches add column if not exists betting_locked boolean not null default false`);
       // 'postponed' joined the status vocabulary with the created-
       // games lifecycle (2026-11-05); the original CHECK only knew
       // upcoming/live/finished and rejected postponed games.
-      await sql(`alter table matches drop constraint if exists matches_status_check`);
-      await sql(`alter table matches add constraint matches_status_check check (status in ('upcoming', 'live', 'finished', 'postponed'))`);
+      await msql(`alter table matches drop constraint if exists matches_status_check`);
+      await msql(`alter table matches add constraint matches_status_check check (status in ('upcoming', 'live', 'finished', 'postponed'))`);
     })();
   }
   return matchColsReady;
+}
+
+/* Fetch match rows by id from the catalog DB. Ids the catalog does
+   not know yet (open bets placed before the 2026-11-07 split, whose
+   matches still live in the core project until the December bridge
+   copies them over) fall back to the core table, whose static facts
+   for those matches are correct; the fallback is skipped while the
+   core is suspended. */
+async function matchesById(ids) {
+  const map = new Map();
+  const uniq = [...new Set((ids || []).filter(Boolean))];
+  if (!uniq.length) return map;
+  const rows = await msql('select * from matches where id = any($1::uuid[])', [uniq]);
+  for (const r of rows) map.set(r.id, r);
+  const missing = uniq.filter(id => !map.has(id));
+  if (missing.length && process.env.MATCHES_DATABASE_URL) {
+    try {
+      const old = await sql('select * from matches where id = any($1::uuid[])', [missing]);
+      for (const r of old) if (!map.has(r.id)) map.set(r.id, r);
+    } catch (e) { /* core suspended: those legs hydrate after the bridge */ }
+  }
+  return map;
 }
 
 /* ---------------- Bet settlement (shared) ----------------
@@ -1004,7 +1040,7 @@ function ensureMatchColumns() {
 async function settleMatch(matchId, home, away) {
   // Half-time score decides the full-book half markets; without it
   // those selections stay pending instead of being guessed.
-  const htRow = await sql('select score_home_ht, score_away_ht, external_ref, goal_events from matches where id = $1', [matchId]);
+  const htRow = await msql('select score_home_ht, score_away_ht, external_ref, goal_events from matches where id = $1', [matchId]);
   let htH = htRow.length ? htRow[0].score_home_ht : null;
   let htA = htRow.length ? htRow[0].score_away_ht : null;
   if ((htH === null || htH === undefined) && htRow.length && isCustomMatch(htRow[0])) {
@@ -1071,15 +1107,29 @@ async function maybeAutoSettle() {
   const nowMs = Date.now();
   if (nowMs - lastAutoSettle < 60000) return;
   lastAutoSettle = nowMs;
-  const rows = await sql(
-    `select m.id, m.score_home, m.score_away, m.external_ref, m.starts_at, m.status, m.goal_events
-     from matches m
-     where (exists (select 1 from bet_selections s where s.match_id = m.id and s.result = 'pending')
-            and m.status = 'finished' and m.score_home is not null and m.score_away is not null)
-        or (m.external_ref like 'custom:%' and m.status <> 'finished'
-            and m.starts_at + make_interval(mins => 106 + coalesce(m.ht_stoppage, 0) + coalesce(m.ft_stoppage, 0)) < now())
+  // Split-DB form (2026-11-07): pending selections live in the core
+  // project, match rows in the catalog project — fetch each side
+  // from its own database and join in memory.
+  const pend = await sql("select distinct match_id from bet_selections where result = 'pending' limit 200");
+  const pendIds = pend.map(r => r.match_id);
+  let rows = [];
+  if (pendIds.length) {
+    rows = await msql(
+      `select id, score_home, score_away, external_ref, starts_at, status, goal_events, ht_stoppage, ft_stoppage
+       from matches
+       where id = any($1::uuid[]) and status = 'finished' and score_home is not null and score_away is not null
+       limit 5`,
+      [pendIds]
+    );
+  }
+  const customs = await msql(
+    `select id, score_home, score_away, external_ref, starts_at, status, goal_events, ht_stoppage, ft_stoppage
+     from matches
+     where external_ref like 'custom:%' and status <> 'finished'
+       and starts_at + make_interval(mins => 106 + coalesce(ht_stoppage, 0) + coalesce(ft_stoppage, 0)) < now()
      limit 5`
   );
+  rows = rows.concat(customs);
   for (const m of rows) {
     try {
       if (isCustomMatch(m)) {
@@ -1090,7 +1140,7 @@ async function maybeAutoSettle() {
         // exact score the super admin scripted — including matches
         // nobody bet on, which the old exists() filter skipped
         // forever (same fix as PrimeStake, 2026-11-05).
-        await sql("update matches set status = 'finished', score_home = $2, score_away = $3 where id = $1",
+        await msql("update matches set status = 'finished', score_home = $2, score_away = $3 where id = $1",
           [m.id, st.final_home, st.final_away]);
       } else {
         await settleMatch(m.id, Number(m.score_home), Number(m.score_away));
@@ -1266,4 +1316,4 @@ async function ensureBookingCode(userId, selections) {
   return null;
 }
 
-module.exports = { sql, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };

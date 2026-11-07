@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, verifyToken, ensureBookingCode } = require('../../_lib');
+const { msql, readBody, send, guard, verifyToken, ensureBookingCode } = require('../../_lib');
 
 // Booking codes (Prince, 2026-11-06): a betslip is stored server-side
 // behind a short 5-character mixed code, bookmaker-style. The old client-side
@@ -16,7 +16,7 @@ module.exports = guard(async (req, res) => {
     return send(res, 400, { error: 'invalid_selections' });
   }
   const ids = [...new Set(clean.map(s => s.match_id))];
-  const found = await sql('select id from matches where id = any($1::uuid[])', [ids]);
+  const found = await msql('select id from matches where id = any($1::uuid[])', [ids]);
   if (found.length !== ids.length) return send(res, 400, { error: 'unknown_match' });
   // One unique code per account + games (Prince, 2026-11-06): a
   // signed-in player's code is bound to their account, so booking

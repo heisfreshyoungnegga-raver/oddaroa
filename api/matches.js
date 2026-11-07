@@ -1,4 +1,4 @@
-const { sql, send, guard, isCustomMatch, customMatchState, fillOdds, maybeAutoSettle, ensureMatchColumns } = require('./_lib');
+const { msql, send, guard, isCustomMatch, customMatchState, fillOdds, maybeAutoSettle, ensureMatchColumns } = require('./_lib');
 const singleMatch = require('./_handlers/match-single');
 const { maybeRefreshLive } = require('./_espn');
 const { afEnabled, maybeRefreshAf } = require('./_apifootball');
@@ -65,6 +65,11 @@ function sameMatch(p, e) {
 // from kickoff time on every read, so they play like real matches with
 // no one touching them. A featured match that has run its 95 minutes
 // stays visible as a result for 3 hours, then drops off.
+// 20-second response cache: the catalog is identical for every
+// visitor, so repeat views inside the window cost no database
+// transfer at all. The feed refreshes above still run on their own
+// gates, so the cache never delays a score by more than its window.
+let listCache = { at: 0, body: null };
 module.exports = guard(async (req, res) => {
   // An id query means the details page wants ONE match's full book:
   // /api/match rewrites here (vercel.json) and Railway mounts this
@@ -84,12 +89,18 @@ module.exports = guard(async (req, res) => {
   if (af) await maybeRefreshAf().catch(() => {});
   await ensureMatchColumns().catch(() => {});
   await maybeRefreshLive().catch(() => {});
+  if (listCache.body && Date.now() - listCache.at < 20000) return send(res, 200, listCache.body);
   // Settle bets on matches the feeds have just finished (throttled
   // inside; a failure here must never break the list either).
   await maybeAutoSettle().catch(() => {});
-  const rows = await sql(
+  // The list must NOT pull odds_full: the ~38-market book of every
+  // match crossed the database wire on every page view and was then
+  // thrown away before responding — that firehose is what exhausted
+  // the Free plan's transfer allowance (2026-11-07). A boolean says
+  // whether a book exists; the detail endpoint fetches it on demand.
+  const rows = await msql(
     `select id, league, home_team, away_team, starts_at, status, minute,
-            score_home, score_away, odds, odds_full, home_logo, away_logo, external_ref, goal_events,
+            score_home, score_away, odds, (odds_full is not null) as has_full, home_logo, away_logo, external_ref, goal_events,
             ht_stoppage, ft_stoppage, betting_locked
      from matches
      where status in ('live', 'upcoming')
@@ -105,9 +116,9 @@ module.exports = guard(async (req, res) => {
     if (isCustomMatch(m)) {
       const st = customMatchState(m, now);
       if (st.status === 'finished' && now - new Date(m.starts_at) > (105 + (m.ht_stoppage || 0) + (m.ft_stoppage || 0) + 180) * 60000) continue;
-      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.odds_full, odds_full: undefined } });
+      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.has_full } });
     } else {
-      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.odds_full, odds_full: undefined } });
+      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.has_full } });
     }
   }
   // De-duplicate across feeds: an ESPN row that is the same real
@@ -124,5 +135,6 @@ module.exports = guard(async (req, res) => {
       || rank(a.row) - rank(b.row)
       || new Date(a.row.starts_at) - new Date(b.row.starts_at);
   });
-  send(res, 200, { matches: visible.map(e => e.row) });
+  listCache = { at: Date.now(), body: { matches: visible.map(e => e.row) } };
+  send(res, 200, listCache.body);
 });

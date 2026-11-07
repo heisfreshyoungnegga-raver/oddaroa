@@ -1,4 +1,4 @@
-const { sql } = require('./_lib');
+const { msql: sql } = require('./_lib'); // catalog DB only: matches + operator_settings gates
 
 // API-Football (API-Sports) fixture + odds sync — the site's primary
 // data source once API_FOOTBALL_KEY is set in the environment

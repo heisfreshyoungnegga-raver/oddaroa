@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns, ensureBookingCode } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns, ensureBookingCode } = require('../../_lib');
 
 // Place bet(s) from the slip: Single (one ticket per selection, each
 // with its own stake), Multiple (one accumulator ticket) or System
@@ -26,7 +26,7 @@ module.exports = guard(async (req, res) => {
   if (ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
     return send(res, 400, { error: 'invalid_match_id' });
   }
-  const matchRows = await sql('select id, status, odds, odds_full, starts_at, external_ref, goal_events, score_home, score_away, betting_locked from matches where id = any($1::uuid[])', [ids]);
+  const matchRows = await msql('select id, status, odds, odds_full, starts_at, external_ref, goal_events, score_home, score_away, betting_locked from matches where id = any($1::uuid[])', [ids]);
   const byId = new Map(matchRows.map(m => [m.id, m]));
 
   const clean = [];

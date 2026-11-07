@@ -1,4 +1,4 @@
-const { sql, expandOdds } = require('./_lib');
+const { msql: sql, expandOdds } = require('./_lib'); // catalog DB only: matches + operator_settings gates
 
 // ESPN fixture sync, shared by the admin Sync button and the automatic
 // live refresh. Pulls scoreboards from ESPN's public API (no key needed)

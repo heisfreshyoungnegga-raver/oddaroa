@@ -1,4 +1,4 @@
-const { sql, send, guard, requireAuth, getSettings, cashoutQuoteFor, isCustomMatch, customMatchState, livePriceFor, currentPickOdds } = require('../../_lib');
+const { sql, matchesById, send, guard, requireAuth, getSettings, cashoutQuoteFor, isCustomMatch, customMatchState, livePriceFor, currentPickOdds } = require('../../_lib');
 
 module.exports = guard(async (req, res) => {
   const auth = requireAuth(req, res);
@@ -7,29 +7,43 @@ module.exports = guard(async (req, res) => {
     `select b.id, b.code, b.booking_code, b.stake_ghs, b.total_odds, b.potential_ghs, b.status, b.placed_at, b.settled_at, b.kind, b.bonus_pct, b.system_label,
             coalesce(json_agg(json_build_object(
               'match_id', s.match_id, 'market', s.market, 'pick', s.pick,
-              'odds', s.odds, 'result', s.result,
-              'home_team', m.home_team, 'away_team', m.away_team, 'league', m.league, 'starts_at', m.starts_at
+              'odds', s.odds, 'result', s.result
             ) order by s.id) filter (where s.id is not null), '[]') as selections
      from bets b
      left join bet_selections s on s.bet_id = b.id
-     left join matches m on m.id = s.match_id
      where b.user_id = $1
      group by b.id
      order by b.placed_at desc
      limit 100`,
     [auth.uid]
   );
+  // Team facts are hydrated from the catalog DB — matches moved to
+  // their own Neon project on 2026-11-07, so the core query can no
+  // longer join them. A catalog outage degrades names to null
+  // instead of failing the whole Bets page.
+  const matchMap = await matchesById(
+    rows.flatMap(b => (b.selections || []).map(x => x.match_id))
+  ).catch(() => new Map());
+  for (const b of rows) {
+    for (const x of (b.selections || [])) {
+      const m = matchMap.get(x.match_id);
+      x.home_team = m ? m.home_team : null;
+      x.away_team = m ? m.away_team : null;
+      x.league = m ? m.league : null;
+      x.starts_at = m ? m.starts_at : null;
+    }
+  }
   // Attach a live cashout quote to each open ticket (null when no
   // cashout is offered — e.g. a leg is live — and the client then
   // shows no button and no message, Prince's rule, 2026-11-05).
   const openIds = rows.filter(b => b.status === 'open').map(b => b.id);
   if (openIds.length) {
-    const legs = await sql(
-      `select s.bet_id, s.market, s.pick, s.result, to_jsonb(m) as match
-       from bet_selections s join matches m on m.id = s.match_id
-       where s.bet_id = any($1::uuid[])`,
+    const selLegs = await sql(
+      'select bet_id, match_id, market, pick, result from bet_selections where bet_id = any($1::uuid[])',
       [openIds]
     );
+    const legMatches = await matchesById(selLegs.map(r => r.match_id)).catch(() => new Map());
+    const legs = selLegs.map(r => ({ bet_id: r.bet_id, market: r.market, pick: r.pick, result: r.result, match: legMatches.get(r.match_id) || null }));
     const settings = await getSettings(['cashout_margin_pct']);
     const byBet = new Map();
     for (const l of legs) {
