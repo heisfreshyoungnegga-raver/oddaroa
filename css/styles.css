@@ -638,6 +638,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 [data-view="home"] .mrow:nth-child(8), [data-view="sports"] .mrow:nth-child(8) { animation-delay: 280ms; }
 @media (prefers-reduced-motion: reduce) { .mrow, .modalwrap.open .modal { animation: none; } }
 .modal-sub { color: var(--muted); margin: 0 0 14px; }
+.vbar { position: relative; height: 10px; border-radius: 999px; background: rgba(255,255,255,.14); overflow: hidden; margin: 14px 0 18px; }
+.vbar i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 999px; background: linear-gradient(90deg, #b8860b, #ffd94d); transition: width .9s var(--ease-out); overflow: hidden; }
+.vbar i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); animation: vbarSheen 1.6s linear infinite; }
+@keyframes vbarSheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
 .modal-x { position: absolute; top: 10px; right: 12px; }
 .iconbtn { background: none; border: 0; font-size: 22px; line-height: 1; color: var(--muted); }
 .authtabs { display: flex; gap: 6px; margin-bottom: 14px; }

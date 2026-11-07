@@ -1100,12 +1100,16 @@ function showVerifyModal(info) {
     '<p class="modal-sub">Second verification</p>' +
     '<h2>Complete your verification</h2>' +
     '<p>Make a <b>' + money(curRules().verifyAmount) + '</b> deposit to unlock withdrawals on your Oddaroa account.</p>' +
-    '<div class="vbar"><i style="width:' + pct + '%"></i></div>' +
+    '<div class="vbar"><i></i></div>' +
     '<button class="btn gold big" data-goto-deposit>Deposit ' + money(curRules().verifyAmount) + ' to verify</button>' +
     '<button class="btn ghost big" data-done-verify>I\'ve completed a deposit</button>' +
     '<p class="muted">Deposits go to your own betting wallet. The money stays yours to bet with \u2014 it is not a fee, and nothing is taken from your balance to release a withdrawal.</p>' +
     '</div>';
   document.body.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const fill = el.querySelector('.vbar i');
+    if (fill) fill.style.width = pct + '%';
+  }));
 }
 function closeVerifyModal() {
   const el = $('#verifyWrap');
