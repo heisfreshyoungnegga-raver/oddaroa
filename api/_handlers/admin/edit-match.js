@@ -53,7 +53,7 @@ module.exports = guard(async (req, res) => {
     kickedOff = m.status === 'live' || (m.status === 'postponed' && startedAlready);
   }
   if (finished) return send(res, 409, { error: 'match_finished', detail: 'This game has finished and can no longer be edited.' });
-  if (kickedOff && (body.starts_at !== undefined || body.goals !== undefined || body.o1 !== undefined || body.ox !== undefined || body.o2 !== undefined)) {
+  if (kickedOff && (body.starts_at !== undefined || body.goals !== undefined || body.o1 !== undefined || body.ox !== undefined || body.o2 !== undefined || body.odds_full !== undefined)) {
     return send(res, 409, { error: 'match_already_live', detail: 'Kickoff, odds and the goal schedule lock once the game has kicked off. Names, crests and stoppages can still be edited.' });
   }
 
@@ -67,6 +67,10 @@ module.exports = guard(async (req, res) => {
   if (body.away_team !== undefined) put('away_team', name(body.away_team, m.away_team));
   if (body.home_logo !== undefined) put('home_logo', cleanCrestUrl(body.home_logo));
   if (body.away_logo !== undefined) put('away_logo', cleanCrestUrl(body.away_logo));
+  // The betting lock is a safety switch, not a price: the super
+  // admin can flip it even while the game is live (Prince, 2026-11-07
+  // — full edit control over his created games).
+  if (body.betting_locked !== undefined) put('betting_locked', !!body.betting_locked);
   if (custom && body.ht_stoppage !== undefined) put('ht_stoppage', clampStop(body.ht_stoppage));
   if (custom && body.ft_stoppage !== undefined) put('ft_stoppage', clampStop(body.ft_stoppage));
 
@@ -92,6 +96,40 @@ module.exports = guard(async (req, res) => {
       // The full book follows the 1X2 line it was derived from.
       const full = fullBookFromOdds(newOdds);
       if (full.length) put('odds_full', JSON.stringify(full), 'jsonb');
+    }
+    // All-markets editor (Prince, 2026-11-07): prices the super
+    // admin typed for specific markets win over the derived book —
+    // same acceptance rules as the create form (only markets the
+    // generator can settle, prices in (1, 1000], at least 2 values).
+    if (custom && Array.isArray(body.odds_full) && body.odds_full.length) {
+      const base = (Number(o1) > 1 && Number(ox) > 1 && Number(o2) > 1)
+        ? expandOdds(Number(o1), Number(ox), Number(o2))
+        : (m.odds && typeof m.odds === 'object' ? m.odds : {});
+      const derivedFull = fullBookFromOdds(base);
+      if (derivedFull.length) {
+        const allowed = new Map(derivedFull.map(b => [b.name, b]));
+        const byName = new Map();
+        for (const mkt of body.odds_full.slice(0, 40)) {
+          if (!mkt || !allowed.has(mkt.name) || !Array.isArray(mkt.values)) continue;
+          const seen = new Set();
+          const values = [];
+          for (const v of mkt.values.slice(0, 64)) {
+            const value = String(v && v.value != null ? v.value : '').trim().slice(0, 40);
+            const odd = Math.round(Number(v && v.odd) * 100) / 100;
+            if (!value || seen.has(value) || !(odd > 1) || odd > 1000) continue;
+            seen.add(value);
+            values.push({ value, odd });
+          }
+          if (values.length >= 2) byName.set(mkt.name, { id: allowed.get(mkt.name).id, name: mkt.name, values });
+        }
+        if (byName.size) {
+          const merged = derivedFull.map(b => byName.get(b.name) || b);
+          // Replace any odds_full queued by the 1X2 branch above.
+          const ix = sets.findIndex(x => x.indexOf('odds_full') === 0);
+          if (ix >= 0) { vals[ix] = JSON.stringify(merged); }
+          else put('odds_full', JSON.stringify(merged), 'jsonb');
+        }
+      }
     }
   }
   if (!sets.length) return send(res, 400, { error: 'nothing_to_update' });

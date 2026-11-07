@@ -323,6 +323,12 @@ function createdGamesHTML() {
 function editMatchFormHTML(m, custom) {
   const kicked = m.status === 'live';
   const o = m.odds || {};
+  emBookDirty = false;
+  const book = custom && !kicked && Array.isArray(m.odds_full) ? m.odds_full : [];
+  const bookHTML = book.length ? '<details style="margin:6px 0"><summary class="muted">All markets editor — set any market\'s prices (they win over the derived book)</summary>' +
+    book.map(b => '<div style="margin:8px 0"><div class="muted">' + esc(b.name) + '</div><div class="oddsgrid">' +
+      (b.values || []).map(v => '<label>' + esc(v.value) + ' <input type="number" step="0.01" min="1.01" max="1000" data-book="' + esc(b.name) + '" data-pick="' + esc(v.value) + '" value="' + v.odd + '"></label>').join('') +
+      '</div></div>').join('') + '</details>' : '';
   return '<form id="editMatchForm" data-mid="' + m.id + '" class="stack" style="margin:10px 0">' +
     (m.status === 'postponed' ? '<p class="muted">This game is postponed. Set a new kickoff below to bring it back.</p>'
       : kicked ? '<p class="muted">This game has kicked off — kickoff, odds and the goal schedule are locked. Names, crests and stoppages can still change.</p>' : '') +
@@ -330,6 +336,8 @@ function editMatchFormHTML(m, custom) {
     '<label>Home team <input type="text" id="emHome" value="' + esc(m.home_team) + '"></label>' +
     '<label>Away team <input type="text" id="emAway" value="' + esc(m.away_team) + '"></label>' +
     '<label>Kickoff <input type="datetime-local" id="emStart" value="' + isoLocal(m.starts_at) + '"' + (kicked ? ' disabled' : '') + '></label>' +
+    (kicked ? '' : '<button class="btn sm" type="button" id="emStartNow">Start the match now</button>') +
+    '<label class="checkrow"><input type="checkbox" id="emBetLock"' + (m.betting_locked ? ' checked' : '') + '> Lock betting on this game</label>' +
     (custom ? '<div class="oddsgrid">' +
       '<label>1 (home) <input type="number" step="0.01" min="1.01" id="em_o1" value="' + (o.o1 || '') + '"' + (kicked ? ' disabled' : '') + '></label>' +
       '<label>X (draw) <input type="number" step="0.01" min="1.01" id="em_ox" value="' + (o.ox || '') + '"' + (kicked ? ' disabled' : '') + '></label>' +
@@ -337,6 +345,7 @@ function editMatchFormHTML(m, custom) {
       '<label>Goal schedule <input type="text" id="emGoals" value="' + esc(goalsTextOf(m)) + '"' + (kicked ? ' disabled' : '') + '></label>' +
       '<div class="oddsgrid"><label>1st half stoppage (min) <input type="number" min="0" max="15" id="emHtStop" value="' + (m.ht_stoppage || 0) + '"></label>' +
       '<label>2nd half stoppage (min) <input type="number" min="0" max="15" id="emFtStop" value="' + (m.ft_stoppage || 0) + '"></label></div>' : '') +
+    bookHTML +
     '<label>Home crest (flag) — image URL <input type="url" id="emHomeLogo" value="' + esc(m.home_logo || '') + '"></label>' +
     '<label>…or upload the home crest <input type="file" data-crest="home" accept="image/*"></label>' +
     '<label>Away crest (flag) — image URL <input type="url" id="emAwayLogo" value="' + esc(m.away_logo || '') + '"></label>' +
@@ -669,6 +678,11 @@ async function loadAll() {
 }
 
 document.addEventListener('click', async e => {
+  if (e.target.id === 'emStartNow') {
+    const el = document.querySelector('#emStart');
+    if (el) { const d = new Date(); d.setSeconds(0, 0); el.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+    return;
+  }
   if (e.target.id === 'workTodayBtn') {
     state.workMode = 'day'; state.workDate = ''; loadWork(); return;
   }
@@ -933,6 +947,7 @@ document.addEventListener('click', async e => {
 // downscaled in the browser (max 256px) and held here until submit,
 // so a phone photo never becomes a multi-MB database value.
 const crestUploads = { home: '', away: '' };
+let emBookDirty = false;
 // Featured-form goal script + specified book (Prince, 2026-11-05,
 // from the form he shared): goals are built with +Home/+Away
 // buttons instead of typed syntax, and the market editor can
@@ -979,6 +994,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'workAdminSel') {
     state.workAdmin = e.target.value; render(); return;
   }
+  if (e.target.dataset && e.target.dataset.book !== undefined) { emBookDirty = true; return; }
   const side = e.target.dataset ? e.target.dataset.crest : null;
   if (!side) return;
   const file = e.target.files && e.target.files[0];
@@ -1056,8 +1072,19 @@ document.addEventListener('submit', async e => {
       home_team: $('#emHome').value.trim(),
       away_team: $('#emAway').value.trim(),
       home_logo: $('#emHomeLogo').value.trim() || crestUploads.home,
-      away_logo: $('#emAwayLogo').value.trim() || crestUploads.away
+      away_logo: $('#emAwayLogo').value.trim() || crestUploads.away,
+      betting_locked: !!($('#emBetLock') && $('#emBetLock').checked)
     };
+    if (custom && !kicked && emBookDirty) {
+      const byName = new Map();
+      document.querySelectorAll('[data-book]').forEach(inp => {
+        const odd = Number(inp.value);
+        if (!(odd > 1)) return;
+        if (!byName.has(inp.dataset.book)) byName.set(inp.dataset.book, []);
+        byName.get(inp.dataset.book).push({ value: inp.dataset.pick, odd });
+      });
+      if (byName.size) body.odds_full = [...byName.entries()].map(([name, values]) => ({ name, values }));
+    }
     if (custom) {
       body.ht_stoppage = Number($('#emHtStop').value) || 0;
       body.ft_stoppage = Number($('#emFtStop').value) || 0;
