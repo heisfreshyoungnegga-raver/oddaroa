@@ -59,12 +59,17 @@
       '<div class="gpanel card">' + panelHTML + '</div>' +
       '<div class="ghist card"><h3>Your recent rounds</h3><div id="gHistory"><p class="empty">Loading…</p></div></div>';
   }
+  function stakeRules() {
+    return (window.odStakeRules && window.odStakeRules()) || { min: 1, max: 1000, sym: 'GHS ', code: 'GHS' };
+  }
   function stakeHTML(def) {
-    return '<label class="glabel">Stake (GHS)</label>' +
+    const R = stakeRules();
+    const chips = R.code === 'NGN' ? [500, 1000, 2500, 5000, 10000, 25000] : [2, 5, 10, 25, 50, 100];
+    return '<label class="glabel">Stake (' + R.code + ')</label>' +
       '<div class="gstake"><button type="button" class="gstep" data-step="-1">−</button>' +
-      '<input id="gStake" type="number" min="1" max="1000" step="1" value="' + def + '">' +
+      '<input id="gStake" type="number" min="' + R.min + '" max="' + R.max + '" step="1" value="' + Math.max(def, R.min) + '">' +
       '<button type="button" class="gstep" data-step="1">+</button></div>' +
-      '<div class="gchips">' + [2, 5, 10, 25, 50, 100].map(v =>
+      '<div class="gchips">' + chips.map(v =>
         '<button type="button" class="gchip" data-gchip="' + v + '">' + v + '</button>').join('') +
       '<button type="button" class="gchip" data-scale="0.5">½</button>' +
       '<button type="button" class="gchip" data-scale="2">2×</button></div>';
@@ -119,7 +124,8 @@
 
   async function startRound(gameId, config) {
     const stake = stakeVal();
-    if (!(stake >= 1 && stake <= 1000)) { toast('Stake must be between GHS 1 and GHS 1,000'); return null; }
+    const R = stakeRules();
+    if (!(stake >= R.min && stake <= R.max)) { toast('Stake must be between ' + R.sym + R.min.toLocaleString('en-GB') + ' and ' + R.sym + R.max.toLocaleString('en-GB')); return null; }
     try {
       const d = await api('/games/start', { method: 'POST', body: { game: gameId, stake_ghs: stake, config } });
       setBalance(d.balance);

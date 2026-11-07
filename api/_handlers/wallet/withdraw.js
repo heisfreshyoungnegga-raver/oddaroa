@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth, ensureAdminTables, getSettings } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, ensureAdminTables, ensurePaymentTables, getSettings, currencyOfPhone } = require('../../_lib');
 
 // Withdrawal request: the balance is held immediately, and the database
 // trigger refuses the insert until the user reaches the required number
@@ -12,9 +12,30 @@ module.exports = guard(async (req, res) => {
   if (settings.payouts_frozen === '1') {
     return send(res, 403, { error: 'payouts_frozen', detail: 'Withdrawals are temporarily paused by the operator. Please check back shortly.' });
   }
-  const { amount_ghs, method } = await readBody(req);
+  const body = await readBody(req);
+  const { amount_ghs, method } = body;
   const amount = Number(amount_ghs);
   if (!(amount > 0)) return send(res, 400, { error: 'invalid_amount' });
+  // Nigerian accounts are paid by bank transfer through Flutterwave
+  // (Prince, 2026-11-07): the bank details ride on the transaction row
+  // so the super admin's confirm can fire the transfer. Ghana accounts
+  // keep paying out to MoMo exactly as before.
+  await ensurePaymentTables();
+  const urows = await sql('select phone from users where id = $1', [auth.uid]);
+  const isNgn = urows.length && currencyOfPhone(urows[0].phone) === 'NGN';
+  let payoutMeta = null;
+  let methodLabel = method ? String(method).slice(0, 40) : 'MTN MoMo';
+  if (isNgn) {
+    const bankCode = String(body.bank_code || '').trim();
+    const bankName = String(body.bank_name || '').trim().slice(0, 80);
+    const acctNum = String(body.account_number || '').replace(/\D/g, '');
+    const acctName = String(body.account_name || '').trim().slice(0, 80);
+    if (!bankCode || !bankName || acctNum.length !== 10 || !acctName) {
+      return send(res, 400, { error: 'bank_details_required', detail: 'Pick your bank and enter the 10-digit account number so we can pay you.' });
+    }
+    payoutMeta = { currency: 'NGN', bank_code: bankCode, bank_name: bankName, account_number: acctNum, account_name: acctName };
+    methodLabel = 'Bank transfer';
+  }
   let rows;
   try {
     rows = await sql(
@@ -23,10 +44,10 @@ module.exports = guard(async (req, res) => {
          where id = $1 and balance_ghs >= $2
          returning id
        )
-       insert into wallet_transactions (user_id, kind, method, amount_ghs, status)
-       select $1, 'withdrawal', $3, -$2, 'pending' from bal
+       insert into wallet_transactions (user_id, kind, method, amount_ghs, status, payout_meta)
+       select $1, 'withdrawal', $3, -$2, 'pending', $4::jsonb from bal
        returning id, status, created_at`,
-      [auth.uid, amount, method ? String(method).slice(0, 40) : 'MTN MoMo']
+      [auth.uid, amount, methodLabel, payoutMeta ? JSON.stringify(payoutMeta) : null]
     );
   } catch (e) {
     if (String(e.dbMessage || '').includes('withdrawal locked')) {

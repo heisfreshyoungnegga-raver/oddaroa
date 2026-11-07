@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, readBody, send, guard, requireAuth } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, currencyOfPhone, moneyRules } = require('../../_lib');
 const G = require('../../_games');
 
 // Start a game round. The stake debit and the round row are one
@@ -13,8 +13,10 @@ module.exports = guard(async (req, res) => {
   const { game, stake_ghs, config } = await readBody(req);
   if (!G.GAME_NAMES[game]) return send(res, 400, { error: 'unknown_game' });
   const stake = Number(stake_ghs);
-  if (!(stake >= G.MIN_STAKE && stake <= G.MAX_STAKE) || G.money2(stake) !== stake) {
-    return send(res, 400, { error: 'invalid_stake', detail: 'Stake must be between GHS 1 and GHS 1,000.' });
+  const gu = await sql('select phone from users where id = $1', [auth.uid]);
+  const grules = moneyRules(gu.length ? currencyOfPhone(gu[0].phone) : 'GHS');
+  if (!(stake >= grules.minStake && stake <= grules.maxStake) || G.money2(stake) !== stake) {
+    return send(res, 400, { error: 'invalid_stake', detail: `Stake must be between ${grules.symbol}${grules.minStake.toLocaleString('en-GB')} and ${grules.symbol}${grules.maxStake.toLocaleString('en-GB')}.` });
   }
   const cfg = G.validateConfig(game, config);
   if (!cfg) return send(res, 400, { error: 'invalid_config' });

@@ -220,7 +220,8 @@ on conflict (key) do nothing;
 -- What the admin payout queue screen reads.
 create or replace view admin_pending_queue as
   select wt.id, wt.user_id, u.phone, wt.kind, wt.method, wt.amount_ghs,
-         wt.external_ref, wt.created_at, (wt.proof_image is not null) as has_proof
+         wt.external_ref, wt.created_at, (wt.proof_image is not null) as has_proof,
+         wt.payout_meta
   from wallet_transactions wt
   join users u on u.id = wt.user_id
   where wt.status = 'pending' and wt.kind in ('deposit', 'withdrawal')

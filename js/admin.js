@@ -46,6 +46,13 @@ function toast(msg) {
 }
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 function money(n) { return 'GHS ' + Number(n || 0).toFixed(2); }
+// A row's currency follows the account's phone country (Nigeria went
+// live on Flutterwave, 2026-11-07): NG rows are naira, everything
+// else stays GHS. Used wherever a row belongs to one player.
+function moneyC(n, phone) {
+  const d = String(phone || '').replace(/\D/g, '');
+  return (d.startsWith('234') ? '₦' : 'GHS ') + Number(n || 0).toFixed(2);
+}
 function fmtDate(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' · ' +
@@ -267,8 +274,9 @@ function referralCardHTML() {
 function queueHTML(compact) {
   const rows = state.queue.map(q =>
     '<div class="txrow"><div><b>' + esc(q.kind) + ' · ' + esc(q.phone) + '</b>' +
-    '<div class="muted">' + fmtDate(q.created_at) + ' · ' + esc(q.method || '') + (q.external_ref ? ' · Ref ' + esc(q.external_ref) : '') + '</div></div>' +
-    '<div>' + money(q.amount_ghs) + '</div>' +
+    '<div class="muted">' + fmtDate(q.created_at) + ' · ' + esc(q.method || '') + (q.external_ref ? ' · Ref ' + esc(q.external_ref) : '') +
+    (q.payout_meta ? '<br>Pay to: ' + esc(q.payout_meta.account_name || '') + ' · ' + esc(q.payout_meta.bank_name || '') + ' ' + esc(q.payout_meta.account_number || '') : '') + '</div></div>' +
+    '<div>' + moneyC(q.amount_ghs, q.phone) + '</div>' +
     '<span>' + (q.has_proof ? '<button class="btn ghost sm" data-proof="' + q.id + '">Screenshot</button> ' : '') +
     // Withdrawals are decided by the super admin only (Prince's rule,
     // 2026-11-04) — everyone else sees the row but no action buttons.
@@ -443,6 +451,7 @@ function controlHTML() {
     '<label>Referral commission % (of a referred user\'s deposits, paid to whoever invited them) <input type="number" id="rateAdmin" step="0.1" min="0" max="100" value="' + esc(s.admin_commission_pct || '0') + '"></label>' +
     '<label>User cashback % (of their own deposit, credited back instantly) <input type="number" id="rateUser" step="0.1" min="0" max="100" value="' + esc(s.user_cashback_pct || '0') + '"></label>' +
     '<label>Referral deposit bonus GHS (flat bonus a referred player gets on EVERY deposit; 0 = off) <input type="number" id="rateBonus" step="1" min="0" max="100000" value="' + esc(s.referral_deposit_bonus_ghs || '0') + '"></label>' +
+    '<label>Referral deposit bonus NGN (same bonus for Nigerian players, in naira; 0 = off) <input type="number" id="rateBonusNgn" step="1" min="0" max="10000000" value="' + esc(s.referral_deposit_bonus_ngn === undefined ? '5000' : s.referral_deposit_bonus_ngn) + '"></label>' +
     '<label>Cashout margin % (the house keeps this much of a ticket\'s fair cashout value) <input type="number" id="rateCashout" step="0.1" min="0" max="50" value="' + esc(s.cashout_margin_pct || '10') + '"></label>' +
     '<button class="btn gold big" type="submit">Save Rates</button></form></div>' +
     '<div class="card"><h3>Give a bonus</h3><form id="bonusForm" class="stack">' +
@@ -1107,7 +1116,7 @@ document.addEventListener('submit', async e => {
     try {
       const data = await api('/admin/settings', {
         method: 'POST',
-        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), referral_deposit_bonus_ghs: Number($('#rateBonus').value), cashout_margin_pct: Number($('#rateCashout').value) }
+        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), referral_deposit_bonus_ghs: Number($('#rateBonus').value), referral_deposit_bonus_ngn: Number(($('#rateBonusNgn') || {}).value || 0), cashout_margin_pct: Number($('#rateCashout').value) }
       });
       state.settings = data.settings;
       toast('Rates saved.');

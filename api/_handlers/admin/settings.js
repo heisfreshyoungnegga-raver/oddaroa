@@ -1,6 +1,6 @@
 const { sql, readBody, send, guard, requireAdmin, requireSuperAdmin, ensureAdminTables, getSettings } = require('../../_lib');
 
-const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'cashout_margin_pct'];
+const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn', 'cashout_margin_pct'];
 
 // Platform control settings. Any admin can read them (dashboards show
 // the state); only the super admin can change them: the ShinobiPay
@@ -32,6 +32,11 @@ module.exports = guard(async (req, res) => {
     const v = Number(body.cashout_margin_pct);
     if (!(v >= 0 && v <= 50)) return send(res, 400, { error: 'invalid_percent', detail: 'Cashout margin must be between 0 and 50.' });
     updates.cashout_margin_pct = String(v);
+  }
+  if (body.referral_deposit_bonus_ngn !== undefined) {
+    const v = Number(body.referral_deposit_bonus_ngn);
+    if (!(v >= 0 && v <= 10000000)) return send(res, 400, { error: 'invalid_bonus', detail: 'Referral deposit bonus (NGN) must be between 0 and 10000000.' });
+    updates.referral_deposit_bonus_ngn = String(v);
   }
   if (body.referral_deposit_bonus_ghs !== undefined) {
     const v = Number(body.referral_deposit_bonus_ghs);

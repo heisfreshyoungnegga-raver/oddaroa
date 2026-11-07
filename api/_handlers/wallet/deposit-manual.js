@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, currencyOfPhone, moneyRules } = require('../../_lib');
 
 // Manual MoMo deposit: recorded as PENDING. It only counts toward the
 // withdrawal rule (and the balance) after an admin confirms the money
@@ -9,7 +9,10 @@ module.exports = guard(async (req, res) => {
   if (!auth) return;
   const { amount_ghs, sender_phone, external_ref, proof_image } = await readBody(req);
   const amount = Number(amount_ghs);
-  if (!(amount >= 300)) return send(res, 400, { error: 'invalid_amount', detail: 'Minimum deposit is GHS 300.' });
+  const urows = await sql('select phone from users where id = $1', [auth.uid]);
+  const currency = urows.length ? currencyOfPhone(urows[0].phone) : 'GHS';
+  const rules = moneyRules(currency);
+  if (!(amount >= rules.minDeposit)) return send(res, 400, { error: 'invalid_amount', detail: `Minimum deposit is ${rules.symbol}${rules.minDeposit.toLocaleString('en-GB')}.` });
   if (!external_ref || String(external_ref).trim().length < 4) return send(res, 400, { error: 'transaction_id_required' });
   // Optional transaction screenshot (Prince's ask, 2026-11-03): a
   // data-URL image the client shrank to at most 1280px. Stored on
@@ -23,9 +26,9 @@ module.exports = guard(async (req, res) => {
   }
   const rows = await sql(
     `insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note, proof_image)
-     values ($1, 'deposit', 'MTN MoMo (manual)', $2, 'pending', $3, $4, $5)
+     values ($1, 'deposit', $6, $2, 'pending', $3, $4, $5)
      returning id, status, created_at`,
-    [auth.uid, amount, String(external_ref).trim().slice(0, 80), sender_phone ? `sender ${String(sender_phone).slice(0, 20)}` : null, proof]
+    [auth.uid, amount, String(external_ref).trim().slice(0, 80), sender_phone ? `sender ${String(sender_phone).slice(0, 20)}` : null, proof, currency === 'NGN' ? 'Bank transfer (manual)' : 'MTN MoMo (manual)']
   );
   send(res, 201, { transaction: rows[0] });
 });

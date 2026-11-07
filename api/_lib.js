@@ -137,8 +137,29 @@ function guard(handler) {
   };
 }
 
+// One wallet currency per account, fixed by the phone's country code
+// (Prince, 2026-11-07: Nigeria goes fully live on Flutterwave). The
+// stored balance number is denominated in the account's own currency;
+// GHS remains the default for Ghana numbers.
+function currencyOfPhone(phone) {
+  const d = String(phone || '').replace(/\D/g, '');
+  if (d.startsWith('234')) return 'NGN';
+  if (d.startsWith('254')) return 'KES';
+  if (d.startsWith('256')) return 'UGX';
+  if (d.startsWith('255')) return 'TZS';
+  return 'GHS';
+}
+// Per-currency money rules: deposit floors/ceilings, the verification
+// deposit ask, game stake bounds and where the referral bonus setting
+// lives. NGN figures are the platform equivalents of the GHS ones.
+const CURRENCY_RULES = {
+  GHS: { symbol: 'GHS ', minDeposit: 300, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000, bonusKey: 'referral_deposit_bonus_ghs', bonusDefault: 0 },
+  NGN: { symbol: '\u20a6', minDeposit: 10000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000, bonusKey: 'referral_deposit_bonus_ngn', bonusDefault: 5000 }
+};
+function moneyRules(currency) { return CURRENCY_RULES[currency] || CURRENCY_RULES.GHS; }
+
 function publicUser(u) {
-  return { id: u.id, phone: u.phone, email: u.email || null, display_name: u.display_name, role: u.role, status: u.status, balance_ghs: Number(u.balance_ghs) };
+  return { id: u.id, phone: u.phone, email: u.email || null, display_name: u.display_name, role: u.role, status: u.status, balance_ghs: Number(u.balance_ghs), currency: currencyOfPhone(u.phone) };
 }
 function betCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -357,6 +378,29 @@ async function shinobiFetch(path, { method = 'GET', body, idempotencyKey } = {})
   return { status: res.status, data };
 }
 
+// Flutterwave (Nigeria, Prince 2026-11-07): hosted-checkout deposits in
+// NGN and bank-transfer payouts. Keys arrive via env only — Prince
+// pastes FLUTTERWAVE_SECRET_KEY + FLUTTERWAVE_WEBHOOK_HASH into Vercel
+// and Railway; without them every Flutterwave surface answers
+// provider_not_configured and the Nigerian UI shows a switching-on note.
+function flwConfig() {
+  return {
+    apiBase: 'https://api.flutterwave.com/v3',
+    secretKey: process.env.FLUTTERWAVE_SECRET_KEY || '',
+    webhookHash: process.env.FLUTTERWAVE_WEBHOOK_HASH || ''
+  };
+}
+async function flwFetch(path, { method = 'GET', body } = {}) {
+  const { apiBase, secretKey } = flwConfig();
+  const res = await fetch(apiBase + path, {
+    method,
+    headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, data };
+}
+
 // ShinobiPay intent status -> our attempt status vocabulary.
 function mapIntentStatus(s) {
   switch (s) {
@@ -404,6 +448,8 @@ function ensurePaymentTables() {
         created_at timestamptz not null default now(),
         settled_at timestamptz
       )`);
+      await sql(`alter table payment_attempts add column if not exists currency text not null default 'GHS'`);
+      await sql(`alter table wallet_transactions add column if not exists payout_meta jsonb`);
       await sql(`create table if not exists webhook_events (
         event_id text primary key,
         received_at timestamptz not null default now()
@@ -494,13 +540,16 @@ async function getSettings(keys) {
 //    account can refer, players included — to be paid out later from
 //    the super-admin dashboard.
 // Idempotent per source txn, so a retried call can never double-pay.
-async function applyDepositRewards(userId, txnId, amountGhs) {
+async function applyDepositRewards(userId, txnId, amountGhs, currency) {
   const amount = Number(amountGhs);
   if (!(amount > 0)) return;
-  const s = await getSettings(['admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs']);
+  const rules = moneyRules(currency || 'GHS');
+  const s = await getSettings(['admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn']);
   const cashPct = Number(s.user_cashback_pct || 0);
   const commPct = Number(s.admin_commission_pct || 0);
-  const refBonus = Number(s.referral_deposit_bonus_ghs || 0);
+  // 0 in the setting means OFF and must stay off; only a missing key
+  // falls back to the per-currency default.
+  const refBonus = s[rules.bonusKey] === undefined ? rules.bonusDefault : (Number(s[rules.bonusKey]) || 0);
   if (cashPct > 0) {
     const cash = Math.round(amount * cashPct) / 100;
     if (cash > 0) {
@@ -948,6 +997,55 @@ async function settleAttempt(attempt) {
   return 'already';
 }
 
+// Flutterwave twin of settleAttempt: re-verify the transaction with
+// Flutterwave and credit exactly once, for exactly the attempt amount,
+// only when the verify says successful AND the amount, currency and
+// tx_ref all match the attempt. Driven by the webhook first and by the
+// deposit-flw-status reconciler when the payer returns to the site.
+async function settleFlwAttempt(attempt) {
+  if (attempt.status === 'succeeded') return 'already';
+  if (!attempt.intent_id) return 'not_succeeded';
+  const got = await flwFetch(`/transactions/${encodeURIComponent(attempt.intent_id)}/verify`);
+  const d = (got.data && got.data.data) || {};
+  if (got.status !== 200 || d.status !== 'successful') return 'not_succeeded';
+  const verified = Number(d.amount) === Number(attempt.amount_ghs)
+    && d.currency === (attempt.currency || 'NGN')
+    && String(d.tx_ref || '') === String(attempt.reference);
+  if (!verified) {
+    try {
+      await sql(
+        `update payment_attempts set fail_reason = $2 where id = $1 and status <> 'succeeded'`,
+        [attempt.id, `verify_mismatch amount=${d.amount} currency=${d.currency || ''} tx_ref=${d.tx_ref || ''}`]
+      );
+    } catch (e) { /* diagnostics only */ }
+    return 'unverified';
+  }
+  const out = await sql(
+    `with a as (
+       update payment_attempts set status = 'succeeded', settled_at = now()
+       where id = $1 and status <> 'succeeded'
+       returning user_id, amount_ghs
+     ),
+     ins as (
+       insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note)
+       select user_id, 'deposit', 'Flutterwave', amount_ghs, 'completed', $2, 'Flutterwave deposit'
+       from a returning id
+     ),
+     cred as (
+       update users set balance_ghs = balance_ghs + (select amount_ghs from a)
+       where id = (select user_id from a) returning id
+     )
+     select (select count(*) from a) as settled, (select id from ins) as txn_id`,
+    [attempt.id, 'flw:' + attempt.intent_id]
+  );
+  if (Number(out[0].settled) === 1 && out[0].txn_id) {
+    await ensureAdminTables();
+    await applyDepositRewards(attempt.user_id, out[0].txn_id, Number(attempt.amount_ghs), attempt.currency || 'NGN');
+    return 'credited';
+  }
+  return 'already';
+}
+
 // Winnings bonus (Prince, 2026-11-05, from the GoalsVault slip he
 // shared): multiples and system combinations earn a percentage bonus
 // on top of their full potential win, scaled by the number of legs in
@@ -1316,4 +1414,4 @@ async function ensureBookingCode(userId, selections) {
   return null;
 }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };

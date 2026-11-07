@@ -5,6 +5,10 @@ const handlers = {
   'deposit-momo': require('../_handlers/wallet/deposit-momo'),
   'deposit-status': require('../_handlers/wallet/deposit-status'),
   'deposit-otp': require('../_handlers/wallet/deposit-otp'),
+  'deposit-flutterwave': require('../_handlers/wallet/deposit-flutterwave'),
+  'deposit-flw-status': require('../_handlers/wallet/deposit-flw-status'),
+  banks: require('../_handlers/wallet/banks'),
+  'resolve-account': require('../_handlers/wallet/resolve-account'),
   withdraw: require('../_handlers/wallet/withdraw'),
 };
 module.exports = (req, res) => {

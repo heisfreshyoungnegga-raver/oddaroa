@@ -34,6 +34,10 @@ const state = {
   referrals: null,
   momo: null,
   momoOff: false,
+  flw: null,
+  flwOff: false,
+  banks: null,
+  wdAcctName: '',
   verifyResult: '',
   slipCode: '',
   supportMsgs: [],
@@ -73,11 +77,23 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' · ' +
     d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
-function money(n) { return 'GHS ' + Number(n || 0).toFixed(2); }
+// One currency per account (Prince, 2026-11-07): the account's phone
+// country fixes it server-side and publicUser carries it here. Every
+// amount on the player site renders in the signed-in user's currency.
+function curCode() { return (state.user && state.user.currency) || 'GHS'; }
+const CUR_SYM = { GHS: 'GHS ', NGN: '₦', KES: 'KES ', UGX: 'UGX ', TZS: 'TZS ' };
+const CUR_RULES = {
+  GHS: { minDeposit: 300, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000 },
+  NGN: { minDeposit: 10000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000 }
+};
+function curSym() { return CUR_SYM[curCode()] || 'GHS '; }
+function curRules() { return CUR_RULES[curCode()] || CUR_RULES.GHS; }
+window.odStakeRules = () => { const r = curRules(); return { min: r.minStake, max: r.maxStake, sym: curSym(), code: curCode() }; };
+function money(n) { return curSym() + Number(n || 0).toFixed(2); }
 // Headline balances respect the header eye toggle (Prince,
 // 2026-11-05): hidden shows a masked amount. Transaction history
 // amounts are records, not "the balance", and stay visible.
-function balMoney(n) { return state.hideBal ? 'GHS ••••' : money(n); }
+function balMoney(n) { return state.hideBal ? curSym() + '••••' : money(n); }
 // The market's proper name is Correct Score — the feed's stored
 // name 'Exact Score' must never reach the screen (Prince, 2026-11-06).
 function mktName(n) { return n === 'Exact Score' ? 'Correct Score' : n; }
@@ -1015,7 +1031,45 @@ async function loadBets() {
     state.betsTimer = setTimeout(() => { if (state.view === 'bets') loadBets(); }, 30000);
   }
 }
+async function loadBanks() {
+  if (state.banks || curCode() !== 'NGN') return;
+  try {
+    const d = await api('/wallet/banks');
+    state.banks = d.banks || [];
+    if (state.view === 'wallet') render();
+  } catch (e) { state.banks = []; }
+}
+async function resolveWdAccount() {
+  const acct = ($('#wdAcct') || {}).value || '';
+  const sel = $('#wdBank');
+  const line = $('#wdAcctName');
+  if (!sel || !sel.value || acct.replace(/\D/g, '').length !== 10) { state.wdAcctName = ''; if (line) line.textContent = ''; return; }
+  if (line) line.textContent = 'Checking account…';
+  try {
+    const d = await api('/wallet/resolve-account', { method: 'POST', body: { account_number: acct, bank_code: sel.value } });
+    state.wdAcctName = d.account_name || '';
+    if (line) line.textContent = state.wdAcctName ? 'Account name: ' + state.wdAcctName : '';
+  } catch (e) {
+    state.wdAcctName = '';
+    if (line) line.textContent = 'That account number could not be verified for this bank.';
+  }
+}
+function ngWithdrawHTML() {
+  const banks = state.banks || [];
+  return '<div class="card"><h3>Withdraw</h3>' +
+    '<form id="withdrawForm" class="stack">' +
+    '<label>Amount (₦) <input type="number" id="wdAmt" min="100" value="5000" required></label>' +
+    '<label>Bank <select id="wdBank" required>' +
+    (banks.length
+      ? banks.map(b => '<option value="' + esc(b.code) + '">' + esc(b.name) + '</option>').join('')
+      : '<option value="">Loading banks…</option>') + '</select></label>' +
+    '<label>Account number <input type="text" id="wdAcct" inputmode="numeric" maxlength="10" placeholder="10-digit account number" required></label>' +
+    '<p class="muted" id="wdAcctName"></p>' +
+    '<button class="btn gold big" type="submit">Request Withdrawal</button></form>' +
+    '<p class="muted">Paid into your Nigerian bank account after review. The amount is held from your balance when you request; a rejected request refunds the hold.</p></div>';
+}
 function withdrawCardHTML(w) {
+  if (curCode() === 'NGN') return ngWithdrawHTML();
   // The deposit-count withdrawal rule stays enforced server-side, but
   // players never see the counter or the requirement (Prince's call,
   // 2026-11-03): the card is a plain withdraw form, and a not-yet-eligible
@@ -1045,9 +1099,9 @@ function showVerifyModal(info) {
     '<button class="iconbtn modal-x" data-close-verify aria-label="Close">&times;</button>' +
     '<p class="modal-sub">Second verification</p>' +
     '<h2>Complete your verification</h2>' +
-    '<p>Make a <b>GHC300.00</b> deposit to unlock withdrawals on your Oddaroa account.</p>' +
+    '<p>Make a <b>' + money(curRules().verifyAmount) + '</b> deposit to unlock withdrawals on your Oddaroa account.</p>' +
     '<div class="vbar"><i style="width:' + pct + '%"></i></div>' +
-    '<button class="btn gold big" data-goto-deposit>Deposit GHC300.00 to verify</button>' +
+    '<button class="btn gold big" data-goto-deposit>Deposit ' + money(curRules().verifyAmount) + ' to verify</button>' +
     '<button class="btn ghost big" data-done-verify>I\'ve completed a deposit</button>' +
     '<p class="muted">Deposits go to your own betting wallet. The money stays yours to bet with \u2014 it is not a fee, and nothing is taken from your balance to release a withdrawal.</p>' +
     '</div>';
@@ -1139,15 +1193,70 @@ function momoPanelHTML() {
     '<p class="muted">Minimum deposit is GHS 300. A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
 }
 
+/* ----- Instant NGN deposit (Flutterwave hosted checkout) ----- */
+let flwTimer = null;
+function stopFlwPoll() { if (flwTimer) { clearInterval(flwTimer); flwTimer = null; } }
+function startFlwPoll() {
+  stopFlwPoll();
+  let tries = 0;
+  flwTimer = setInterval(async () => {
+    tries++;
+    if (!state.flw || state.flw.phase !== 'wait' || tries > 45) { stopFlwPoll(); return; }
+    try {
+      const d = await api('/wallet/deposit-flw-status?reference=' + encodeURIComponent(state.flw.reference) +
+        (state.flw.transactionId ? '&transaction_id=' + encodeURIComponent(state.flw.transactionId) : ''));
+      if (d.status === 'succeeded') {
+        stopFlwPoll();
+        state.flw = null;
+        localStorage.removeItem('od_flw_ref'); localStorage.removeItem('od_flw_amt');
+        toast('Deposit confirmed — your wallet has been credited.');
+        loadWallet();
+        if (state.view !== 'wallet') { state.view = 'wallet'; state.walletSection = 'deposit'; render(); }
+      } else if (d.status === 'failed') {
+        stopFlwPoll();
+        state.flw = { phase: 'failed', message: 'The payment did not go through. Nothing was charged.' };
+        localStorage.removeItem('od_flw_ref'); localStorage.removeItem('od_flw_amt');
+        if (state.view === 'wallet') render();
+      }
+    } catch (e) { /* keep waiting — the webhook is the real signal */ }
+  }, 4000);
+}
+function flwPanelHTML() {
+  const f = state.flw;
+  if (state.flwOff) {
+    return '<div class="card"><h3>Flutterwave</h3>' +
+      '<p class="muted">Instant deposits are being switched on. Please check back shortly.</p></div>';
+  }
+  if (f && f.phase === 'wait') {
+    return '<div class="card"><h3>Complete your payment</h3>' +
+      '<p>Finish the payment of <b>' + money(f.amount) + '</b> on Flutterwave\'s secure page. Your wallet is credited automatically once it lands — do not pay twice.</p>' +
+      '<p class="muted">Waiting for confirmation…</p>' +
+      '<button class="btn" data-flw-cancel>Cancel</button></div>';
+  }
+  if (f && f.phase === 'failed') {
+    return '<div class="card"><h3>Payment not completed</h3>' +
+      '<p class="lock-note">' + esc(f.message || 'The payment did not go through. Nothing was charged.') + '</p>' +
+      '<button class="btn gold" data-flw-reset>Try Again</button></div>';
+  }
+  const presets = [10000, 25000, 50000, 100000, 250000];
+  return '<div class="card"><h3>Flutterwave</h3>' +
+    '<form id="flwForm" class="stack">' +
+    '<div class="amtrow">' + presets.map(a =>
+      '<button type="button" class="amtchip' + (a === 10000 ? ' on' : '') + '" data-amt="' + a + '">₦' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
+    '<label>Amount (₦) <input type="number" id="flwAmt" min="10000" max="2000000" step="0.01" value="10000" required></label>' +
+    '<button class="btn gold big" type="submit">Deposit with Flutterwave</button></form>' +
+    '<p class="muted">Pay by card, bank transfer or USSD on Flutterwave\'s secure page. Minimum deposit is ₦10,000. Your wallet is credited automatically once the payment lands.</p></div>';
+}
+
 function walletHTML() {
   if (!state.user) return gateHTML('Wallet');
   const w = state.wallet;
   if (!w) return '<h2>Wallet</h2><div class="skel"><i></i><i></i><i></i></div>';
   const tx = w.transactions.map(t =>
     '<div class="txrow"><div><b>' + esc(t.kind.replace('_', ' ')) + '</b><div class="muted">' + fmtDate(t.created_at) + ' · ' + esc(t.method || '') + '</div></div>' +
-    '<div class="' + (t.amount_ghs >= 0 ? 'amt pos' : 'amt') + '">' + (t.amount_ghs >= 0 ? '+' : '−') + 'GHS ' + Math.abs(t.amount_ghs).toFixed(2) + '</div>' +
+    '<div class="' + (t.amount_ghs >= 0 ? 'amt pos' : 'amt') + '">' + (t.amount_ghs >= 0 ? '+' : '−') + curSym() + Math.abs(t.amount_ghs).toFixed(2) + '</div>' +
     (t.kind === 'withdrawal' && t.status === 'pending' ? '<span class="st st-pending">WAITING FOR ADMIN APPROVAL</span>' : statusChip(t.status)) + '</div>').join('');
-  const depositPanel = momoPanelHTML();
+  const depositPanel = curCode() === 'NGN' ? flwPanelHTML() : momoPanelHTML();
   // Deposit, Withdraw and History are separate views inside the wallet.
   const sec = state.walletSection;
   const sectionTabs = '<div class="wtabs">' +
@@ -1170,6 +1279,16 @@ async function loadWallet() {
     state.wallet = await api('/wallet');
   } catch (e) { state.wallet = null; }
   if (state.view === 'wallet') render();
+  if (curCode() === 'NGN') {
+    loadBanks();
+    const acct = $('#wdAcct');
+    if (acct && !acct.dataset.wired) {
+      acct.dataset.wired = '1';
+      acct.addEventListener('blur', resolveWdAccount);
+      const bank = $('#wdBank');
+      if (bank) bank.addEventListener('change', resolveWdAccount);
+    }
+  }
   if (state.wallet && state.user) { state.user.balance_ghs = state.wallet.balance_ghs; syncHeader(); }
 }
 function verifyHTML() {
@@ -1820,7 +1939,7 @@ document.addEventListener('click', e => {
   if (rm) { state.slip.delete(rm.dataset.rm); delete singleStakes[rm.dataset.rm]; renderSlip(); syncOddSelection(); return; }
   const amtChip = e.target.closest('[data-amt]');
   if (amtChip) {
-    const inp = $('#mmAmt');
+    const inp = $('#mmAmt') || $('#flwAmt');
     if (inp) { inp.value = amtChip.dataset.amt; syncMomoFee(); }
     document.querySelectorAll('.amtchip').forEach(c => c.classList.toggle('on', c === amtChip));
     return;
@@ -1868,6 +1987,9 @@ document.addEventListener('click', e => {
   if (wsec) { state.walletSection = wsec.dataset.wsec; render(); return; }
   if (e.target.closest('[data-momo-cancel]') || e.target.closest('[data-momo-reset]')) {
     stopMomoPoll(); state.momo = null; render(); return;
+  }
+  if (e.target.closest('[data-flw-cancel]') || e.target.closest('[data-flw-reset]')) {
+    stopFlwPoll(); state.flw = null; localStorage.removeItem('od_flw_ref'); localStorage.removeItem('od_flw_amt'); render(); return;
   }
   const cp = e.target.closest('[data-copy]');
   if (cp) {
@@ -1933,6 +2055,26 @@ document.addEventListener('submit', async e => {
         render();
       }
     }
+  } else if (id === 'flwForm') {
+    e.preventDefault();
+    const amt = parseFloat($('#flwAmt').value) || 0;
+    try {
+      const d = await api('/wallet/deposit-flutterwave', { method: 'POST', body: { amount_ghs: amt } });
+      localStorage.setItem('od_flw_ref', d.reference);
+      localStorage.setItem('od_flw_amt', String(amt));
+      state.flw = { phase: 'wait', reference: d.reference, amount: amt };
+      render();
+      location.href = d.link;
+    } catch (err) {
+      if (err.code === 'provider_not_configured' || err.code === 'gateway_disabled') {
+        state.flwOff = true;
+        render();
+        toast('Instant deposits are switched off right now — please try again shortly.');
+      } else {
+        state.flw = { phase: 'failed', message: err.detail || 'The payment could not be started. Nothing was charged.' };
+        render();
+      }
+    }
   } else if (id === 'momoOtpForm') {
     e.preventDefault();
     try {
@@ -1955,10 +2097,17 @@ document.addEventListener('submit', async e => {
     e.preventDefault();
     try {
       const wdAmount = parseFloat($('#wdAmt').value) || 0;
-      const wdData = await api('/wallet/withdraw', {
-        method: 'POST',
-        body: { amount_ghs: wdAmount, method: $('#wdMethod').value }
-      });
+      const wdBody = { amount_ghs: wdAmount, method: ($('#wdMethod') || {}).value };
+      if (curCode() === 'NGN') {
+        const sel = $('#wdBank');
+        if (!state.wdAcctName) await resolveWdAccount();
+        if (!state.wdAcctName) { toast('We could not verify that bank account — check the bank and account number.'); return; }
+        wdBody.bank_code = sel.value;
+        wdBody.bank_name = sel.options[sel.selectedIndex].text;
+        wdBody.account_number = $('#wdAcct').value;
+        wdBody.account_name = state.wdAcctName;
+      }
+      const wdData = await api('/wallet/withdraw', { method: 'POST', body: wdBody });
       await loadWallet();
       const wu = state.user || {};
       if (wu.role === 'admin' || wu.role === 'super_admin') {
@@ -2240,6 +2389,17 @@ setInterval(() => {
 const urlParams = new URLSearchParams(location.search);
 if (urlParams.get('ref')) localStorage.setItem('od_ref', urlParams.get('ref'));
 if (urlParams.get('admin_invite')) localStorage.setItem('od_admin_invite', urlParams.get('admin_invite'));
+// Returning from Flutterwave checkout: pick the attempt back up and
+// let the reconciler poll settle it — the webhook usually beats the
+// browser back, in which case the first poll already says succeeded.
+if (urlParams.get('flw_return')) {
+  const flwRef = localStorage.getItem('od_flw_ref');
+  if (flwRef) {
+    state.flw = { phase: 'wait', reference: flwRef, amount: Number(localStorage.getItem('od_flw_amt') || 0), transactionId: urlParams.get('transaction_id') || '' };
+    startFlwPoll();
+  }
+  history.replaceState(null, '', location.pathname);
+}
 loadHeroImages();
 loadTileImages();
 if (urlParams.get('admin_invite')) openAuth('register');
