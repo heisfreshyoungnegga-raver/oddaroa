@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth, currencyOfPhone, moneyRules } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, currencyOfPhone, moneyRules, depositFloorFor } = require('../../_lib');
 
 // Manual MoMo deposit: recorded as PENDING. It only counts toward the
 // withdrawal rule (and the balance) after an admin confirms the money
@@ -9,10 +9,11 @@ module.exports = guard(async (req, res) => {
   if (!auth) return;
   const { amount_ghs, sender_phone, external_ref, proof_image } = await readBody(req);
   const amount = Number(amount_ghs);
-  const urows = await sql('select phone from users where id = $1', [auth.uid]);
+  const urows = await sql('select phone, role from users where id = $1', [auth.uid]);
   const currency = urows.length ? currencyOfPhone(urows[0].phone) : 'GHS';
   const rules = moneyRules(currency);
-  if (!(amount >= rules.minDeposit)) return send(res, 400, { error: 'invalid_amount', detail: `Minimum deposit is ${rules.symbol}${rules.minDeposit.toLocaleString('en-GB')}.` });
+  const floor = depositFloorFor(urows[0], currency);
+  if (!(amount >= floor)) return send(res, 400, { error: 'invalid_amount', detail: `Minimum deposit is ${rules.symbol}${floor.toLocaleString('en-GB')}.` });
   if (!external_ref || String(external_ref).trim().length < 4) return send(res, 400, { error: 'transaction_id_required' });
   // Optional transaction screenshot (Prince's ask, 2026-11-03): a
   // data-URL image the client shrank to at most 1280px. Stored on

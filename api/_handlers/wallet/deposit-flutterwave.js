@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, readBody, send, guard, requireAuth, flwConfig, flwFetch, ensurePaymentTables, ensureAdminTables, getSettings, currencyOfPhone, moneyRules } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, flwConfig, flwFetch, ensurePaymentTables, ensureAdminTables, getSettings, currencyOfPhone, moneyRules, depositFloorFor } = require('../../_lib');
 
 // Instant NGN deposit (Flutterwave hosted checkout): create a payment
 // attempt, send the payer to Flutterwave's hosted page (card, bank
@@ -16,7 +16,7 @@ module.exports = guard(async (req, res) => {
   const settings = await getSettings(['gateway_enabled']);
   if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please use Manual transfer.' });
 
-  const users = await sql('select phone, email, display_name from users where id = $1', [auth.uid]);
+  const users = await sql('select phone, email, display_name, role from users where id = $1', [auth.uid]);
   if (!users.length) return send(res, 404, { error: 'user_not_found' });
   const user = users[0];
   if (currencyOfPhone(user.phone) !== 'NGN') return send(res, 400, { error: 'wrong_currency', detail: 'Flutterwave deposits are for Nigerian accounts. Ghana accounts deposit with Mobile Money.' });
@@ -25,8 +25,9 @@ module.exports = guard(async (req, res) => {
   const rules = moneyRules('NGN');
   const { amount_ghs } = await readBody(req);
   const amount = Number(amount_ghs);
-  if (!(amount >= rules.minDeposit) || amount > rules.maxDeposit) {
-    return send(res, 400, { error: 'invalid_amount', detail: `Enter an amount between ${rules.symbol}${rules.minDeposit.toLocaleString('en-GB')} and ${rules.symbol}${rules.maxDeposit.toLocaleString('en-GB')}.` });
+  const floor = depositFloorFor(user, 'NGN');
+  if (!(amount >= floor) || amount > rules.maxDeposit) {
+    return send(res, 400, { error: 'invalid_amount', detail: `Enter an amount between ${rules.symbol}${floor.toLocaleString('en-GB')} and ${rules.symbol}${rules.maxDeposit.toLocaleString('en-GB')}.` });
   }
   const amountMinor = Math.round(amount * 100);
   if (Math.abs(amount * 100 - amountMinor) > 0.001) return send(res, 400, { error: 'invalid_amount', detail: 'Amount must be in whole kobo.' });

@@ -154,9 +154,17 @@ function currencyOfPhone(phone) {
 // lives. NGN figures are the platform equivalents of the GHS ones.
 const CURRENCY_RULES = {
   GHS: { symbol: 'GHS ', minDeposit: 300, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000, bonusKey: 'referral_deposit_bonus_ghs', bonusDefault: 0 },
-  NGN: { symbol: '\u20a6', minDeposit: 10000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000, bonusKey: 'referral_deposit_bonus_ngn', bonusDefault: 5000 }
+  NGN: { symbol: '\u20a6', minDeposit: 30000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000, bonusKey: 'referral_deposit_bonus_ngn', bonusDefault: 5000 }
 };
 function moneyRules(currency) { return CURRENCY_RULES[currency] || CURRENCY_RULES.GHS; }
+
+// Deposit floor for an account: players use the currency's minDeposit;
+// admin-tier accounts in Nigeria may deposit from ₦10 to test the
+// system (Prince's order, 2026-11-07).
+function depositFloorFor(user, currency) {
+  if (currency === 'NGN' && user && (user.role === 'admin' || user.role === 'super_admin')) return 10;
+  return moneyRules(currency).minDeposit;
+}
 
 function publicUser(u) {
   return { id: u.id, phone: u.phone, email: u.email || null, display_name: u.display_name, role: u.role, status: u.status, balance_ghs: Number(u.balance_ghs), currency: currencyOfPhone(u.phone) };
@@ -1427,4 +1435,4 @@ async function ensureBookingCode(userId, selections) {
   return null;
 }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };

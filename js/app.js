@@ -84,7 +84,7 @@ function curCode() { return (state.user && state.user.currency) || 'GHS'; }
 const CUR_SYM = { GHS: 'GHS ', NGN: '₦', KES: 'KES ', UGX: 'UGX ', TZS: 'TZS ' };
 const CUR_RULES = {
   GHS: { minDeposit: 300, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000 },
-  NGN: { minDeposit: 10000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000 }
+  NGN: { minDeposit: 30000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000 }
 };
 function curSym() { return CUR_SYM[curCode()] || 'GHS '; }
 function curRules() { return CUR_RULES[curCode()] || CUR_RULES.GHS; }
@@ -1238,14 +1238,16 @@ function flwPanelHTML() {
       '<p class="lock-note">' + esc(f.message || 'The payment did not go through. Nothing was charged.') + '</p>' +
       '<button class="btn gold" data-flw-reset>Try Again</button></div>';
   }
-  const presets = [10000, 25000, 50000, 100000, 250000];
+  const flwAdminTier = state.user && (state.user.role === 'admin' || state.user.role === 'super_admin');
+  const flwFloor = flwAdminTier ? 10 : 30000;
+  const presets = flwAdminTier ? [10, 100, 1000, 10000, 30000] : [30000, 50000, 100000, 250000, 500000];
   return '<div class="card"><h3>Flutterwave</h3>' +
     '<form id="flwForm" class="stack">' +
     '<div class="amtrow">' + presets.map(a =>
-      '<button type="button" class="amtchip' + (a === 10000 ? ' on' : '') + '" data-amt="' + a + '">₦' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
-    '<label>Amount (₦) <input type="number" id="flwAmt" min="10000" max="2000000" step="0.01" value="10000" required></label>' +
+      '<button type="button" class="amtchip' + (a === presets[0] ? ' on' : '') + '" data-amt="' + a + '">₦' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
+    '<label>Amount (₦) <input type="number" id="flwAmt" min="' + flwFloor + '" max="2000000" step="0.01" value="' + flwFloor + '" required></label>' +
     '<button class="btn gold big" type="submit">Deposit with Flutterwave</button></form>' +
-    '<p class="muted">Pay by card, bank transfer or USSD on Flutterwave\'s secure page. Minimum deposit is ₦10,000. Your wallet is credited automatically once the payment lands.</p></div>';
+    '<p class="muted">Pay by card, bank transfer or USSD on Flutterwave\'s secure page. Minimum deposit is ₦' + flwFloor.toLocaleString('en-GB') + '. Your wallet is credited automatically once the payment lands.</p></div>';
 }
 
 function walletHTML() {
