@@ -183,7 +183,7 @@ function ymdOf(offsetDays) {
   return new Date(Date.now() + offsetDays * 86400000).toISOString().slice(0, 10);
 }
 
-const ODDS_CAP_PER_REFRESH = 25;
+const ODDS_CAP_PER_REFRESH = 10;
 
 // Fixtures sweep: a full week of the core leagues (yesterday for
 // settlements, today, and five days ahead so the upcoming list
@@ -226,11 +226,12 @@ async function refreshAfLive() {
       `select external_ref from matches
        where external_ref like 'af:%' and status = 'live'
          and starts_at < now() - interval '10 minutes'
-       limit 20`
+       order by starts_at asc
+       limit 100`
     );
     const missing = stale.filter(r => !liveIds.has(r.external_ref)).map(r => r.external_ref.slice(3));
-    if (missing.length) {
-      const final = await afFetch('/fixtures?ids=' + missing.join('-'));
+    for (let i = 0; i < missing.length; i += 20) {
+      const final = await afFetch('/fixtures?ids=' + missing.slice(i, i + 20).join('-'));
       for (const fx of final) {
         const m = mapFixture(fx, true);
         if (m) await upsertMatch(m);
@@ -248,7 +249,7 @@ async function refreshAfLive() {
      where external_ref like 'af:%' and status in ('live', 'upcoming')
        and starts_at < now() + interval '6 days'
        and (not (odds ? 'o1') or odds_full is null)
-     order by (status = 'live') desc, starts_at asc
+     order by (status = 'upcoming') desc, starts_at asc
      limit $1`,
     [ODDS_CAP_PER_REFRESH]
   );

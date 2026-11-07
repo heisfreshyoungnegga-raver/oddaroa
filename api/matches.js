@@ -98,15 +98,12 @@ module.exports = guard(async (req, res) => {
   // thrown away before responding — that firehose is what exhausted
   // the Free plan's transfer allowance (2026-11-07). A boolean says
   // whether a book exists; the detail endpoint fetches it on demand.
-  const rows = await msql(
-    `select id, league, home_team, away_team, starts_at, status, minute,
+  const LIST_COLS = `id, league, home_team, away_team, starts_at, status, minute,
             score_home, score_away, odds, (odds_full is not null) as has_full, home_logo, away_logo, external_ref, goal_events,
-            ht_stoppage, ft_stoppage, betting_locked
-     from matches
-     where status in ('live', 'upcoming')
-     order by (status = 'live') desc, starts_at asc
-     limit 500`
-  );
+            ht_stoppage, ft_stoppage, betting_locked`;
+  const liveRows = await msql(`select ${LIST_COLS} from matches where status = 'live' order by starts_at asc limit 300`);
+  const upRows = await msql(`select ${LIST_COLS} from matches where status = 'upcoming' order by starts_at asc limit 300`);
+  const rows = liveRows.concat(upRows);
   const now = new Date();
   // Group 0 is the primary block (API-Football rows, admin manual
   // matches and the featured matches); group 1 is the ESPN block.

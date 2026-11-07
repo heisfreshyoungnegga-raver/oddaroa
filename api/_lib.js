@@ -1208,6 +1208,19 @@ async function maybeAutoSettle() {
   // Split-DB form (2026-11-07): pending selections live in the core
   // project, match rows in the catalog project — fetch each side
   // from its own database and join in memory.
+  // Janitor: a feed match still marked live 4+ hours after kickoff
+  // and already showing 88+ minutes is over — the feeds dropped it
+  // (an exhausted API quota leaves rows frozen mid-match). Finish it
+  // on its last known score so its bets settle below instead of
+  // locking open forever, and so stale rows stop crowding the list.
+  // Suspended early-minute matches are spared: they may resume, and
+  // the live sweep would re-import them as live anyway.
+  await msql(
+    `update matches set status = 'finished', minute = null
+     where status = 'live' and external_ref not like 'custom:%'
+       and starts_at < now() - interval '4 hours'
+       and (minute >= 88 or (minute is null and starts_at < now() - interval '6 hours'))`
+  ).catch(() => {});
   const pend = await sql("select distinct match_id from bet_selections where result = 'pending' limit 200");
   const pendIds = pend.map(r => r.match_id);
   let rows = [];
