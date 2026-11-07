@@ -24,6 +24,7 @@ const state = {
   tab: 'dashboard',
   stats: null, queue: [], matches: [], users: [], support: [],
   settings: null, myDash: null, invites: [], lastInvite: '',
+  work: null, workMode: 'day', workDate: '', workFrom: '', workTo: '', workAdmin: '',
   offline: false,
   // Set when this page was opened from a super admin's invite link:
   // the portal then shows its own admin account-creation page
@@ -140,7 +141,62 @@ function dashboardHTML() {
   // "dont let the admin show the super admin option on thier pages")
   // — it renders only for the super_admin ROLE, on either portal.
   const isSuperRole = !!state.user && state.user.role === 'super_admin';
-  return tabsHTML() + '<div class="stats">' + grid + '</div>' + referralCardHTML() + (isSuperRole ? espnHTML() : '') + queueHTML(true);
+  return tabsHTML() + '<div class="stats">' + grid + '</div>' + workHTML() + referralCardHTML() + (isSuperRole ? espnHTML() : '') + queueHTML(true);
+}
+
+// Per-day work sheet (Prince, 2026-11-07): the Dashboard opens with
+// what the signed-in admin has DONE in the selected day — queue
+// decisions, referrals joined, commission earned — and the day
+// rolls over at midnight Accra time. Any past day is one pick away
+// (that is the history), and the super admin sees every admin's
+// sheet plus a custom date range and a per-admin filter, so
+// accountability is complete.
+function workQuery() {
+  if (state.workMode === 'range' && state.workFrom && state.workTo) return '?from=' + state.workFrom + '&to=' + state.workTo;
+  return state.workDate ? '?date=' + state.workDate : '';
+}
+async function loadWork() {
+  const w = await api('/admin/worklog' + workQuery()).catch(() => null);
+  if (w) { state.work = w; render(); }
+}
+function workTiles(w) {
+  if (!w) return '<p class="muted">Nothing recorded.</p>';
+  const tiles = [
+    ['Deposits confirmed', w.deposits_done_n + ' · ' + money(w.deposits_done_ghs)],
+    ['Deposits rejected', String(w.deposits_rejected_n)],
+    ['Withdrawals confirmed', w.withdrawals_done_n + ' · ' + money(w.withdrawals_done_ghs)],
+    ['Withdrawals rejected', String(w.withdrawals_rejected_n)],
+    ['New referrals', String(w.referrals_n)],
+    ['Commission earned', money(w.commission_earned_ghs)],
+    ['Commission paid out', money(w.commission_paid_ghs)],
+  ];
+  return '<div class="stats">' + tiles.map(([l, v]) => '<div class="stat"><div class="muted">' + l + '</div><div class="stat-v">' + v + '</div></div>').join('') + '</div>';
+}
+function workHTML() {
+  const wk = state.work;
+  const isSuper = !!state.user && state.user.role === 'super_admin';
+  if (!wk) return '<div class="card"><h3>Work sheet</h3><p class="muted">Loading…</p></div>';
+  const per = wk.period || { from: wk.today, to: wk.today };
+  const isToday = per.from === wk.today && per.to === wk.today;
+  const title = state.workMode === 'range' ? 'Work — ' + per.from + ' → ' + per.to : (isToday ? "Today's work" : 'Work — ' + per.from);
+  let h = '<div class="card"><h3>' + title + '</h3>';
+  h += '<div class="row wrap gap"><label class="muted">Day <input type="date" id="workDate" value="' + per.from + '"></label>' +
+    '<button class="btn" id="workTodayBtn">Today</button>' +
+    (isSuper ? '<label class="muted">From <input type="date" id="workFrom" value="' + (state.workFrom || per.from) + '"></label><label class="muted">To <input type="date" id="workTo" value="' + (state.workTo || per.to) + '"></label><button class="btn gold" id="workRangeBtn">View range</button>' : '') +
+    '</div>';
+  h += '<p class="muted">Your work ' + (isToday && state.workMode === 'day' ? 'today' : 'in this period') + ' — it refreshes with each new day; pick any past day above to see that day\'s sheet.</p>';
+  h += workTiles(wk.me);
+  if (isSuper && Array.isArray(wk.admins)) {
+    const names = wk.admins.map(a => '<option value="' + a.admin_id + '"' + (state.workAdmin === a.admin_id ? ' selected' : '') + '>' + esc(a.display_name || a.phone) + '</option>').join('');
+    h += '<h3>All admins — ' + (state.workMode === 'range' ? per.from + ' → ' + per.to : per.from) + '</h3>' +
+      '<div class="row wrap gap"><label class="muted">Admin <select id="workAdminSel"><option value="">All admins</option>' + names + '</select></label></div>';
+    const rows = wk.admins.filter(a => !state.workAdmin || a.admin_id === state.workAdmin);
+    h += rows.map(a => '<div class="stat" style="margin-top:8px"><div class="muted">' + esc(a.display_name || a.phone) + ' · ' + (a.role === 'super_admin' ? 'Super admin' : 'Admin') + '</div>' +
+      '<div>Deposits: <b>' + a.deposits_done_n + '</b> (' + money(a.deposits_done_ghs) + ') · Rejected: <b>' + a.deposits_rejected_n + '</b> · Withdrawals: <b>' + a.withdrawals_done_n + '</b> (' + money(a.withdrawals_done_ghs) + ') · Rejected: <b>' + a.withdrawals_rejected_n + '</b></div>' +
+      '<div>Referrals joined: <b>' + a.referrals_n + '</b> · Commission earned: <b>' + money(a.commission_earned_ghs) + '</b> · Paid out: <b>' + money(a.commission_paid_ghs) + '</b></div></div>').join('');
+    if (wk.totals) h += '<p class="muted" style="margin-top:8px">Totals — deposits confirmed ' + wk.totals.deposits_done_n + ' (' + money(wk.totals.deposits_done_ghs) + '), withdrawals confirmed ' + wk.totals.withdrawals_done_n + ' (' + money(wk.totals.withdrawals_done_ghs) + '), referrals ' + wk.totals.referrals_n + ', commission earned ' + money(wk.totals.commission_earned_ghs) + '.</p>';
+  }
+  return h + '</div>';
 }
 
 // Referral centre, on the Dashboard itself (Prince, 2026-11-05):
@@ -569,15 +625,16 @@ async function loadAll() {
   try {
     const jobs = [
       api('/admin/stats'), api('/admin/queue'), api('/admin/matches'), api('/admin/users'), api('/admin/support'),
-      api('/admin/settings').catch(() => null), api('/admin/my-dashboard').catch(() => null)
+      api('/admin/settings').catch(() => null), api('/admin/my-dashboard').catch(() => null), api('/admin/worklog' + workQuery()).catch(() => null)
     ];
     if (superTools()) jobs.push(api('/admin/invite-admin').catch(() => null));
     if (superTools()) jobs.push(api('/admin/matches?created=1').catch(() => null));
-    const [stats, queue, matches, users, support, settings, myDash, invites, created] = await Promise.all(jobs);
+    const [stats, queue, matches, users, support, settings, myDash, work, invites, created] = await Promise.all(jobs);
     state.stats = stats.stats; state.queue = queue.queue; state.matches = matches.matches;
     state.users = users.users; state.support = support.messages;
     if (settings) state.settings = settings.settings;
     if (myDash) state.myDash = myDash;
+    if (work) state.work = work;
     if (invites) state.invites = invites.invites || [];
     if (created) state.createdMatches = created.matches || [];
   } catch (e) { toast(e.message); }
@@ -585,6 +642,14 @@ async function loadAll() {
 }
 
 document.addEventListener('click', async e => {
+  if (e.target.id === 'workTodayBtn') {
+    state.workMode = 'day'; state.workDate = ''; loadWork(); return;
+  }
+  if (e.target.id === 'workRangeBtn') {
+    const f = document.querySelector('#workFrom'), t = document.querySelector('#workTo');
+    if (f && t && f.value && t.value) { state.workMode = 'range'; state.workFrom = f.value; state.workTo = t.value; loadWork(); }
+    return;
+  }
   if (e.target.id === 'espnSync') {
     const leagues = [...document.querySelectorAll('.espn-league:checked')].map(x => x.value);
     if (!leagues.length) { toast('Pick at least one league.'); return; }
@@ -881,6 +946,12 @@ function collectFfBook() {
   return [...byName.entries()].filter(([, values]) => values.length >= 2).map(([name, values]) => ({ name, values }));
 }
 document.addEventListener('change', e => {
+  if (e.target.id === 'workDate' && e.target.value) {
+    state.workMode = 'day'; state.workDate = e.target.value; loadWork(); return;
+  }
+  if (e.target.id === 'workAdminSel') {
+    state.workAdmin = e.target.value; render(); return;
+  }
   const side = e.target.dataset ? e.target.dataset.crest : null;
   if (!side) return;
   const file = e.target.files && e.target.files[0];

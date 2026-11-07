@@ -20,6 +20,7 @@ const handlers = {
   'balance-edit': require('../_handlers/admin/balance-edit'),
   bonus: require('../_handlers/admin/bonus'),
   'my-dashboard': require('../_handlers/admin/my-dashboard'),
+  worklog: require('../_handlers/admin/worklog'),
   payout: require('../_handlers/admin/payout'),
   'payout-request': require('../_handlers/admin/payout-request'),
   'delete-user': require('../_handlers/admin/delete-user'),
