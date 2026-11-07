@@ -1,4 +1,4 @@
-const { sql, send, guard } = require('../../_lib');
+const { sql, matchesById, send, guard } = require('../../_lib');
 
 // Public ticket check: status and selections only, no account data.
 module.exports = guard(async (req, res) => {
@@ -6,15 +6,23 @@ module.exports = guard(async (req, res) => {
   if (!code) return send(res, 400, { error: 'code_required' });
   const rows = await sql(
     `select b.code, b.stake_ghs, b.total_odds, b.potential_ghs, b.status, b.placed_at, b.kind, b.bonus_pct, b.system_label,
-            m.home_team, m.away_team, m.league, s.market, s.pick, s.odds, s.result
+            s.match_id, s.market, s.pick, s.odds, s.result
      from bets b
      left join bet_selections s on s.bet_id = b.id
-     left join matches m on m.id = s.match_id
      where b.code = $1
      order by s.id`,
     [code]
   );
   if (!rows.length) return send(res, 404, { error: 'ticket_not_found' });
+  // Team names hydrate from the catalog DB (matches moved projects
+  // on 2026-11-07); the core query can no longer join them.
+  const matchMap = await matchesById(rows.map(r => r.match_id)).catch(() => new Map());
+  for (const r of rows) {
+    const m = matchMap.get(r.match_id);
+    r.home_team = m ? m.home_team : null;
+    r.away_team = m ? m.away_team : null;
+    r.league = m ? m.league : null;
+  }
   const head = rows[0];
   send(res, 200, {
     ticket: {
