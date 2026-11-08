@@ -1372,6 +1372,67 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .bp-actions .btn { flex: 1; }
 .bp-done { margin-top: 10px; background: none; border: 0; color: #c9c9c9; font-weight: 700; cursor: pointer; padding: 8px; }
 .bkcode { letter-spacing: .08em; color: #ffd94d; }
+/* Bets list + detail upgrade (2026-11-08, Prince's reference) */
+.bt-tabs { display: flex; gap: 8px; margin: 4px 0 14px; }
+.bt-tab { flex: 1; padding: 11px 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 700; font-size: 15px; cursor: pointer; }
+.bt-tab.on { background: var(--card-dark); border-color: var(--gold); color: var(--gold); }
+.bchips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+.bchip { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-weight: 600; cursor: pointer; }
+.bchip.on { background: var(--gold); border-color: var(--gold); color: var(--accent-ink); }
+.bcard { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin: 0 0 14px; }
+.bcard-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.bcard-code { color: var(--gold); font-size: 19px; letter-spacing: .4px; }
+.bcard-sub { color: var(--muted); margin: 5px 0 0; font-size: 13.5px; }
+.bcard-live { margin: 9px 0 0; font-size: 13.5px; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+.livedot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); animation: pulseDot 1.2s ease-in-out infinite; flex: none; }
+.bcard-cols { display: flex; gap: 10px; margin-top: 13px; }
+.bcard-cols > span { flex: 1; color: var(--muted); font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
+.bcard-cols b { color: var(--ink); font-size: 16px; }
+.bcard-cols b.paidwin { color: var(--win); }
+.bcard .cashout-btn { width: 100%; margin-top: 13px; }
+.bcard-foot { width: 100%; margin-top: 13px; padding-top: 12px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--gold); font-weight: 700; font-size: 15px; cursor: pointer; }
+.bcard-foot span { font-size: 17px; }
+.bsheet { background: var(--surface); max-width: 560px; margin: 0 auto; min-height: 100dvh; padding: 16px 16px 96px; overflow-y: auto; max-height: 100dvh; }
+.bd-head { display: flex; align-items: center; gap: 10px; }
+.bd-head h3 { margin: 0; font-size: 19px; }
+.bd-meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 13.5px; margin-top: 12px; }
+.bd-copy { background: none; border: 1px solid var(--line); border-radius: 8px; color: var(--gold); padding: 2px 9px; font-weight: 700; cursor: pointer; }
+.bd-title { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+.bd-title > b { font-size: 21px; }
+.bd-status { font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
+.bd-status svg { width: 20px; height: 20px; }
+.bd-status.won { color: var(--win); }
+.bd-status.lost { color: var(--live); }
+.bd-status.cashed_out { color: var(--gold); }
+.bd-retlabel { color: var(--muted); margin: 16px 0 2px; }
+.bd-return { font-size: 34px; font-weight: 800; margin: 0; }
+.bd-return.won { color: var(--win); }
+.wonbanner { display: flex; align-items: center; gap: 12px; background: linear-gradient(90deg, #d9a40a, var(--gold)); border-radius: 14px; padding: 13px 14px; margin: 18px 0 6px; color: #141414; }
+.wb-ic { width: 42px; height: 42px; border-radius: 50%; background: rgba(0,0,0,.18); display: grid; place-items: center; flex: none; }
+.wb-ic svg { width: 24px; height: 24px; }
+.wb-txt { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.wb-txt b { font-size: 18px; }
+.wb-txt i { font-style: normal; font-weight: 600; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-btn { background: #141414; color: #fff; border: 0; flex: none; }
+.bd-legs { margin-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+.bleg { display: flex; gap: 11px; background: var(--card-dark); border: 1px solid var(--line); border-radius: 14px; padding: 13px; }
+.bleg-ic { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; font-weight: 800; flex: none; border: 2px solid var(--muted); color: var(--muted); }
+.bleg-ic.won { border-color: var(--win); color: var(--win); }
+.bleg-ic.lost { border-color: var(--live); color: var(--live); }
+.bleg-ic.live { border-color: var(--live); color: var(--live); animation: pulseDot 1.2s ease-in-out infinite; }
+.bleg-main { flex: 1; min-width: 0; }
+.bleg-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.bleg-teams { margin-top: 9px; background: rgba(255,255,255,.04); border-radius: 10px; padding: 9px 11px; }
+.bleg-teams > div { display: flex; justify-content: space-between; padding: 3px 0; }
+.bleg-ft { margin: 8px 0 0; color: var(--muted); }
+.bleg-ft b { color: var(--ink); }
+.bleg-rows { margin-top: 9px; background: rgba(255,255,255,.04); border-radius: 10px; padding: 9px 11px; }
+.bleg-rows > div { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.bleg-rows span { color: var(--muted); }
+.bd-actions { position: sticky; bottom: 0; display: flex; gap: 9px; padding: 12px 0 4px; background: var(--surface); }
+.bd-actions .btn { flex: 1; }
+.bd-actions .btn[disabled] { opacity: .45; }
+
 
 /* Bets: live leg extras (2026-11-06) */
 .legtime { color: #8a978d; font-size: 11.5px; }

@@ -1090,6 +1090,7 @@ function ensureBetColumns() {
       await sql(`alter table bets add column if not exists kind text not null default 'multiple'`);
       await sql(`alter table bets add column if not exists bonus_pct numeric not null default 0`);
       await sql(`alter table bets add column if not exists system_label text`);
+      await sql(`alter table bets add column if not exists payout_ghs numeric`);
     })();
   }
   return betColsReady;
@@ -1186,11 +1187,11 @@ async function settleMatch(matchId, home, away) {
     const b = rows[0];
     if (b.status !== 'open' || Number(b.pending) > 0) continue;
     if (Number(b.lost) > 0) {
-      await sql("update bets set status = 'lost', settled_at = now() where id = $1", [betId]);
+      await sql("update bets set status = 'lost', settled_at = now(), payout_ghs = 0 where id = $1", [betId]);
       settledLost++;
     } else {
       await sql(
-        `with upd as (update bets set status = 'won', settled_at = now() where id = $1 returning user_id, potential_ghs),
+        `with upd as (update bets set status = 'won', settled_at = now(), payout_ghs = potential_ghs where id = $1 returning user_id, potential_ghs),
               led as (insert into wallet_transactions (user_id, kind, method, amount_ghs, status)
                       select user_id, 'bet_win', 'Balance', potential_ghs, 'completed' from upd returning id)
          update users set balance_ghs = balance_ghs + (select potential_ghs from upd)

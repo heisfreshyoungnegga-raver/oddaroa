@@ -31,7 +31,7 @@ module.exports = guard(async (req, res) => {
   // double cashout impossible), write the ledger row, credit the
   // balance — mirroring the bet_win payout in settleMatch.
   const rows = await sql(
-    `with upd as (update bets set status = 'cashed_out', settled_at = now()
+    `with upd as (update bets set status = 'cashed_out', settled_at = now(), payout_ghs = $3
                   where id = $1 and user_id = $2 and status = 'open' returning user_id),
           led as (insert into wallet_transactions (user_id, kind, method, amount_ghs, status)
                   select user_id, 'cashout', 'Balance', $3, 'completed' from upd returning id),

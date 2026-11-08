@@ -89,7 +89,7 @@ const CUR_RULES = {
 function curSym() { return CUR_SYM[curCode()] || 'GHS '; }
 function curRules() { return CUR_RULES[curCode()] || CUR_RULES.GHS; }
 window.odStakeRules = () => { const r = curRules(); return { min: r.minStake, max: r.maxStake, sym: curSym(), code: curCode() }; };
-function money(n) { return curSym() + Number(n || 0).toFixed(2); }
+function money(n) { return curSym() + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 // Headline balances respect the header eye toggle (Prince,
 // 2026-11-05): hidden shows a masked amount. Transaction history
 // amounts are records, not "the balance", and stay visible.
@@ -942,48 +942,151 @@ function shrinkImage(file) {
     img.src = url;
   });
 }
-function betCardHTML(b) {
-  const legs = (b.selections || []).map(l => {
-    // Live legs wear the same pulsing LIVE chip + score + clock
-    // the Super Admin pages show (Prince's ask 2026-11-05); a
-    // finished-but-unsettled leg shows its FT score.
-    let res;
-    if (l.match_status === 'live') {
-      const when = l.live_label || (l.live_minute != null ? l.live_minute + '′' : '');
-      res = '<span class="st st-live">● LIVE' + (when ? ' ' + esc(when) : '') + '</span> <b>' +
-        (l.live_home || 0) + '-' + (l.live_away || 0) + '</b>';
-    } else if (l.match_status === 'finished') {
-      res = '<span class="legres">FT ' + (l.live_home || 0) + '-' + (l.live_away || 0) + '</span>';
-    } else if (l.match_status === 'postponed') {
-      res = '<span class="legres">Postponed</span>';
-    } else {
-      res = '<span class="legres">' + esc(l.result || '') + '</span>';
-    }
-    const nowTag = l.now_odds && (!l.result || l.result === 'pending')
-      ? ' <span class="nowodds ' + (Number(l.now_odds) > Number(l.odds) ? 'now-up' : Number(l.now_odds) < Number(l.odds) ? 'now-down' : '') + '">now ' + Number(l.now_odds).toFixed(2) + '</span>'
-      : '';
-    return '<div class="leg"><span>' + esc(l.home_team || '') + ' vs ' + esc(l.away_team || '') +
-      (l.starts_at ? '<br><span class="legtime">' + fmtDate(l.starts_at) + '</span>' : '') + '</span>' +
-      '<span>' + esc(l.pick) + ' · ' + esc(mktName(l.market)) + ' · <b>' + Number(l.odds).toFixed(2) + '</b>' + nowTag + '</span>' +
-      '<span class="legstate">' + res + '</span></div>';
-  }).join('');
-  return '<div class="card"><div class="card-head"><b>' + esc(b.code) + '</b>' + statusChip(b.status) + '</div>' +
-    '<p class="muted">' + fmtDate(b.placed_at) + '</p>' + legs +
-    '<div class="card-row"><span>Stake</span><b>' + money(b.stake_ghs) + '</b></div>' +
-    '<div class="card-row"><span>Type</span><b>' + esc(b.kind === 'system' ? 'System ' + (b.system_label || '') : b.kind === 'single' ? 'Single' : 'Multiple') + '</b></div>' +
-    (Number(b.bonus_pct) > 0 ? '<div class="card-row"><span>Winnings bonus</span><b>+' + Number(b.bonus_pct) + '%</b></div>' : '') +
-    '<div class="card-row"><span>Total odds</span><b>' + Number(b.total_odds).toFixed(2) + '</b></div>' +
-    '<div class="card-row"><span>Potential win</span><b>' + money(b.potential_ghs) + '</b></div>' +
-    (b.live_potential_ghs != null ? '<div class="card-row"><span>Live potential</span><b class="goldval">' + money(b.live_potential_ghs) + '</b></div>' : '') +
-    (b.booking_code ? '<div class="card-row"><span>Booking code</span><b class="bkcode">' + esc(b.booking_code) + '</b></div>' : '') +
-    // Cashout (Prince, 2026-11-05): the button exists only while
-    // the server quotes a value. When any leg is live there is no
-    // quote, so there is no button and no message — it comes back
-    // once that game is settled at full time.
+function ticketTypeLabel(b) {
+  return b.kind === 'system' ? 'System ' + (b.system_label || '') : b.kind === 'single' ? 'Single' : 'Multiple';
+}
+// What the player actually received for a settled ticket: a win
+// pays its full potential, a cashout pays the stored payout, a
+// loss pays nothing. Null = settled before payouts were recorded.
+function paidOutOf(b) {
+  if (b.status === 'won') return Number(b.potential_ghs);
+  if (b.status === 'cashed_out') return b.payout_ghs == null ? null : Number(b.payout_ghs);
+  if (b.status === 'lost') return 0;
+  if (b.status === 'void') return Number(b.stake_ghs);
+  return null;
+}
+// Bets list + detail upgrade (Prince, 2026-11-08, from his
+// reference screenshots): Open Bets / Bet History tabs, outcome
+// filter chips, compact Stake | Odds | Paid out cards, and a full
+// Bet details sheet with per-leg outcomes, Rebet and Show Off.
+function ticketCardHTML(b) {
+  const legs = b.selections || [];
+  const liveLeg = legs.find(l => l.match_status === 'live');
+  const settled = b.status !== 'open';
+  const paid = paidOutOf(b);
+  return '<div class="bcard">' +
+    '<div class="bcard-top"><b class="bcard-code">' + esc(b.booking_code || b.code) + '</b>' + statusChip(b.status) + '</div>' +
+    '<p class="bcard-sub">' + legs.length + (legs.length === 1 ? ' leg' : ' legs') + ' · ' + esc(ticketTypeLabel(b)) + ' · ' + fmtDate(b.placed_at) + '</p>' +
+    (liveLeg ? '<p class="bcard-live"><span class="livedot"></span>LIVE ' + esc(liveLeg.home_team || '') + ' <b>' + (liveLeg.live_home || 0) + '-' + (liveLeg.live_away || 0) + '</b> ' + esc(liveLeg.away_team || '') + (liveLeg.live_label ? ' · ' + esc(liveLeg.live_label) : '') + '</p>' : '') +
+    '<div class="bcard-cols">' +
+      '<span>Stake<b>' + money(b.stake_ghs) + '</b></span>' +
+      '<span>Odds<b>' + Number(b.total_odds).toFixed(2) + '</b></span>' +
+      (settled
+        ? '<span>Paid out<b class="' + (paid > 0 ? 'paidwin' : '') + '">' + (paid == null ? '—' : money(paid)) + '</b></span>'
+        : '<span>Potential<b>' + money(b.live_potential_ghs != null ? b.live_potential_ghs : b.potential_ghs) + '</b></span>') +
+    '</div>' +
     (b.status === 'open' && b.cashout_ghs
-      ? '<button class="btn gold cashout-btn" data-cashout="' + b.id + '">Cash out · ' + money(b.cashout_ghs) + '</button>'
-      : '') +
+      ? '<button class="btn gold cashout-btn" data-cashout="' + b.id + '">Cash out · ' + money(b.cashout_ghs) + '</button>' : '') +
+    '<button class="bcard-foot" data-bet-details="' + b.id + '">View bet details <span>›</span></button>' +
     '</div>';
+}
+function legOutcomeText(l) {
+  if (l.result === 'won' || l.result === 'lost') {
+    return (l.live_home != null && l.live_away != null) ? (l.live_home + ':' + l.live_away) : l.result;
+  }
+  return '—';
+}
+function legDetailHTML(l) {
+  let ic = 'pend', glyph = '•';
+  if (l.result === 'won') { ic = 'won'; glyph = '✓'; }
+  else if (l.result === 'lost') { ic = 'lost'; glyph = '✕'; }
+  else if (l.match_status === 'live') { ic = 'live'; glyph = '●'; }
+  let pill;
+  if (l.result === 'won') pill = '<span class="st st-completed">WON</span>';
+  else if (l.result === 'lost') pill = '<span class="st st-rejected">LOST</span>';
+  else if (l.match_status === 'live') pill = '<span class="st st-live">● LIVE' + (l.live_label ? ' ' + esc(l.live_label) : '') + '</span>';
+  else if (l.match_status === 'postponed') pill = '<span class="st st-pending">POSTPONED</span>';
+  else pill = '<span class="st st-pending">PENDING</span>';
+  const scored = l.match_status === 'live' || l.match_status === 'finished';
+  const nowTag = l.now_odds && (!l.result || l.result === 'pending')
+    ? ' <span class="nowodds ' + (Number(l.now_odds) > Number(l.odds) ? 'now-up' : Number(l.now_odds) < Number(l.odds) ? 'now-down' : '') + '">now ' + Number(l.now_odds).toFixed(2) + '</span>' : '';
+  return '<div class="bleg"><span class="bleg-ic ' + ic + '">' + glyph + '</span><div class="bleg-main">' +
+    '<div class="bleg-head"><span>' + (l.starts_at ? fmtDate(l.starts_at) : '') + ' · Football</span>' + pill + '</div>' +
+    '<div class="bleg-teams"><div><span>' + esc(l.home_team || '') + '</span><b>' + (scored ? (l.live_home || 0) : '') + '</b></div>' +
+    '<div><span>' + esc(l.away_team || '') + '</span><b>' + (scored ? (l.live_away || 0) : '') + '</b></div></div>' +
+    (l.match_status === 'finished' ? '<p class="bleg-ft">FT Score: <b>' + (l.live_home || 0) + ':' + (l.live_away || 0) + '</b></p>' : '') +
+    '<div class="bleg-rows"><div><span>Market</span><b>' + esc(mktName(l.market)) + '</b></div>' +
+    '<div><span>Pick</span><b>' + esc(l.pick) + ' @ ' + Number(l.odds).toFixed(2) + '</b>' + nowTag + '</div>' +
+    '<div><span>Outcome</span><b>' + esc(legOutcomeText(l)) + '</b></div></div>' +
+    '</div></div>';
+}
+function betDetailsHTML(b) {
+  const paid = paidOutOf(b);
+  const ret = b.status === 'open' ? (b.live_potential_ghs != null ? b.live_potential_ghs : b.potential_ghs) : paid;
+  const statusHead = b.status === 'won'
+    ? '<span class="bd-status won">' + TROPHY_ICON + ' WON</span>'
+    : '<span class="bd-status ' + b.status + '">' + esc(String(b.status).replace('_', ' ').toUpperCase()) + '</span>';
+  return '<div class="bsheet">' +
+    '<div class="bd-head"><button class="iconbtn" data-close-bdetail aria-label="Back">←</button><h3>Bet details</h3></div>' +
+    '<div class="bd-meta"><span>' + fmtDate(b.placed_at) + ' · ' + esc(ticketTypeLabel(b)) + '</span>' +
+    '<span>Ticket ID: <b>' + esc(b.code) + '</b> <button class="bd-copy" data-copy="' + esc(b.code) + '">Copy</button></span></div>' +
+    '<div class="bd-title"><b>' + esc(ticketTypeLabel(b)) + '</b>' + statusHead + '</div>' +
+    (ret != null ? '<p class="bd-retlabel">' + (b.status === 'open' ? 'Potential Return' : 'Total Return') + '</p><p class="bd-return' + (b.status === 'won' ? ' won' : '') + '">' + money(ret) + '</p>' : '') +
+    (b.status === 'won' ? '<div class="wonbanner"><span class="wb-ic">' + TROPHY_ICON + '</span><span class="wb-txt"><b>You Won!</b><i>' + esc(String((state.user && state.user.display_name) || 'WINNER').toUpperCase()) + '</i></span><button class="btn wb-btn" data-showoff="' + b.id + '">SHOW OFF</button></div>' : '') +
+    '<div class="card-row"><span>Total Stake</span><b>' + money(b.stake_ghs) + '</b></div>' +
+    '<div class="card-row"><span>Total Odds</span><b>' + Number(b.total_odds).toFixed(2) + '</b></div>' +
+    (Number(b.bonus_pct) > 0 ? '<div class="card-row"><span>Winnings bonus</span><b>+' + Number(b.bonus_pct) + '%</b></div>' : '') +
+    (b.booking_code ? '<div class="card-row"><span>Booking code</span><b class="bkcode">' + esc(b.booking_code) + '</b></div>' : '') +
+    '<div class="bd-legs">' + (b.selections || []).map(legDetailHTML).join('') + '</div>' +
+    '<div class="bd-actions">' +
+      '<button class="btn ghost" data-copy="' + esc(b.booking_code || b.code) + '">Booking Code</button>' +
+      '<button class="btn ghost" data-rebet="' + b.id + '">Rebet</button>' +
+      (b.status === 'open' && b.cashout_ghs
+        ? '<button class="btn gold" data-cashout="' + b.id + '">Cash Out · ' + money(b.cashout_ghs) + '</button>'
+        : '<button class="btn gold" disabled>Cash Out</button>') +
+    '</div></div>';
+}
+function openBetDetails(id) {
+  const b = state.myBets.find(x => x.id === id);
+  if (!b) return;
+  closeBetDetails();
+  state.betDetailId = id;
+  const el = document.createElement('div');
+  el.className = 'modalwrap open';
+  el.id = 'bdetailWrap';
+  el.innerHTML = betDetailsHTML(b);
+  document.body.appendChild(el);
+}
+function closeBetDetails() {
+  const el = $('#bdetailWrap');
+  if (el) el.remove();
+  state.betDetailId = null;
+}
+async function shareOff(id) {
+  const b = state.myBets.find(x => x.id === id);
+  if (!b) return;
+  const text = 'I just won ' + money(b.potential_ghs) + ' on Oddaroa! Ticket ' + (b.booking_code || b.code) + ' — play at https://oddaroa.com';
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Oddaroa win', text }); return; }
+    throw new Error('no share');
+  } catch (e) {
+    try { await navigator.clipboard.writeText(text); toast('Win text copied — paste it anywhere to show off.'); }
+    catch (e2) { toast(text); }
+  }
+}
+async function rebetBet(id) {
+  const b = state.myBets.find(x => x.id === id);
+  if (!b) return;
+  const legs = b.selections || [];
+  await Promise.all([...new Set(legs.map(l => l.match_id))].map(mid => loadMatchFull(mid).catch(() => {})));
+  state.slip.clear();
+  let added = 0, skipped = 0;
+  legs.forEach(l => {
+    const m = state.matches.find(x => x.id === l.match_id);
+    if (!m || (m.status && m.status !== 'upcoming')) { skipped++; return; }
+    const o = priceForPick(m, l.market, l.pick);
+    if (!o) { skipped++; return; }
+    state.slip.set(slipKey(m.id, l.market, l.pick), {
+      matchId: m.id, matchLabel: m.home + ' vs ' + m.away,
+      league: m.league, market: l.market, pick: l.pick, odd: o.odd,
+    });
+    added++;
+  });
+  renderSlip();
+  syncOddSelection();
+  closeBetDetails();
+  if (added) { openSlip(); toast('Rebet loaded — ' + added + ' selection(s) on your slip' + (skipped ? ', ' + skipped + ' no longer available' : '') + '.'); }
+  else toast('None of those selections are available anymore.');
 }
 async function cashOut(betId) {
   const b = state.myBets.find(x => x.id === betId);
@@ -992,6 +1095,7 @@ async function cashOut(betId) {
   try {
     const data = await api('/bets/cashout', { method: 'POST', body: { bet_id: betId } });
     if (state.user) { state.user.balance_ghs = data.balance_ghs; syncHeader(); }
+    closeBetDetails();
     toast('Cashed out — ' + money(data.cashout_ghs) + ' added to your balance.');
     loadBets();
   } catch (err) {
@@ -1001,8 +1105,24 @@ async function cashOut(betId) {
 }
 function betsHTML() {
   if (!state.user) return gateHTML('Bets');
+  const tab = state.betsTab || 'open';
+  const open = state.myBets.filter(b => b.status === 'open');
+  let body = '';
+  if (tab === 'open') {
+    body = open.length ? open.map(ticketCardHTML).join('') : '<p class="empty">No open bets — add odds to your slip and place a bet.</p>';
+  } else {
+    const filter = state.betsFilter || 'all';
+    const settled = state.myBets.filter(b => b.status !== 'open');
+    const shown = filter === 'all' ? settled : settled.filter(b => b.status === filter);
+    const chip = (k, label) => '<button class="bchip' + (filter === k ? ' on' : '') + '" data-bfilter="' + k + '">' + label + '</button>';
+    body = '<div class="bchips">' + chip('all', 'All') + chip('won', 'Won') + chip('lost', 'Lost') + chip('cashed_out', 'Cashed out') + '</div>' +
+      (shown.length ? shown.map(ticketCardHTML).join('') : '<p class="empty">No bets in this filter yet.</p>');
+  }
   return '<h2>Bets</h2>' +
-    (state.myBets.length ? state.myBets.map(betCardHTML).join('') : '<p class="empty">No bets yet — add odds to your slip and place your first bet.</p>');
+    '<div class="bt-tabs">' +
+      '<button class="bt-tab' + (tab === 'open' ? ' on' : '') + '" data-btab="open">Open Bets (' + open.length + ')</button>' +
+      '<button class="bt-tab' + (tab === 'history' ? ' on' : '') + '" data-btab="history">Bet History</button>' +
+    '</div>' + body;
 }
 // Little red count on the bottom-nav Bets button: how many of the
 // user's staked bets are still open (Prince, 2026-11-06 — the same
@@ -1021,6 +1141,7 @@ async function loadBets() {
     maybeCelebrateWin(data.bets);
   } catch (e) { state.myBets = []; }
   if (state.view === 'bets') render();
+  if (state.betDetailId) openBetDetails(state.betDetailId);
   syncBetsBadge();
   // While any leg is live, keep the Bets view fresh on its own so
   // the score and clock move without the player refreshing.
@@ -1833,6 +1954,17 @@ async function refreshUser() {
 document.addEventListener('click', e => {
   const co = e.target.closest('[data-cashout]');
   if (co) { e.preventDefault(); cashOut(co.dataset.cashout); return; }
+  const btab = e.target.closest('[data-btab]');
+  if (btab) { state.betsTab = btab.dataset.btab; render(); return; }
+  const bfil = e.target.closest('[data-bfilter]');
+  if (bfil) { state.betsFilter = bfil.dataset.bfilter; render(); return; }
+  const bdet = e.target.closest('[data-bet-details]');
+  if (bdet) { openBetDetails(bdet.dataset.betDetails); return; }
+  if (e.target.closest('[data-close-bdetail]')) { closeBetDetails(); return; }
+  const soff = e.target.closest('[data-showoff]');
+  if (soff) { shareOff(soff.dataset.showoff); return; }
+  const reb = e.target.closest('[data-rebet]');
+  if (reb) { rebetBet(reb.dataset.rebet); return; }
   const nav = e.target.closest('[data-nav]');
   if (nav) { closeMenu();
     e.preventDefault();
