@@ -9,7 +9,7 @@ const { sql, readBody, send, guard, requireAdmin, requireSuperAdmin, ensureSuppo
 module.exports = guard(async (req, res) => {
   const auth = requireAdmin(req, res);
   if (!auth) return;
-  await ensureSupportColumns();
+  await ensureSupportColumns().catch(() => {});
   const q = req.query || {};
   if (req.method === 'POST') {
     const body = await readBody(req);

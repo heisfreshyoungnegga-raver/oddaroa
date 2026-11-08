@@ -8,7 +8,7 @@ const { sql, readBody, send, guard, requireAuth, ensureSupportColumns } = requir
 module.exports = guard(async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
-  await ensureSupportColumns();
+  await ensureSupportColumns().catch(() => {});
   if (req.method === 'POST') {
     const { subject, body } = await readBody(req);
     const text = String(body || '').trim();
