@@ -249,7 +249,7 @@ async function refreshAfLive() {
      where external_ref like 'af:%' and status in ('live', 'upcoming')
        and starts_at < now() + interval '6 days'
        and (not (odds ? 'o1') or odds_full is null)
-     order by odds_attempt_at asc nulls first, starts_at asc
+     order by (status = 'upcoming') desc, odds_attempt_at asc nulls first, starts_at asc
      limit $1`,
     [ODDS_CAP_PER_REFRESH]
   );
