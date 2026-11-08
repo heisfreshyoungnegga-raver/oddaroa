@@ -228,8 +228,20 @@ async function loadMatchFull(id) {
     if (data.match && Array.isArray(data.match.odds_full)) {
       state.fullBooks[id] = data.match.odds_full;
       if (state.view === 'match' && state.matchId === id) render();
+    } else {
+      // The server answered but the book is not priced yet — un-mark
+      // so the next retry (60s tick while the page is open) can win
+      // it. The old behaviour made ANY miss final for the whole
+      // session: one network hiccup, or opening the match a minute
+      // before its book landed, and Correct Score & co. never
+      // appeared until a full page reload (users' "options no dey
+      // come", 2026-11-08).
+      delete state.fullTried[id];
     }
-  } catch (e) { /* the classic markets still render without the book */ }
+  } catch (e) {
+    // A failed fetch must not be final either — allow the retry.
+    delete state.fullTried[id];
+  }
 }
 function leagues() {
   return ['All', ...new Set(state.matches.map(m => m.league))];
@@ -2596,6 +2608,9 @@ setInterval(() => {
 setInterval(() => {
   if (document.hidden) return;
   if (['home', 'live', 'sports', 'virtual', 'match'].includes(state.view)) loadMatches();
+  // While a match page is open without its full book, keep trying —
+  // books priced after the page opened must still arrive.
+  if (state.view === 'match' && state.matchId && !state.fullBooks[state.matchId]) loadMatchFull(state.matchId);
 }, 60000);
 
 // Support chat: while the player is on Support or Settings, quietly
