@@ -42,6 +42,7 @@ module.exports = guard(async (req, res) => {
       `select u.id as user_id, u.display_name, u.phone,
          (select body from support_messages sm2 where sm2.user_id = u.id order by sm2.created_at desc limit 1) as last_body,
          (select sender from support_messages sm3 where sm3.user_id = u.id order by sm3.created_at desc limit 1) as last_sender,
+         (select (read_at is not null) from support_messages sm4 where sm4.user_id = u.id order by sm4.created_at desc limit 1) as last_seen,
          max(sm.created_at) as last_at,
          count(*) filter (where sm.sender = 'user' and sm.read_at is null) as unread
        from support_messages sm join users u on u.id = sm.user_id
@@ -57,7 +58,7 @@ module.exports = guard(async (req, res) => {
     const target = String(q.user);
     const rows = await sql(
       `select * from (
-         select id, body, sender, created_at
+         select id, body, sender, created_at, read_at
          from support_messages where user_id = $1
          order by created_at desc limit 200
        ) t order by created_at asc`,

@@ -559,7 +559,7 @@ function messagesHTML() {
       '<span class="mchat-ava">' + esc(initialsOf(t.display_name, t.phone)) + '</span>' +
       '<span class="mchat-tcol"><span class="mchat-tname">' + esc(label) +
       (t.unread ? ' <span class="mchat-badge">' + t.unread + '</span>' : '') + '</span>' +
-      '<span class="mchat-tprev">' + (t.last_sender === 'admin' ? 'You: ' : '') + esc(String(t.last_body || '').slice(0, 46)) + '</span></span>' +
+      '<span class="mchat-tprev">' + (t.last_sender === 'admin' ? (t.last_seen ? '\u2713\u2713 ' : '\u2713 ') : '') + esc(String(t.last_body || '').slice(0, 46)) + '</span></span>' +
       '<span class="mchat-ttime">' + fmtDate(t.last_at) + '</span></button>';
   }).join('');
   let main;
@@ -569,7 +569,8 @@ function messagesHTML() {
     const sel = (state.chatThreads || []).find(t => t.user_id === state.chatUser) || {};
     const msgs = (state.chatThread || []).map(m =>
       '<div class="chat-row ' + (m.sender === 'admin' ? 'mine' : 'theirs') + '"><div class="chat-bubble">' +
-      esc(m.body) + '<span class="chat-time">' + fmtDate(m.created_at) + '</span></div></div>').join('');
+      esc(m.body) + '<span class="chat-time">' + fmtDate(m.created_at) +
+      (m.sender === 'admin' ? (m.read_at ? ' \u00b7 Seen' : ' \u00b7 Sent') : '') + '</span></div></div>').join('');
     main = '<div class="mchat-head"><span class="mchat-ava">' + esc(initialsOf(sel.display_name, sel.phone)) + '</span>' +
       '<span class="mchat-hcol"><b>' + esc(sel.display_name || sel.phone || 'Player') + '</b>' +
       (sel.display_name && sel.phone ? '<span class="mchat-hphone">' + esc(sel.phone) + '</span>' : '') + '</span></div>' +
@@ -1300,8 +1301,10 @@ setInterval(async () => {
     state.chatThreads = t.threads || [];
     if (state.chatUser) {
       const d = await api('/admin/support?user=' + encodeURIComponent(state.chatUser));
-      const lastNew = d.messages && d.messages.length ? String(d.messages[d.messages.length - 1].id) : '';
-      const lastOld = state.chatThread.length ? String(state.chatThread[state.chatThread.length - 1].id) : '';
+      const seenCount = (d.messages || []).filter(m => m.sender === 'admin' && m.read_at).length;
+      const lastNew = (d.messages && d.messages.length ? String(d.messages[d.messages.length - 1].id) : '') + '|' + seenCount;
+      const oldSeen = state.chatThread.filter(m => m.sender === 'admin' && m.read_at).length;
+      const lastOld = (state.chatThread.length ? String(state.chatThread[state.chatThread.length - 1].id) : '') + '|' + oldSeen;
       state.chatThread = d.messages || [];
       if (lastNew === lastOld) return;
       const typing = document.activeElement && document.activeElement.id === 'mchatText' && document.activeElement.value;
