@@ -1439,17 +1439,35 @@ function promosHTML() {
     '<div class="card"><span class="gtag">' + p.tag + '</span><h3>' + p.title + '</h3><p>' + p.body + '</p></div>').join('') +
     '</div><p class="muted">All promotions are subject to terms and account verification. 18+ only.</p>';
 }
+function fmtMsgTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' +
+      d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return ''; }
+}
+// Support chat box (Prince, 2026-11-08): one conversation with the
+// super admin, shared by the Support view and the Settings view.
+function chatHTML() {
+  if (!state.user) {
+    return '<div class="card"><h3>Chat with support</h3>' +
+      '<p class="muted">Log in to chat with the support team. Guests can browse the FAQs without an account.</p></div>';
+  }
+  const msgs = state.supportMsgs.map(m => {
+    const mine = m.sender !== 'admin';
+    return '<div class="chat-row ' + (mine ? 'mine' : 'theirs') + '"><div class="chat-bubble">' +
+      esc(m.body) + '<span class="chat-time">' + fmtMsgTime(m.created_at) + '</span></div></div>';
+  }).join('');
+  return '<div class="card"><h3>Chat with support</h3>' +
+    '<div class="chat-list" id="chatList">' +
+    (msgs || '<p class="muted chat-empty">No messages yet. Say hello — the support team replies right here.</p>') +
+    '</div>' +
+    '<form id="chatForm" class="chat-form"><input type="text" id="chatText" placeholder="Type your message…" autocomplete="off" maxlength="2000" required>' +
+    '<button class="btn gold" type="submit">Send</button></form></div>';
+}
 function supportHTML() {
   const faq = FAQS.map(f => '<details class="faq"><summary>' + f.q + '</summary><p>' + f.a + '</p></details>').join('');
-  const msgs = state.supportMsgs.map(m =>
-    '<div class="leg"><span>' + esc(m.subject) + '</span><span class="legres">' + esc(m.status) + '</span></div>').join('');
-  return '<h2>Support</h2><div class="card"><h3>FAQs</h3>' + faq + '</div>' +
-    '<div class="card"><h3>Message support</h3>' + msgs +
-    (state.user
-      ? '<form id="supportForm" class="stack"><label>Subject <input type="text" id="supportSubject" placeholder="What is it about?" required></label>' +
-        '<label>Your message <input type="text" id="supportText" placeholder="How can we help?" required></label>' +
-        '<button class="btn gold big" type="submit">Send Message</button></form>'
-      : '<p class="muted">Log in to message the support team. Guests can browse the FAQs without an account.</p>') + '</div>';
+  return '<h2>Support</h2><div class="card"><h3>FAQs</h3>' + faq + '</div>' + chatHTML();
 }
 async function loadSupport() {
   if (!state.user) return;
@@ -1457,7 +1475,13 @@ async function loadSupport() {
     const data = await api('/support');
     state.supportMsgs = data.messages;
   } catch (e) { /* keep current */ }
-  if (state.view === 'support') render();
+  if (state.view === 'support' || state.view === 'settings') {
+    render();
+    const list = $('#chatList');
+    const last = state.supportMsgs[state.supportMsgs.length - 1];
+    const lastId = last ? String(last.id) : '';
+    if (list && lastId !== state._chatLastId) { list.scrollTop = list.scrollHeight; state._chatLastId = lastId; }
+  }
 }
 function settingsHTML() {
   if (!state.user) return gateHTML('Settings');
@@ -1468,7 +1492,7 @@ function settingsHTML() {
     '<h3>Change password</h3><form id="passwordForm" class="stack">' +
     '<label>Current password <input type="password" id="pwCurrent" required></label>' +
     '<label>New password <input type="password" id="pwNew" required></label>' +
-    '<button class="btn gold big" type="submit">Update Password</button></form></div>';
+    '<button class="btn gold big" type="submit">Update Password</button></form></div>' + chatHTML();
 }
 function gamesHTML() {
   loadGameImages();
@@ -1975,7 +1999,7 @@ document.addEventListener('click', e => {
     if (state.view === 'bets') loadBets();
     if (state.view === 'winners') loadWinners();
     if (state.view === 'wallet') loadWallet();
-    if (state.view === 'support') loadSupport();
+    if (state.view === 'support' || state.view === 'settings') loadSupport();
     return;
   }
   if (e.target.closest('#filterToggle')) {
@@ -2292,14 +2316,14 @@ document.addEventListener('submit', async e => {
     } catch (err) {
       toast('That slip code could not be read.');
     }
-  } else if (id === 'supportForm') {
+  } else if (id === 'chatForm') {
     e.preventDefault();
+    const input = $('#chatText');
+    const text = input ? input.value.trim() : '';
+    if (!text) return;
     try {
-      await api('/support', {
-        method: 'POST',
-        body: { subject: $('#supportSubject').value.trim(), body: $('#supportText').value.trim() }
-      });
-      toast('Message sent — support will reply here.');
+      await api('/support', { method: 'POST', body: { body: text } });
+      if (input) input.value = '';
       loadSupport();
     } catch (err) { errToast(err, 'Message could not be sent.'); }
   } else if (id === 'passwordForm') {
@@ -2520,6 +2544,13 @@ setInterval(() => {
   if (document.hidden) return;
   if (['home', 'live', 'sports', 'virtual', 'match'].includes(state.view)) loadMatches();
 }, 60000);
+
+// Support chat: while the player is on Support or Settings, quietly
+// pull the thread so admin replies land without a manual refresh.
+setInterval(() => {
+  if (document.hidden || !state.user) return;
+  if (state.view === 'support' || state.view === 'settings') loadSupport();
+}, 15000);
 
 // Invite links land here first: remember the attribution / invite
 // token, then let registration pick it up.

@@ -1095,6 +1095,21 @@ function ensureBetColumns() {
   }
   return betColsReady;
 }
+// Support chat columns (Prince, 2026-11-08): support_messages becomes a
+// two-way chat — sender marks who wrote ('user' | 'admin'), admin_id the
+// replying admin, read_at when the other side has seen the message.
+let supportColsReady = null;
+function ensureSupportColumns() {
+  if (!supportColsReady) {
+    supportColsReady = (async () => {
+      await sql(`alter table support_messages add column if not exists sender text not null default 'user'`);
+      await sql(`alter table support_messages add column if not exists admin_id uuid`);
+      await sql(`alter table support_messages add column if not exists read_at timestamptz`);
+      await sql(`create index if not exists support_messages_user_created_idx on support_messages (user_id, created_at)`);
+    })();
+  }
+  return supportColsReady;
+}
 // Custom-match stoppage columns (Prince, 2026-11-05): how many
 // stoppage minutes the super admin added to each half of a featured
 // match. The match clock is 45 + stoppage, a 15-minute half-time,
@@ -1436,4 +1451,4 @@ async function ensureBookingCode(userId, selections) {
   return null;
 }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };

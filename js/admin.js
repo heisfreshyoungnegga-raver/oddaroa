@@ -22,7 +22,7 @@ const state = {
   token: localStorage.getItem('ps_admin_token') || '',
   user: null,
   tab: 'dashboard',
-  stats: null, queue: [], matches: [], users: [], support: [],
+  stats: null, queue: [], matches: [], users: [], support: [], chatThreads: [], chatUser: null, chatThread: [],
   settings: null, myDash: null, invites: [], lastInvite: '',
   work: null, workMode: 'day', workDate: '', workFrom: '', workTo: '', workAdmin: '',
   offline: false,
@@ -116,8 +116,14 @@ function tabsHTML() {
   // going live and settling are super admin work.
   if (isSuperPortal) tabs.splice(2, 0, ['matches', 'Matches']);
   if (superTools()) tabs.push(['control', 'Platform Control']);
-  return '<div class="wtabs">' + tabs.map(([k, label]) =>
-    '<button class="' + (state.tab === k ? 'on' : '') + '" data-atab="' + k + '">' + label + '</button>').join('') + '</div>';
+  return '<div class="wtabs">' + tabs.map(([k, label]) => {
+    let text = label;
+    if (k === 'support' && isSuperPortal) {
+      const unread = (state.chatThreads || []).reduce((n, t) => n + (Number(t.unread) || 0), 0);
+      text = 'Messages' + (unread ? ' (' + unread + ')' : '');
+    }
+    return '<button class="' + (state.tab === k ? 'on' : '') + '" data-atab="' + k + '">' + text + '</button>';
+  }).join('') + '</div>';
 }
 function siteLink(path) { return location.origin + path; }
 const ESPN_LEAGUES = [
@@ -523,7 +529,43 @@ function featuredFormHTML() {
     '<div id="ffBook"></div></details>' +
     '<button class="btn gold big" type="submit">Create Featured Match</button></form></div>';
 }
+async function openThread(uid) {
+  state.chatUser = uid;
+  try {
+    const d = await api('/admin/support?user=' + encodeURIComponent(uid));
+    state.chatThread = d.messages || [];
+  } catch (e) { toast(e.message); }
+  try {
+    const t = await api('/admin/support?threads=1');
+    state.chatThreads = t.threads || [];
+  } catch (e) { /* keep current list */ }
+  render();
+  const list = $('#mchatList');
+  if (list) list.scrollTop = list.scrollHeight;
+}
+function messagesHTML() {
+  const threads = (state.chatThreads || []).map(t =>
+    '<button class="mchat-thread' + (state.chatUser === t.user_id ? ' on' : '') + '" data-thread="' + t.user_id + '">' +
+      '<span class="mchat-tname">' + esc(t.display_name || t.phone || 'Player') +
+      (t.unread ? ' <span class="mchat-badge">' + t.unread + '</span>' : '') + '</span>' +
+      '<span class="mchat-tprev">' + (t.last_sender === 'admin' ? 'You: ' : '') + esc(String(t.last_body || '').slice(0, 70)) + '</span>' +
+      '<span class="mchat-ttime">' + fmtDate(t.last_at) + '</span></button>').join('');
+  let main;
+  if (!state.chatUser) {
+    main = '<p class="empty">Select a conversation to read it and reply.</p>';
+  } else {
+    const msgs = (state.chatThread || []).map(m =>
+      '<div class="chat-row ' + (m.sender === 'admin' ? 'mine' : 'theirs') + '"><div class="chat-bubble">' +
+      esc(m.body) + '<span class="chat-time">' + fmtDate(m.created_at) + '</span></div></div>').join('');
+    main = '<div class="chat-list" id="mchatList">' + (msgs || '<p class="muted chat-empty">No messages yet.</p>') + '</div>' +
+      '<form id="mchatForm" class="chat-form"><input type="text" id="mchatText" placeholder="Reply to player…" autocomplete="off" maxlength="2000" required>' +
+      '<button class="btn gold" type="submit">Reply</button></form>';
+  }
+  return tabsHTML() + '<div class="card"><h3>Messages</h3><div class="mchat"><div class="mchat-threads">' +
+    (threads || '<p class="empty">No conversations yet.</p>') + '</div><div class="mchat-main">' + main + '</div></div></div>';
+}
 function supportHTML() {
+  if (isSuperPortal) return messagesHTML();
   const rows = state.support.map(m =>
     '<div class="txrow"><div><b>' + esc(m.subject) + '</b>' +
     '<div class="muted">' + esc(m.phone || '') + ' · ' + fmtDate(m.created_at) + '</div>' +
@@ -674,9 +716,11 @@ async function loadAll() {
     ];
     if (superTools()) jobs.push(api('/admin/invite-admin').catch(() => null));
     if (superTools()) jobs.push(api('/admin/matches?created=1').catch(() => null));
-    const [stats, queue, matches, users, support, settings, myDash, work, invites, created] = await Promise.all(jobs);
+    if (isSuperPortal) jobs.push(api('/admin/support?threads=1').catch(() => null));
+    const [stats, queue, matches, users, support, settings, myDash, work, invites, created, chatT] = await Promise.all(jobs);
     state.stats = stats.stats; state.queue = queue.queue; state.matches = matches.matches;
     state.users = users.users; state.support = support.messages;
+    if (chatT) state.chatThreads = chatT.threads || [];
     if (settings) state.settings = settings.settings;
     if (myDash) state.myDash = myDash;
     if (work) state.work = work;
@@ -864,6 +908,8 @@ document.addEventListener('click', async e => {
   }
   const tab = e.target.closest('[data-atab]');
   if (tab) { state.tab = tab.dataset.atab; render(); return; }
+  const threadBtn = e.target.closest('[data-thread]');
+  if (threadBtn) { openThread(threadBtn.dataset.thread); return; }
   const confirmBtn = e.target.closest('[data-confirm]');
   if (confirmBtn) {
     const item = state.queue.find(q => q.id === confirmBtn.dataset.confirm);
@@ -1024,6 +1070,18 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('submit', async e => {
+  if (e.target.id === 'mchatForm') {
+    e.preventDefault();
+    const input = $('#mchatText');
+    const text = input ? input.value.trim() : '';
+    if (!text || !state.chatUser) return;
+    try {
+      await api('/admin/support', { method: 'POST', body: { user_id: state.chatUser, body: text } });
+      if (input) input.value = '';
+      openThread(state.chatUser);
+    } catch (err) { toast(err.message); }
+    return;
+  }
   if (e.target.id === 'adminLogin') {
     e.preventDefault();
     try {
@@ -1215,3 +1273,28 @@ document.addEventListener('submit', async e => {
     render();
   }
 })();
+
+
+// Messages dashboard: quietly refresh threads (and the open thread)
+// while the super admin sits on the tab.
+setInterval(async () => {
+  if (!isSuperPortal || !state.user || state.tab !== 'support' || document.hidden) return;
+  try {
+    const t = await api('/admin/support?threads=1');
+    state.chatThreads = t.threads || [];
+    if (state.chatUser) {
+      const d = await api('/admin/support?user=' + encodeURIComponent(state.chatUser));
+      const lastNew = d.messages && d.messages.length ? String(d.messages[d.messages.length - 1].id) : '';
+      const lastOld = state.chatThread.length ? String(state.chatThread[state.chatThread.length - 1].id) : '';
+      state.chatThread = d.messages || [];
+      if (lastNew === lastOld) return;
+      const typing = document.activeElement && document.activeElement.id === 'mchatText' && document.activeElement.value;
+      if (typing) return;
+      render();
+      const l = $('#mchatList');
+      if (l) l.scrollTop = l.scrollHeight;
+      return;
+    }
+    render();
+  } catch (e) { /* quiet */ }
+}, 20000);
