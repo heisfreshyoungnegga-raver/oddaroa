@@ -249,7 +249,7 @@ async function refreshAfLive() {
      where external_ref like 'af:%' and status in ('live', 'upcoming')
        and starts_at < now() + interval '6 days'
        and (not (odds ? 'o1') or odds_full is null)
-     order by (status = 'upcoming') desc, starts_at asc
+     order by odds_attempt_at asc nulls first, starts_at asc
      limit $1`,
     [ODDS_CAP_PER_REFRESH]
   );
@@ -257,16 +257,28 @@ async function refreshAfLive() {
   for (const row of needy) {
     const fixtureId = row.external_ref.slice(3);
     let resp = [];
-    try { resp = await afFetch('/odds?fixture=' + fixtureId); } catch (e) { continue; }
+    try { resp = await afFetch('/odds?fixture=' + fixtureId); } catch (e) {
+      await sql('update matches set odds_attempt_at = now() where id = $1', [row.id]).catch(() => {});
+      continue;
+    }
     const bookmakers = resp[0] && resp[0].bookmakers;
     const bm = pickBookmaker(bookmakers);
-    if (!bm) continue;
+    // Every attempt is stamped, priced or not: an unpriceable fixture
+    // (a youth game the API never books) used to sit at the head of
+    // the queue and starve every match behind it (2026-11-08).
+    if (!bm) {
+      await sql('update matches set odds_attempt_at = now() where id = $1', [row.id]).catch(() => {});
+      continue;
+    }
     const fresh = oddsFromAf(bookmakers);
     const full = fullFromAf(bm);
-    if (!fresh.o1 && !full.length) continue;
+    if (!fresh.o1 && !full.length) {
+      await sql('update matches set odds_attempt_at = now() where id = $1', [row.id]).catch(() => {});
+      continue;
+    }
     const merged = { ...(row.odds || {}), ...fresh };
     await sql(
-      'update matches set odds = $1::jsonb, odds_full = coalesce($2::jsonb, odds_full) where id = $3',
+      'update matches set odds = $1::jsonb, odds_full = coalesce($2::jsonb, odds_full), odds_attempt_at = now() where id = $3',
       [JSON.stringify(merged), full.length ? JSON.stringify(full) : null, row.id]
     );
     priced++;

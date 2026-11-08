@@ -216,8 +216,13 @@ async function loadMatches() {
 // carries has_full). Cached per match for the session.
 async function loadMatchFull(id) {
   if (!id || state.fullBooks[id]) return;
-  const m = state.matches.find(x => x.id === id);
-  if (m && !m.has_full) return;
+  // Do not trust the list's has_full flag: it is a snapshot, and a book
+  // priced after the list loaded would never be fetched (the details
+  // page then shows only the classic markets forever). Try once per
+  // session per match; the endpoint is cheap and a miss is final here.
+  state.fullTried = state.fullTried || {};
+  if (state.fullTried[id]) return;
+  state.fullTried[id] = 1;
   try {
     const data = await api('/match?id=' + encodeURIComponent(id));
     if (data.match && Array.isArray(data.match.odds_full)) {

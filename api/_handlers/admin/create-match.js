@@ -43,7 +43,7 @@ module.exports = guard(async (req, res) => {
   const auth = requireSuperAdmin(req, res);
   if (!auth) return;
   await ensureAdminTables();
-  await ensureMatchColumns();
+  await ensureMatchColumns().catch(() => {});
   const { league, home_team, away_team, starts_at, o1, ox, o2, goals, fav, ht_stoppage, ft_stoppage, home_logo, away_logo, odds_full, betting_locked } = await readBody(req);
   // Match-level stoppage (Prince, 2026-11-05): minutes added to each
   // half, 0-15. Crests ("flags") are a URL or a small data image the

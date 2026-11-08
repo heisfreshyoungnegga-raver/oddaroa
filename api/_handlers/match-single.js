@@ -12,7 +12,7 @@ module.exports = guard(async (req, res) => {
   if (req.method !== 'GET') return send(res, 405, { error: 'method_not_allowed' });
   const id = req.query && req.query.id;
   if (!id || !/^[0-9a-f-]{36}$/i.test(String(id))) return send(res, 400, { error: 'match_required' });
-  await ensureMatchColumns();
+  await ensureMatchColumns().catch(() => {});
   const rows = await sql(
     `select id, league, home_team, away_team, starts_at, status, minute,
             score_home, score_away, odds, odds_full, home_logo, away_logo, external_ref, goal_events, betting_locked,

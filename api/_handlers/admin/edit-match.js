@@ -9,7 +9,7 @@ module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const auth = requireSuperAdmin(req, res);
   if (!auth) return;
-  await ensureMatchColumns();
+  await ensureMatchColumns().catch(() => {});
   const body = await readBody(req);
   const id = String(body.id || '');
   if (!id) return send(res, 400, { error: 'match_required' });

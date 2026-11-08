@@ -1091,7 +1091,7 @@ function ensureBetColumns() {
       await sql(`alter table bets add column if not exists bonus_pct numeric not null default 0`);
       await sql(`alter table bets add column if not exists system_label text`);
       await sql(`alter table bets add column if not exists payout_ghs numeric`);
-    })();
+    })().catch(e => { betColsReady = null; throw e; });
   }
   return betColsReady;
 }
@@ -1106,7 +1106,7 @@ function ensureSupportColumns() {
       await sql(`alter table support_messages add column if not exists admin_id uuid`);
       await sql(`alter table support_messages add column if not exists read_at timestamptz`);
       await sql(`create index if not exists support_messages_user_created_idx on support_messages (user_id, created_at)`);
-    })();
+    })().catch(e => { supportColsReady = null; throw e; });
   }
   return supportColsReady;
 }
@@ -1121,12 +1121,22 @@ function ensureMatchColumns() {
       await msql(`alter table matches add column if not exists ht_stoppage int not null default 0`);
       await msql(`alter table matches add column if not exists ft_stoppage int not null default 0`);
       await msql(`alter table matches add column if not exists betting_locked boolean not null default false`);
+      await msql(`alter table matches add column if not exists odds_attempt_at timestamptz`);
       // 'postponed' joined the status vocabulary with the created-
       // games lifecycle (2026-11-05); the original CHECK only knew
-      // upcoming/live/finished and rejected postponed games.
-      await msql(`alter table matches drop constraint if exists matches_status_check`);
-      await msql(`alter table matches add constraint matches_status_check check (status in ('upcoming', 'live', 'finished', 'postponed'))`);
-    })();
+      // upcoming/live/finished and rejected postponed games. The swap
+      // runs ONLY when the live definition lacks 'postponed': a blind
+      // drop+add on every cold start raced between server instances,
+      // and the losing instance cached the failure and served 500s
+      // until it was recycled (the /api/match outage, 2026-11-08).
+      const cons = await msql(
+        `select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'matches_status_check'`
+      );
+      if (!cons.length || !/postponed/.test(cons[0].def || '')) {
+        await msql(`alter table matches drop constraint if exists matches_status_check`);
+        await msql(`alter table matches add constraint matches_status_check check (status in ('upcoming', 'live', 'finished', 'postponed'))`);
+      }
+    })().catch(e => { matchColsReady = null; throw e; });
   }
   return matchColsReady;
 }
