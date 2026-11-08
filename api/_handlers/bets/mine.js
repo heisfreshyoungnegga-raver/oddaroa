@@ -110,8 +110,15 @@ module.exports = guard(async (req, res) => {
           if (s.result === 'lost') { dead = true; break; }
           prod *= s.result === 'won' ? (Number(s.odds) || 1) : (Number(s.now_odds || s.odds) || 1);
         }
+        // The cap is Prince's rule (2026-11-08): the potential win
+        // may NEVER pass the ticket's real win amount. Live prices
+        // drifting up made a 600 @ 29.57 ticket (true win 17,742)
+        // display a 73,470 "potential" it could never pay.
         b.live_potential_ghs = dead ? 0
-          : Math.round(Number(b.stake_ghs) * prod * (1 + (Number(b.bonus_pct) || 0) / 100) * 100) / 100;
+          : Math.min(
+              Math.round(Number(b.stake_ghs) * prod * (1 + (Number(b.bonus_pct) || 0) / 100) * 100) / 100,
+              Number(b.potential_ghs) || Infinity
+            );
       }
     }
   }
