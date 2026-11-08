@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>logo size preview</title><link rel="stylesheet" href="css/styles.css?v=34">
+<style>body{background:#05070a;margin:0;padding:10px}.frame{width:390px}</style></head><body>
+<div class="frame"><div id="fixtureRows"></div></div>
+<script src="js/data.js"></script>
+<script src="js/app.js?v=49"></script>
+<script>
+(function () {
+  var L = 'https://media.api-sports.io/football/teams/';
+  var fx = [
+    { id: 'f1', league: 'Test League', status: 'upcoming', starts_at: '2026-11-08T15:00:00Z', home: 'Padded Crest FC', away: 'Full Crest United', home_logo: L + '27620.png', away_logo: L + '25775.png', odds: null },
+    { id: 'f2', league: 'Test League', status: 'upcoming', starts_at: '2026-11-08T15:00:00Z', home: 'Tall Crest City', away: 'Mid Crest Rovers', home_logo: L + '3628.png', away_logo: L + '3617.png', odds: null },
+    { id: 'f3', league: 'Test League', status: 'upcoming', starts_at: '2026-11-08T15:00:00Z', home: 'Wide Crest Town', away: 'Full Crest Athletic', home_logo: L + '28351.png', away_logo: L + '2012.png', odds: null }
+  ];
+  document.getElementById('fixtureRows').innerHTML = fx.map(rowHTML).join('');
+})();
+</script>
+</body></html>
