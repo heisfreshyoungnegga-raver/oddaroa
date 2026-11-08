@@ -1029,7 +1029,6 @@ function betDetailsHTML(b) {
     (b.booking_code ? '<div class="card-row"><span>Booking code</span><b class="bkcode">' + esc(b.booking_code) + '</b></div>' : '') +
     '<div class="bd-legs">' + (b.selections || []).map(legDetailHTML).join('') + '</div>' +
     '<div class="bd-actions">' +
-      '<button class="btn ghost" data-copy="' + esc(b.booking_code || b.code) + '">Booking Code</button>' +
       '<button class="btn ghost" data-rebet="' + b.id + '">Rebet</button>' +
       (b.status === 'open' && b.cashout_ghs
         ? '<button class="btn gold" data-cashout="' + b.id + '">Cash Out · ' + money(b.cashout_ghs) + '</button>'
@@ -2132,7 +2131,7 @@ document.addEventListener('click', e => {
   const cp = e.target.closest('[data-copy]');
   if (cp) {
     if (navigator.clipboard) navigator.clipboard.writeText(cp.dataset.copy).catch(() => {});
-    toast('MoMo number copied: ' + cp.dataset.copy);
+    toast('Copied: ' + cp.dataset.copy);
     return;
   }
   const thT = e.target.closest('[data-theme-toggle]');
