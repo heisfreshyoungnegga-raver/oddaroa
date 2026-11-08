@@ -65,8 +65,15 @@ module.exports = guard(async (req, res) => {
   if (body.league !== undefined) put('league', name(body.league, m.league));
   if (body.home_team !== undefined) put('home_team', name(body.home_team, m.home_team));
   if (body.away_team !== undefined) put('away_team', name(body.away_team, m.away_team));
-  if (body.home_logo !== undefined) put('home_logo', cleanCrestUrl(body.home_logo));
-  if (body.away_logo !== undefined) put('away_logo', cleanCrestUrl(body.away_logo));
+  if (body.home_logo !== undefined || body.away_logo !== undefined) {
+    const hl = body.home_logo === undefined ? undefined : cleanCrestUrl(body.home_logo);
+    const al = body.away_logo === undefined ? undefined : cleanCrestUrl(body.away_logo);
+    if ((body.home_logo && !hl) || (body.away_logo && !al)) {
+      return send(res, 400, { error: 'crest_invalid', detail: 'That crest image could not be accepted — use an image link or a smaller uploaded image.' });
+    }
+    if (hl !== undefined) put('home_logo', hl);
+    if (al !== undefined) put('away_logo', al);
+  }
   // The betting lock is a safety switch, not a price: the super
   // admin can flip it even while the game is live (Prince, 2026-11-07
   // — full edit control over his created games).

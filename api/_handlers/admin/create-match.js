@@ -53,6 +53,11 @@ module.exports = guard(async (req, res) => {
   const ftStop = clampStop(ft_stoppage);
   const homeLogo = cleanCrestUrl(home_logo);
   const awayLogo = cleanCrestUrl(away_logo);
+  // A crest the admin actually provided must never vanish silently
+  // (Prince, 2026-11-08): reject loudly instead of storing nothing.
+  if ((home_logo && !homeLogo) || (away_logo && !awayLogo)) {
+    return send(res, 400, { error: 'crest_invalid', detail: 'That crest image could not be accepted — use an image link or a smaller uploaded image.' });
+  }
 
   let home = String(home_team || '').trim();
   let away = String(away_team || '').trim();

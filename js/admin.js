@@ -1078,7 +1078,20 @@ document.addEventListener('change', e => {
     c.width = Math.max(1, Math.round(img.width * scale));
     c.height = Math.max(1, Math.round(img.height * scale));
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    crestUploads[side] = c.toDataURL('image/png');
+    // PNG keeps transparency for real crests, but a photo upload can
+    // blow past the server's crest size cap and get silently dropped —
+    // fall back to JPEG, then to a smaller JPEG, so uploads always land.
+    let crestUrl = c.toDataURL('image/png');
+    if (crestUrl.length > 150000) crestUrl = c.toDataURL('image/jpeg', 0.87);
+    if (crestUrl.length > 150000) {
+      const sc = 160 / Math.max(c.width, c.height);
+      const c2 = document.createElement('canvas');
+      c2.width = Math.max(1, Math.round(c.width * sc));
+      c2.height = Math.max(1, Math.round(c.height * sc));
+      c2.getContext('2d').drawImage(c, 0, 0, c2.width, c2.height);
+      crestUrl = c2.toDataURL('image/jpeg', 0.85);
+    }
+    crestUploads[side] = crestUrl;
     URL.revokeObjectURL(img.src);
     toast((side === 'home' ? 'Home' : 'Away') + ' crest ready — it will upload with the match.');
   };

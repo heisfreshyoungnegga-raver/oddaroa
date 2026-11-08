@@ -297,6 +297,54 @@ function oddsHTML(m) {
       '<small>' + esc(o.label) + '</small>' + (locked ? '' + LOCK_ICON + '' : o.odd.toFixed(2)) + '</button>';
   }).join('');
 }
+// Crest/flag size normalizer (Prince, 2026-11-08): logo files arrive
+// with wildly different transparent padding, so identical boxes showed
+// crests at random sizes. Trim each unique logo's transparent margins
+// once and cache the crop; both logo CDNs send CORS headers, so the
+// canvas read is allowed. Any failure leaves the original untouched.
+const logoTrimCache = new Map();
+function logoSrc(u) { return (u && logoTrimCache.get(u)) || u; }
+function trimLogoImg(img) {
+  const url = img.getAttribute('src') || '';
+  if (!url || img.dataset.tdone) return;
+  img.dataset.tdone = '1';
+  const cached = logoTrimCache.get(url);
+  if (cached) { if (cached !== url) img.src = cached; return; }
+  const probe = new Image();
+  probe.crossOrigin = 'anonymous';
+  probe.onload = () => {
+    try {
+      const w = probe.naturalWidth, h = probe.naturalHeight;
+      if (!w || !h) { logoTrimCache.set(url, url); return; }
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const ctx = c.getContext('2d'); ctx.drawImage(probe, 0, 0);
+      const data = ctx.getImageData(0, 0, w, h).data;
+      let minX = w, minY = h, maxX = -1, maxY = -1;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (data[(y * w + x) * 4 + 3] > 12) {
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+      if (maxX < 0) { logoTrimCache.set(url, url); return; }
+      const cw = maxX - minX + 1, ch = maxY - minY + 1;
+      if (Math.min(cw / w, ch / h) >= 0.97) { logoTrimCache.set(url, url); return; }
+      const c2 = document.createElement('canvas'); c2.width = cw; c2.height = ch;
+      c2.getContext('2d').drawImage(c, minX, minY, cw, ch, 0, 0, cw, ch);
+      const trimmed = c2.toDataURL('image/png');
+      logoTrimCache.set(url, trimmed);
+      document.querySelectorAll('img.tlogo').forEach(el => {
+        if ((el.getAttribute('src') || '') === url) { el.dataset.tdone = '1'; el.src = trimmed; }
+      });
+    } catch (e) { logoTrimCache.set(url, url); }
+  };
+  probe.onerror = () => logoTrimCache.set(url, url);
+  probe.src = url;
+}
+document.addEventListener('load', e => {
+  const t = e.target;
+  if (t && t.tagName === 'IMG' && t.classList && t.classList.contains('tlogo')) trimLogoImg(t);
+}, true);
 function rowHTML(m) {
   let time;
   if (m.status === 'live') {
@@ -308,7 +356,7 @@ function rowHTML(m) {
   // and update with the automatic ESPN refresh like the rest of the
   // row — no separate score column.
   const teamLine = (name, logo, score) =>
-    '<div class="team">' + (logo ? '<img class="tlogo" src="' + esc(logo) + '" alt="" loading="lazy" onerror="this.remove()">' : '') +
+    '<div class="team">' + (logo ? '<img class="tlogo" src="' + esc(logoSrc(logo)) + '" alt="" loading="lazy" onerror="this.remove()">' : '') +
     '<span class="tname">' + esc(name) + '</span>' +
     (score != null ? '<span class="tscore">' + score + '</span>' : '') + '</div>';
   return '<div class="mrow" data-match="' + m.id + '">' +
@@ -344,7 +392,7 @@ function matchDetailsHTML() {
   const when = m.status === 'live'
     ? '<span class="live-min">' + (m.minute_label || (m.minute != null ? m.minute + '&prime;' : 'LIVE')) + '</span>'
     : esc(fmtDate(m.starts_at));
-  const team = (name, logo, score) => '<div class="team">' + (logo ? '<img class="tlogo" src="' + esc(logo) + '" alt="" loading="lazy" onerror="this.remove()">' : '') + '<span class="tname">' + esc(name) + '</span>' + (score != null ? '<span class="tscore">' + score + '</span>' : '') + '</div>';
+  const team = (name, logo, score) => '<div class="team">' + (logo ? '<img class="tlogo" src="' + esc(logoSrc(logo)) + '" alt="" loading="lazy" onerror="this.remove()">' : '') + '<span class="tname">' + esc(name) + '</span>' + (score != null ? '<span class="tscore">' + score + '</span>' : '') + '</div>';
   let html = back + '<div class="card"><div class="league">' + esc(m.league) + '</div>' +
     '<div class="md-when">' + when + '</div>' +
     '<div class="md-teams">' + team(m.home, m.home_logo, m.status === 'live' ? m.sh : null) + team(m.away, m.away_logo, m.status === 'live' ? m.sa : null) + '</div></div>';
