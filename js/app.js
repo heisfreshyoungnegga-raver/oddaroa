@@ -460,7 +460,7 @@ function fetchAssetUrl(path) {
   return fetch(path).then(r => (r.ok ? r.arrayBuffer() : null)).then(buf => (buf ? sniffImageUrl(buf) : null)).catch(() => null);
 }
 function loadHeroImages() {
-  [{ img: 'assets/winning-cup.png' }, { img: 'assets/win-cup.jpg' }].forEach(s => {
+  [{ img: 'assets/winning-cup.png' }, { img: 'assets/win-cup.png' }].forEach(s => {
     if (heroUrls[s.img]) return;
     heroUrls[s.img] = s.img;
     fetch(s.img).then(r => (r.ok ? r.arrayBuffer() : null)).then(buf => {
@@ -833,7 +833,7 @@ function showWinCelebration(bet) {
       '<div class="win-body">' +
         '<div class="win-congrats"><span class="win-mini">' + TROPHY_ICON + '</span> CONGRATULATIONS! <span class="win-mini">' + TROPHY_ICON + '</span></div>' +
         '<div class="win-youwon">YOU WON!</div>' +
-        '<div class="win-art"><img src="' + (heroUrls['assets/win-cup.jpg'] || 'assets/win-cup.jpg') + '" alt="Oddaroa Winning Cup"><div class="win-confetti">' + confetti + '</div></div>' +
+        '<div class="win-art"><img src="' + (heroUrls['assets/win-cup.png'] || 'assets/win-cup.png') + '" alt="Oddaroa Winning Cup"><div class="win-confetti">' + confetti + '</div></div>' +
         '<div class="win-amt-label">Your winning amount:</div>' +
         '<div class="win-amt">' + amt + '</div>' +
         '<div class="win-verify">Verify Code: <b>' + esc(bet.code || '') + '</b></div>' +
@@ -847,8 +847,8 @@ function showWinCelebration(bet) {
   document.body.appendChild(el);
   const artImg = el.querySelector('.win-art img');
   if (artImg && !/^(data:|blob:)/.test(artImg.src)) {
-    fetchAssetUrl('assets/win-cup.jpg').then(u => {
-      if (u) { heroUrls['assets/win-cup.jpg'] = u; if (artImg.isConnected) artImg.src = u; }
+    fetchAssetUrl('assets/win-cup.png').then(u => {
+      if (u) { heroUrls['assets/win-cup.png'] = u; if (artImg.isConnected) artImg.src = u; }
     });
   }
   winChime();
