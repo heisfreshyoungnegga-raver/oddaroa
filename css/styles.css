@@ -1458,3 +1458,20 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .mchat-ttime { font-size: 11px; opacity: .55; }
 .mchat-main { min-width: 0; }
 @media (max-width: 720px) { .mchat { grid-template-columns: 1fr; } }
+
+/* Messages dashboard v2 — two-pane messenger layout */
+.mchat { grid-template-columns: 300px 1fr; gap: 0; border: 1px solid #263027; border-radius: 14px; overflow: hidden; }
+.mchat-threads { max-height: 600px; padding: 8px; background: #0e130e; }
+.mchat-thread { flex-direction: row; align-items: center; gap: 10px; width: 100%; }
+.mchat-ava { flex: none; width: 38px; height: 38px; border-radius: 50%; border: 1px solid #6d5518; background: #1b251e; color: #f0b90b; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; }
+.mchat-tcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mchat-tprev { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mchat-ttime { flex: none; align-self: flex-start; }
+.mchat-main { display: flex; flex-direction: column; height: 600px; background: #0a0f0a; border-left: 1px solid #263027; }
+.mchat-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #263027; }
+.mchat-hcol { display: flex; flex-direction: column; }
+.mchat-hphone { font-size: 12px; opacity: .65; }
+.mchat-main .chat-list { flex: 1; max-height: none; padding: 14px; }
+.mchat-main .chat-form { padding: 0 14px 14px; }
+.mchat-idle { margin: auto; }
+@media (max-width: 720px) { .mchat-main { height: 480px; border-left: none; border-top: 1px solid #263027; } .mchat-threads { max-height: 300px; } }

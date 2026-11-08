@@ -116,6 +116,9 @@ function tabsHTML() {
   // going live and settling are super admin work.
   if (isSuperPortal) tabs.splice(2, 0, ['matches', 'Matches']);
   if (superTools()) tabs.push(['control', 'Platform Control']);
+  // Support chat is super-admin work only (Prince, 2026-11-08): the
+  // regular Admin Portal carries no Support/Messages tab at all.
+  if (!isSuperPortal) { const si = tabs.findIndex(t => t[0] === 'support'); if (si >= 0) tabs.splice(si, 1); }
   return '<div class="wtabs">' + tabs.map(([k, label]) => {
     let text = label;
     if (k === 'support' && isSuperPortal) {
@@ -543,23 +546,36 @@ async function openThread(uid) {
   const list = $('#mchatList');
   if (list) list.scrollTop = list.scrollHeight;
 }
+function initialsOf(name, phone) {
+  const src = String(name || phone || 'P').trim();
+  const parts = src.replace(/^\+/, '').split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return src.slice(0, 2).toUpperCase();
+}
 function messagesHTML() {
-  const threads = (state.chatThreads || []).map(t =>
-    '<button class="mchat-thread' + (state.chatUser === t.user_id ? ' on' : '') + '" data-thread="' + t.user_id + '">' +
-      '<span class="mchat-tname">' + esc(t.display_name || t.phone || 'Player') +
+  const threads = (state.chatThreads || []).map(t => {
+    const label = t.display_name || t.phone || 'Player';
+    return '<button class="mchat-thread' + (state.chatUser === t.user_id ? ' on' : '') + '" data-thread="' + t.user_id + '">' +
+      '<span class="mchat-ava">' + esc(initialsOf(t.display_name, t.phone)) + '</span>' +
+      '<span class="mchat-tcol"><span class="mchat-tname">' + esc(label) +
       (t.unread ? ' <span class="mchat-badge">' + t.unread + '</span>' : '') + '</span>' +
-      '<span class="mchat-tprev">' + (t.last_sender === 'admin' ? 'You: ' : '') + esc(String(t.last_body || '').slice(0, 70)) + '</span>' +
-      '<span class="mchat-ttime">' + fmtDate(t.last_at) + '</span></button>').join('');
+      '<span class="mchat-tprev">' + (t.last_sender === 'admin' ? 'You: ' : '') + esc(String(t.last_body || '').slice(0, 46)) + '</span></span>' +
+      '<span class="mchat-ttime">' + fmtDate(t.last_at) + '</span></button>';
+  }).join('');
   let main;
   if (!state.chatUser) {
-    main = '<p class="empty">Select a conversation to read it and reply.</p>';
+    main = '<p class="empty mchat-idle">Select a conversation to read it and reply.</p>';
   } else {
+    const sel = (state.chatThreads || []).find(t => t.user_id === state.chatUser) || {};
     const msgs = (state.chatThread || []).map(m =>
       '<div class="chat-row ' + (m.sender === 'admin' ? 'mine' : 'theirs') + '"><div class="chat-bubble">' +
       esc(m.body) + '<span class="chat-time">' + fmtDate(m.created_at) + '</span></div></div>').join('');
-    main = '<div class="chat-list" id="mchatList">' + (msgs || '<p class="muted chat-empty">No messages yet.</p>') + '</div>' +
-      '<form id="mchatForm" class="chat-form"><input type="text" id="mchatText" placeholder="Reply to player…" autocomplete="off" maxlength="2000" required>' +
-      '<button class="btn gold" type="submit">Reply</button></form>';
+    main = '<div class="mchat-head"><span class="mchat-ava">' + esc(initialsOf(sel.display_name, sel.phone)) + '</span>' +
+      '<span class="mchat-hcol"><b>' + esc(sel.display_name || sel.phone || 'Player') + '</b>' +
+      (sel.display_name && sel.phone ? '<span class="mchat-hphone">' + esc(sel.phone) + '</span>' : '') + '</span></div>' +
+      '<div class="chat-list" id="mchatList">' + (msgs || '<p class="muted chat-empty">No messages yet.</p>') + '</div>' +
+      '<form id="mchatForm" class="chat-form"><input type="text" id="mchatText" placeholder="Type a message…" autocomplete="off" maxlength="2000" required>' +
+      '<button class="btn gold" type="submit">Send</button></form>';
   }
   return tabsHTML() + '<div class="card"><h3>Messages</h3><div class="mchat"><div class="mchat-threads">' +
     (threads || '<p class="empty">No conversations yet.</p>') + '</div><div class="mchat-main">' + main + '</div></div></div>';
