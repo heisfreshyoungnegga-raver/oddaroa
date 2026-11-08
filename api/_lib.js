@@ -548,11 +548,24 @@ async function getSettings(keys) {
 //    account can refer, players included — to be paid out later from
 //    the super-admin dashboard.
 // Idempotent per source txn, so a retried call can never double-pay.
+// Cross-currency conversion for commissions (Prince, 2026-11-08:
+// "make the naira different currency"). One platform rate — naira per
+// 1 cedi, editable in Platform Control (fx_ngn_per_ghs, default 140).
+// Only GHS<->NGN has a live rate; every other pair is 1:1 because no
+// other currency has a working deposit rail yet.
+function convertAmount(amount, fromCur, toCur, fxNgnPerGhs) {
+  const a = Number(amount) || 0;
+  if (fromCur === toCur) return a;
+  const fx = Number(fxNgnPerGhs) > 0 ? Number(fxNgnPerGhs) : 140;
+  if (fromCur === 'NGN' && toCur === 'GHS') return Math.round((a / fx) * 100) / 100;
+  if (fromCur === 'GHS' && toCur === 'NGN') return Math.round(a * fx * 100) / 100;
+  return a;
+}
 async function applyDepositRewards(userId, txnId, amountGhs, currency) {
   const amount = Number(amountGhs);
   if (!(amount > 0)) return;
   const rules = moneyRules(currency || 'GHS');
-  const s = await getSettings(['admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn']);
+  const s = await getSettings(['admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn', 'fx_ngn_per_ghs']);
   const cashPct = Number(s.user_cashback_pct || 0);
   const commPct = Number(s.admin_commission_pct || 0);
   // 0 in the setting means OFF and must stay off; only a missing key
@@ -576,7 +589,7 @@ async function applyDepositRewards(userId, txnId, amountGhs, currency) {
   }
   if (commPct > 0 || refBonus > 0) {
     const inv = await sql(
-      `select i.id from users u join users i on i.id = u.invited_by
+      `select i.id, i.phone from users u join users i on i.id = u.invited_by
        where u.id = $1 and i.status = 'active' and i.role in ('admin', 'super_admin')`,
       [userId]
     );
@@ -600,12 +613,19 @@ async function applyDepositRewards(userId, txnId, amountGhs, currency) {
         }
       }
       if (commPct > 0) {
-        const earn = Math.round(amount * commPct) / 100;
+        // Commission is earned in the EARNER's currency: convert the
+        // deposit amount first. Booking a naira deposit's raw number
+        // into a cedi admin's earnings paid out ~100x too much
+        // (GH₵21,000 booked on a ₦30,000 deposit, 2026-11-08).
+        const depCur = currency || 'GHS';
+        const earnCur = currencyOfPhone(inv[0].phone);
+        const basis = convertAmount(amount, depCur, earnCur, s.fx_ngn_per_ghs);
+        const earn = Math.round(basis * commPct) / 100;
         if (earn > 0) {
           await sql(
             `insert into commissions (earner_id, source_user_id, source_txn_id, basis_ghs, pct, amount_ghs)
              values ($1, $2, $3, $4, $5, $6) on conflict (source_txn_id) where source_txn_id is not null do nothing`,
-            [inv[0].id, userId, txnId, amount, commPct, earn]
+            [inv[0].id, userId, txnId, basis, commPct, earn]
           );
         }
       }
@@ -1461,4 +1481,4 @@ async function ensureBookingCode(userId, selections) {
   return null;
 }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount };

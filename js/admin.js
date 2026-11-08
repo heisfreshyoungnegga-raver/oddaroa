@@ -259,7 +259,7 @@ function referralCardHTML() {
   if (!d) return '';
   const invited = (d.invited_users || []).map(u =>
     '<div class="txrow"><div><b>' + esc(u.phone) + '</b><div class="muted">' + esc(u.display_name || '') + ' · joined ' + fmtDate(u.created_at) + '</div></div>' +
-    '<div>' + money(u.deposits_ghs) + ' deposited</div></div>').join('');
+    '<div>' + moneyC(u.deposits_ghs, u.phone) + ' deposited</div></div>').join('');
   let html = '<div class="card"><h3>Your referral link</h3>' +
     '<p class="muted">Share this link to refer players. Anyone who registers through it joins instantly (no approval needed) and is credited to you for commissions.</p>' +
     '<div class="manualbox"><div class="mannum" style="font-size:17px; letter-spacing:0">' + esc(siteLink(d.invite_path)) + '</div>' +
@@ -417,7 +417,7 @@ function earningsHTML() {
   const stat = (l, v) => '<div class="stat"><div class="muted">' + l + '</div><div class="stat-v">' + v + '</div></div>';
   const invited = (d.invited_users || []).map(u =>
     '<div class="txrow"><div><b>' + esc(u.phone) + '</b><div class="muted">' + esc(u.display_name || '') + ' · joined ' + fmtDate(u.created_at) + '</div></div>' +
-    '<div>' + money(u.deposits_ghs) + ' deposited</div></div>').join('');
+    '<div>' + moneyC(u.deposits_ghs, u.phone) + ' deposited</div></div>').join('');
   const recent = (d.recent || []).map(r =>
     '<div class="txrow"><div><b>' + money(r.amount_ghs) + '</b><div class="muted">' + r.pct + '% of ' + money(r.basis_ghs) + ' · from ' + esc(r.from_phone) + ' · ' + fmtDate(r.created_at) + '</div></div>' +
     (r.paid_at ? chip('completed') : chip('pending')) + '</div>').join('');
@@ -461,6 +461,7 @@ function controlHTML() {
     '<label>User cashback % (of their own deposit, credited back instantly) <input type="number" id="rateUser" step="0.1" min="0" max="100" value="' + esc(s.user_cashback_pct || '0') + '"></label>' +
     '<label>Referral deposit bonus GHS (flat bonus a referred player gets on EVERY deposit; 0 = off) <input type="number" id="rateBonus" step="1" min="0" max="100000" value="' + esc(s.referral_deposit_bonus_ghs || '0') + '"></label>' +
     '<label>Referral deposit bonus NGN (same bonus for Nigerian players, in naira; 0 = off) <input type="number" id="rateBonusNgn" step="1" min="0" max="10000000" value="' + esc(s.referral_deposit_bonus_ngn === undefined ? '5000' : s.referral_deposit_bonus_ngn) + '"></label>' +
+    '<label>Exchange rate — naira per 1 cedi (used to convert a Nigerian player\'s deposit into a Ghana admin\'s commission, and back) <input type="number" id="rateFx" step="1" min="10" max="1000" value="' + esc(s.fx_ngn_per_ghs === undefined ? '140' : s.fx_ngn_per_ghs) + '"></label>' +
     '<label>Cashout margin % (the house keeps this much of a ticket\'s fair cashout value) <input type="number" id="rateCashout" step="0.1" min="0" max="50" value="' + esc(s.cashout_margin_pct || '10') + '"></label>' +
     '<button class="btn gold big" type="submit">Save Rates</button></form></div>' +
     '<div class="card"><h3>Give a bonus</h3><form id="bonusForm" class="stack">' +
@@ -1204,7 +1205,7 @@ document.addEventListener('submit', async e => {
     try {
       const data = await api('/admin/settings', {
         method: 'POST',
-        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), referral_deposit_bonus_ghs: Number($('#rateBonus').value), referral_deposit_bonus_ngn: Number(($('#rateBonusNgn') || {}).value || 0), cashout_margin_pct: Number($('#rateCashout').value) }
+        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), referral_deposit_bonus_ghs: Number($('#rateBonus').value), referral_deposit_bonus_ngn: Number(($('#rateBonusNgn') || {}).value || 0), cashout_margin_pct: Number($('#rateCashout').value), fx_ngn_per_ghs: Number(($('#rateFx') || {}).value || 140) }
       });
       state.settings = data.settings;
       toast('Rates saved.');
