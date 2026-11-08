@@ -52,6 +52,12 @@ function leagueLabel(lg) {
   // Ghana's top flight has carried more than one id over seasons;
   // recognise it by country + name so it never silently drops out.
   if (lg.country === 'Ghana' && /premier/i.test(lg.name || '')) return 'Ghana Premier League';
+  // International competitions arrive with country "World"
+  // (UEFA Nations League, World Cup / AFCON / Euro qualifiers,
+  // friendlies). Dropping them emptied the upcoming board for the
+  // whole international break (2026-11-08: club leagues dark
+  // 9-17 Nov, only internationals playing, none imported).
+  if (lg.country === 'World' && lg.name) return lg.name;
   return null;
 }
 // Permissive label for the live sweep: any league in the world gets
