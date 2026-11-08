@@ -1475,3 +1475,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .mchat-main .chat-form { padding: 0 14px 14px; }
 .mchat-idle { margin: auto; }
 @media (max-width: 720px) { .mchat-main { height: 480px; border-left: none; border-top: 1px solid #263027; } .mchat-threads { max-height: 300px; } }
+
+/* Messages stacking fix: this media rule must come AFTER the v2 .mchat
+   rule or the desktop columns win the cascade on phones too. */
+@media (max-width: 720px) { .mchat { grid-template-columns: 1fr; } }
