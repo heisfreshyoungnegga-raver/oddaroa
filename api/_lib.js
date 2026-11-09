@@ -509,6 +509,12 @@ function ensureAdminTables() {
         paid_at timestamptz,
         created_at timestamptz not null default now()
       )`);
+      // A deposit books TWO commission rows now (admin + super), so the
+      // old one-row-per-deposit index must not exist. Drop it on every
+      // cold start: a stale pre-split instance once resurrected it
+      // during a deploy rollout and first-deposit confirms began
+      // failing on the duplicate key (2026-11-09).
+      await sql(`drop index if exists commissions_source_idx`);
       await sql(`create unique index if not exists commissions_source_earner_idx on commissions (earner_id, source_txn_id) where source_txn_id is not null`);
       // An earner's ask for the super admin to settle their pending
       // commissions (the Pay Out button in Platform Control settles
