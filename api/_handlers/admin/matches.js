@@ -1,4 +1,4 @@
-const { sql, msql, readBody, send, guard, requireAdmin, ensureMatchColumns, isCustomMatch, customMatchState, fillOdds, fullBookFromOdds } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireAdmin, ensureMatchColumns, isCustomMatch, customMatchState, fillOdds, fullBookFromOdds, findCreatedDuplicate } = require('../../_lib');
 
 // Admin match manager: list all matches, create new ones, and update
 // live state (status, minute, score). Custom (featured) matches carry
@@ -29,6 +29,8 @@ module.exports = guard(async (req, res) => {
   if (req.method === 'POST') {
     const { league, home_team, away_team, starts_at, odds } = body;
     if (!league || !home_team || !away_team || !starts_at) return send(res, 400, { error: 'league_home_away_time_required' });
+    const dup = await findCreatedDuplicate(home_team, away_team, starts_at);
+    if (dup) return send(res, 409, { error: 'duplicate_match', detail: 'You already created this game (' + dup.home_team + ' vs ' + dup.away_team + ') — it is in your Created by you list. Delete it first if you want to create it again.' });
     // Manual matches get the same derived full book as featured
     // ones, priced from the completed 1X2 line (Prince, 2026-11-05).
     const full = fullBookFromOdds(fillOdds(odds || {}));

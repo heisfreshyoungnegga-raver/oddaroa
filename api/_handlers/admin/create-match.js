@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, msql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, ensureMatchColumns, expandOdds, fullBookFromOdds, cleanGoalSchedule, cleanCrestUrl } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireSuperAdmin, ensureAdminTables, ensureMatchColumns, expandOdds, fullBookFromOdds, cleanGoalSchedule, cleanCrestUrl, findCreatedDuplicate } = require('../../_lib');
 
 // Super admin only: create a "featured" match that plays like a real
 // one. Two ways in (Prince's design, 2026-11-03):
@@ -66,6 +66,8 @@ module.exports = guard(async (req, res) => {
   const leagueName = String(league || '').trim() || 'Oddaroa Featured';
 
   const start = starts_at ? new Date(starts_at) : new Date(Date.now() + 30 * 60000);
+  const dup = await findCreatedDuplicate(home, away, start);
+  if (dup) return send(res, 409, { error: 'duplicate_match', detail: 'You already created this game (' + dup.home_team + ' vs ' + dup.away_team + ') — it is in your Created by you list. Delete it first if you want to create it again.' });
   if (Number.isNaN(start.getTime())) return send(res, 400, { error: 'invalid_start_time' });
 
   let odds;

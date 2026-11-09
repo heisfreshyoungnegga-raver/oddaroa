@@ -1560,4 +1560,21 @@ async function ensureBookingCode(userId, selections) {
   return null;
 }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission };
+// Duplicate guard for admin-created games (Prince, 2026-11-09):
+// a created game that already exists must refuse a retry, not
+// multiply. Only admin-created rows count (featured 'custom:%' and
+// manual null-ref) — featured versions of real feed fixtures are
+// legitimate, feed rows are not duplicates of them.
+async function findCreatedDuplicate(home, away, start) {
+  const rows = await msql(
+    `select id, home_team, away_team, starts_at from matches
+     where (external_ref like 'custom:%' or external_ref is null)
+       and lower(home_team) = lower($1) and lower(away_team) = lower($2)
+       and starts_at between $3::timestamptz - interval '5 minutes' and $3::timestamptz + interval '5 minutes'
+     limit 1`,
+    [String(home || '').trim(), String(away || '').trim(), new Date(start).toISOString()]
+  );
+  return rows[0] || null;
+}
+
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate };
