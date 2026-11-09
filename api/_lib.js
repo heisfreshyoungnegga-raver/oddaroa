@@ -153,7 +153,7 @@ function currencyOfPhone(phone) {
 // deposit ask, game stake bounds and where the referral bonus setting
 // lives. NGN figures are the platform equivalents of the GHS ones.
 const CURRENCY_RULES = {
-  GHS: { symbol: 'GHS ', minDeposit: 120, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000, bonusKey: 'referral_deposit_bonus_ghs', bonusDefault: 0 },
+  GHS: { symbol: 'GHS ', minDeposit: 210, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000, bonusKey: 'referral_deposit_bonus_ghs', bonusDefault: 0 },
   NGN: { symbol: '\u20a6', minDeposit: 25000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000, bonusKey: 'referral_deposit_bonus_ngn', bonusDefault: 5000 }
 };
 function moneyRules(currency) { return CURRENCY_RULES[currency] || CURRENCY_RULES.GHS; }

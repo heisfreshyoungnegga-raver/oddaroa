@@ -83,7 +83,7 @@ function fmtDate(iso) {
 function curCode() { return (state.user && state.user.currency) || 'GHS'; }
 const CUR_SYM = { GHS: 'GHS ', NGN: '₦', KES: 'KES ', UGX: 'UGX ', TZS: 'TZS ' };
 const CUR_RULES = {
-  GHS: { minDeposit: 120, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000 },
+  GHS: { minDeposit: 210, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000 },
   NGN: { minDeposit: 25000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000 }
 };
 function curSym() { return CUR_SYM[curCode()] || 'GHS '; }
@@ -1369,17 +1369,17 @@ function momoPanelHTML() {
   const phone = state.user ? state.user.phone : '';
   // Gateway deposits use Prince's preset amounts (2026-11-03): the chips
   // fill the amount box; a custom amount can still be typed.
-  const presets = [120, 300, 500, 1000, 1500, 2000];
+  const presets = [210, 300, 500, 1000, 1500, 2000];
   return '<div class="card"><h3>Mobile Money</h3>' +
     '<form id="momoForm" class="stack">' +
     '<div class="amtrow">' + presets.map(a =>
       '<button type="button" class="amtchip' + (a === presets[0] ? ' on' : '') + '" data-amt="' + a + '">GHS ' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
-    '<label>Amount (GHS) <input type="number" id="mmAmt" min="120" max="5000" step="0.01" value="120" required></label>' +
+    '<label>Amount (GHS) <input type="number" id="mmAmt" min="210" max="5000" step="0.01" value="210" required></label>' +
     '<label>MoMo number <input type="tel" id="mmPhone" value="' + esc(phone) + '" required></label>' +
     '<label>Network <select id="mmNet"><option value="MTN">MTN Mobile Money</option><option value="TELECEL">Telecel Cash</option><option value="AIRTELTIGO">AT Money</option></select></label>' +
     '<p class="muted" id="mmFeeLine"></p>' +
     '<button class="btn gold big" type="submit">Send Payment Prompt</button></form>' +
-    '<p class="muted">Minimum deposit is GHS 120. A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
+    '<p class="muted">Minimum deposit is GHS 210. A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
 }
 
 /* ----- Instant NGN deposit (Flutterwave hosted checkout) ----- */
