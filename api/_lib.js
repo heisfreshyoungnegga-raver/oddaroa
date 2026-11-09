@@ -658,14 +658,17 @@ async function applyDepositRewards(userId, txnId, amountGhs, currency) {
         const basis = convertAmount(amount, depCur, earnCur, s.fx_ngn_per_ghs);
         const earn = Math.round(basis * commPct) / 100;
         if (earn > 0) {
-          // Split the pot (Prince, 2026-11-09): the referring admin's
+          // Split the pot on the FIRST deposit only (Prince,
+          // 2026-11-09, corrected same day): the referring admin's
           // share is the constant flat 70 (see splitCommission); the
           // remainder is the super admin's, booked as his own row in
-          // HIS currency. If the referrer IS the super admin, or no
-          // distinct super admin exists, he simply keeps the whole pot.
+          // HIS currency. On every LATER deposit the admin simply
+          // gets the full 70% pot, the way it always was. If the
+          // referrer IS the super admin, or no distinct super admin
+          // exists, he simply keeps the whole pot.
           const parts = splitCommission(earn, earnCur, s.fx_ngn_per_ghs);
           let sup = null;
-          if (inv[0].role !== 'super_admin' && parts.super > 0) {
+          if (priorDeps[0].n === 0 && inv[0].role !== 'super_admin' && parts.super > 0) {
             const supRows = await sql(
               `select id, phone from users where role = 'super_admin' and status = 'active' order by created_at asc limit 1`
             );
@@ -1148,7 +1151,9 @@ async function settleFlwAttempt(attempt) {
 // the ticket. Singles earn none. The server is authoritative — the
 // client mirrors this table only so the slip displays the same
 // numbers before placing.
-const WIN_BONUS = [[3, 5], [4, 10], [5, 15], [6, 20], [7, 25], [8, 30], [9, 40], [10, 50], [11, 60], [12, 70], [13, 80], [14, 90], [15, 100], [16, 110], [17, 120], [18, 130], [19, 140], [20, 150]];
+// Flat 8% on multiples (Prince, 2026-11-09 — replaces the old leg ladder):
+// any ticket with 2+ legs earns 8% on its potential win; singles earn none.
+const WIN_BONUS = [[2, 8]];
 function winBonusPct(legs) {
   let pct = 0;
   for (const [n, p] of WIN_BONUS) if (legs >= n) pct = p;

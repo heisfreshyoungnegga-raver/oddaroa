@@ -1656,13 +1656,13 @@ async function loadWinners() {
 /* ---------- betslip ---------- */
 /* ---------- betslip types (Single / Multiple / System) ---------- */
 // Prince, 2026-11-05, from the GoalsVault slip he shared. Multiples
-// and system tickets earn the winnings bonus — the ladder mirrors
+// and system tickets earn the winnings bonus — the table mirrors
 // WIN_BONUS in api/_lib.js (authoritative there); this copy only
 // drives the slip's display math.
 let slipType = 'multiple';
 let sysK = 2;
 const singleStakes = {};
-const SLIP_BONUS = [[3, 5], [4, 10], [5, 15], [6, 20], [7, 25], [8, 30], [9, 40], [10, 50], [11, 60], [12, 70], [13, 80], [14, 90], [15, 100], [16, 110], [17, 120], [18, 130], [19, 140], [20, 150]];
+const SLIP_BONUS = [[2, 8]]; // flat 8% on multiples only (Prince, 2026-11-09)
 function slipBonusPct(legs) { let p = 0; for (const [n, v] of SLIP_BONUS) if (legs >= n) p = v; return p; }
 function comboCount(n, k) { if (k < 1 || k > n) return 0; let r = 1; for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1); return Math.round(r); }
 function comboOddsSum(sels, k) {
