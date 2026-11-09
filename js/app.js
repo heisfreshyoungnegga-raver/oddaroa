@@ -1955,6 +1955,7 @@ function syncAuth() {
   // every user signs up AND logs in under their own country.
   show('#authCountryRow', true);
   show('#authEmailRow', !login);
+  show('#authPass2Row', !login);
   show('#authRefRow', !login);
   // A referral code that arrived through an admin's link is
   // pre-entered and LOCKED (Prince, 2026-11-05): the person
@@ -2482,6 +2483,8 @@ $('#authForm').addEventListener('submit', async e => {
   if (authMode === 'register') {
     if (!email) { toast('An email address is required to create an account.'); return; }
     if (!composedPhone && !inviteRegister) { toast('Enter your mobile number.'); return; }
+    const pass2El = $('#authPass2');
+    if (pass2El && pass2El.value !== password) { toast('Passwords do not match — type the same password in both password boxes.'); return; }
   } else if (!rawPhone) return;
   const btn = $('#authSubmit');
   btn.disabled = true;

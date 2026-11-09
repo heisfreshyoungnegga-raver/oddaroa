@@ -32,7 +32,7 @@ const state = {
   invite: new URLSearchParams(location.search).get('admin_invite') || '',
   inviteDone: '',
   editingMatch: '',
-  createdMatches: [],
+  createdMatches: [], createdLoaded: false,
 };
 const $ = (s, r = document) => r.querySelector(s);
 const root = $('#adminRoot');
@@ -319,7 +319,9 @@ function isoLocal(iso) {
 // with its real live state, and an Edit button (Prince, 2026-11-05).
 function createdGamesHTML() {
   const mine = state.createdMatches || [];
-  if (!mine.length) return '<div class="card"><h3>Created by you</h3><p class="empty">No games created yet — use the forms below.</p></div>';
+  if (!mine.length) return state.createdLoaded
+    ? '<div class="card"><h3>Created by you</h3><p class="empty">No games created yet — use the forms below.</p></div>'
+    : '<div class="card"><h3>Created by you</h3><p class="empty">Your created games could not load just now — they are NOT deleted. <button class="btn ghost sm" id="createdRetry">Retry</button></p></div>';
   const rows = mine.map(m => {
     const custom = String(m.external_ref || '').indexOf('custom:') === 0;
     const statusLine = m.status === 'live'
@@ -735,7 +737,7 @@ async function loadAll() {
       api('/admin/settings').catch(() => null), api('/admin/my-dashboard').catch(() => null), api('/admin/worklog' + workQuery()).catch(() => null)
     ];
     if (superTools()) jobs.push(api('/admin/invite-admin').catch(() => null));
-    if (superTools()) jobs.push(api('/admin/matches?created=1').catch(() => null));
+    if (superTools()) jobs.push(api('/admin/matches?created=1').catch(() => api('/admin/matches?created=1')).catch(() => null));
     if (isSuperPortal) jobs.push(api('/admin/support?threads=1').catch(() => null));
     const [stats, queue, matches, users, support, settings, myDash, work, invites, created, chatT] = await Promise.all(jobs);
     state.stats = stats.stats; state.queue = queue.queue; state.matches = matches.matches;
@@ -745,12 +747,13 @@ async function loadAll() {
     if (myDash) state.myDash = myDash;
     if (work) state.work = work;
     if (invites) state.invites = invites.invites || [];
-    if (created) state.createdMatches = created.matches || [];
+    if (created) { state.createdMatches = created.matches || []; state.createdLoaded = true; }
   } catch (e) { toast(e.message); }
   render();
 }
 
 document.addEventListener('click', async e => {
+  if (e.target.id === 'createdRetry') { loadAll(); return; }
   if (e.target.id === 'emStartNow') {
     const el = document.querySelector('#emStart');
     if (el) { const d = new Date(); d.setSeconds(0, 0); el.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }

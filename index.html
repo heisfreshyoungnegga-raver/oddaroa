@@ -108,6 +108,9 @@
       <label>Password
         <span class="passflex"><input type="password" id="authPass" placeholder="Password" autocomplete="current-password" required><button type="button" class="pass-eye" id="passEye" aria-label="Show password"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button></span>
       </label>
+      <label id="authPass2Row" style="display:none">Repeat password
+        <input type="password" id="authPass2" placeholder="Repeat password" autocomplete="new-password">
+      </label>
       <label id="authRefRow" style="display:none">Referral code <span id="authRefNote">(optional)</span>
         <input type="text" id="authRef" placeholder="E.G. AB12CD" autocomplete="off">
       </label>
@@ -157,7 +160,7 @@
 <div class="toast" id="toast" role="status"></div>
 
 <script src="js/data.js"></script>
-<script src="js/app.js?v=58"></script>
+<script src="js/app.js?v=59"></script>
 <script src="js/games.js?v=6"></script>
 </body>
 </html>
