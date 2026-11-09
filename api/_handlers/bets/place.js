@@ -124,7 +124,8 @@ module.exports = guard(async (req, res) => {
   }
   const rows = await sql(
     `with bal as (
-       update users set balance_ghs = balance_ghs - $2
+       update users set balance_ghs = balance_ghs - $2,
+         bonus_ghs = bonus_ghs - least(bonus_ghs, $2)
        where id = $1 and balance_ghs >= $2
        returning id
      ),

@@ -102,7 +102,11 @@ module.exports = guard(async (req, res) => {
             score_home, score_away, odds, (odds_full is not null) as has_full, home_logo, away_logo, external_ref, goal_events,
             ht_stoppage, ft_stoppage, betting_locked`;
   const liveRows = await msql(`select ${LIST_COLS} from matches where status = 'live' order by starts_at asc limit 300`);
-  const upRows = await msql(`select ${LIST_COLS} from matches where status = 'upcoming' order by starts_at asc limit 300`);
+  // Yesterday's dead fixtures never show (Prince, 2026-11-09): a feed
+  // match still marked upcoming 3+ hours after its kickoff never got
+  // covered — it sits on Home forever with 'Odds soon'. Custom games
+  // derive their own state and burn down inside that window anyway.
+  const upRows = await msql(`select ${LIST_COLS} from matches where status = 'upcoming' and starts_at > now() - interval '3 hours' order by starts_at asc limit 300`);
   const rows = liveRows.concat(upRows);
   const now = new Date();
   // Group 0 is the primary block (API-Football rows, admin manual

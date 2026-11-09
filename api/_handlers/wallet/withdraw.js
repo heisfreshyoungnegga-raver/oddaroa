@@ -36,6 +36,16 @@ module.exports = guard(async (req, res) => {
     payoutMeta = { currency: 'NGN', bank_code: bankCode, bank_name: bankName, account_number: acctNum, account_name: acctName };
     methodLabel = 'Bank transfer';
   }
+  // Bonus money is stake-only (Prince, 2026-11-09): the withdrawable
+  // ceiling is balance minus the bonus bucket.
+  const urow = await sql('select balance_ghs, bonus_ghs from users where id = $1', [auth.uid]);
+  const bonusHeld = urow.length ? Number(urow[0].bonus_ghs || 0) : 0;
+  if (bonusHeld > 0) {
+    const realBal = Math.round(((urow.length ? Number(urow[0].balance_ghs || 0) : 0) - bonusHeld) * 100) / 100;
+    if (amount > realBal) {
+      return send(res, 400, { error: 'bonus_not_withdrawable', detail: 'Bonus money can be staked but not withdrawn. Your withdrawable balance is ' + realBal.toFixed(2) + '.' });
+    }
+  }
   let rows;
   try {
     rows = await sql(

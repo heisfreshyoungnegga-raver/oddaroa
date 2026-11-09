@@ -167,7 +167,7 @@ function depositFloorFor(user, currency) {
 }
 
 function publicUser(u) {
-  return { id: u.id, phone: u.phone, email: u.email || null, display_name: u.display_name, role: u.role, status: u.status, balance_ghs: Number(u.balance_ghs), currency: currencyOfPhone(u.phone) };
+  return { id: u.id, phone: u.phone, email: u.email || null, display_name: u.display_name, role: u.role, status: u.status, balance_ghs: Number(u.balance_ghs), bonus_ghs: Number(u.bonus_ghs || 0), currency: currencyOfPhone(u.phone) };
 }
 function betCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -477,6 +477,7 @@ function ensureAdminTables() {
   if (!adminTablesReady) {
     adminTablesReady = (async () => {
       await sql(`alter table users add column if not exists invite_code text`);
+      await sql(`alter table users add column if not exists bonus_ghs numeric(12,2) not null default 0`);
       await sql(`create unique index if not exists users_invite_code_idx on users (invite_code) where invite_code is not null`);
       await sql(`alter table users add column if not exists invited_by uuid references users (id)`);
       // Widen the status check so invited admins can sit in 'pending'
@@ -508,7 +509,7 @@ function ensureAdminTables() {
         paid_at timestamptz,
         created_at timestamptz not null default now()
       )`);
-      await sql(`create unique index if not exists commissions_source_idx on commissions (source_txn_id) where source_txn_id is not null`);
+      await sql(`create unique index if not exists commissions_source_earner_idx on commissions (earner_id, source_txn_id) where source_txn_id is not null`);
       // An earner's ask for the super admin to settle their pending
       // commissions (the Pay Out button in Platform Control settles
       // it). One open request per earner at a time.
@@ -561,16 +562,42 @@ function convertAmount(amount, fromCur, toCur, fxNgnPerGhs) {
   if (fromCur === 'GHS' && toCur === 'NGN') return Math.round(a * fx * 100) / 100;
   return a;
 }
+// First-deposit bonus (Prince, 2026-11-09): Ghana pays 100 on a 120
+// deposit — a ratio of 100/120 of the amount, tunable in Platform
+// Control (deposit_bonus_ghs_ratio). Nigeria pays half of 25,000
+// rounded DOWN to the nearest 1,000 = 12,000 (deposit_bonus_ngn_ratio,
+// floor is a constant). Any other currency: no bonus (no rails yet).
+function firstDepositBonus(amount, currency, s) {
+  const a = Number(amount) || 0;
+  if (a <= 0) return 0;
+  if (currency === 'GHS') {
+    const r = s && s.deposit_bonus_ghs_ratio !== undefined ? Number(s.deposit_bonus_ghs_ratio) : 100 / 120;
+    return Math.round(a * r * 100) / 100;
+  }
+  if (currency === 'NGN') {
+    const r = s && s.deposit_bonus_ngn_ratio !== undefined ? Number(s.deposit_bonus_ngn_ratio) : 0.5;
+    return Math.floor((a * r) / 1000) * 1000;
+  }
+  return 0;
+}
+// Commission split (Prince, 2026-11-09): the referring admin's take
+// is CONSTANT — 70% of the 100 fare amount = GH₵70 flat (converted
+// into the earner's currency), whatever the deposit size; gateway
+// charges and size stop mattering. Everything else in the commission
+// pot goes to the super admin. 'Rounded up to the 70%' — the admin
+// always sees the full flat 70, never a pesewa less.
+function splitCommission(earnPot, earnCur, fxNgnPerGhs) {
+  const pot = Math.round((Number(earnPot) || 0) * 100) / 100;
+  const flat = convertAmount(70, 'GHS', earnCur, fxNgnPerGhs);
+  const admin = Math.min(flat, pot);
+  return { admin: Math.round(admin * 100) / 100, super: Math.round((pot - admin) * 100) / 100 };
+}
 async function applyDepositRewards(userId, txnId, amountGhs, currency) {
   const amount = Number(amountGhs);
   if (!(amount > 0)) return;
-  const rules = moneyRules(currency || 'GHS');
-  const s = await getSettings(['admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn', 'fx_ngn_per_ghs']);
+  const s = await getSettings(['admin_commission_pct', 'user_cashback_pct', 'fx_ngn_per_ghs', 'deposit_bonus_ghs_ratio', 'deposit_bonus_ngn_ratio']);
   const cashPct = Number(s.user_cashback_pct || 0);
   const commPct = Number(s.admin_commission_pct || 0);
-  // 0 in the setting means OFF and must stay off; only a missing key
-  // falls back to the per-currency default.
-  const refBonus = s[rules.bonusKey] === undefined ? rules.bonusDefault : (Number(s[rules.bonusKey]) || 0);
   if (cashPct > 0) {
     const cash = Math.round(amount * cashPct) / 100;
     if (cash > 0) {
@@ -587,31 +614,40 @@ async function applyDepositRewards(userId, txnId, amountGhs, currency) {
       }
     }
   }
-  if (commPct > 0 || refBonus > 0) {
+  // FIRST-DEPOSIT BONUS (Prince, 2026-11-09): only the first
+  // completed deposit a user ever makes earns it ('only first
+  // deposit — the others no'). It replaces the old flat referral
+  // bonus that paid on every deposit. The money is STAKE-ONLY: it
+  // lands in the balance AND in the bonus_ghs bucket; staking spends
+  // the bucket down and withdrawals can never touch it.
+  const priorDeps = await sql(
+    `select count(*)::int as n from wallet_transactions
+     where user_id = $1 and kind = 'deposit' and status = 'completed' and id <> $2`,
+    [userId, txnId]
+  );
+  if (priorDeps[0].n === 0) {
+    const bonus = firstDepositBonus(amount, currency || 'GHS', s);
+    if (bonus > 0) {
+      const dupe = await sql('select id from wallet_transactions where external_ref = $1', ['firstbonus:' + txnId]);
+      if (!dupe.length) {
+        await sql(
+          `with ins as (
+             insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note)
+             values ($1, 'adjustment', 'First deposit bonus', $2, 'completed', $3, $4) returning id
+           )
+           update users set balance_ghs = balance_ghs + $2, bonus_ghs = bonus_ghs + $2 where id = $1`,
+          [userId, bonus, 'firstbonus:' + txnId, 'First deposit bonus (stakes only)']
+        );
+      }
+    }
+  }
+  if (commPct > 0) {
     const inv = await sql(
-      `select i.id, i.phone from users u join users i on i.id = u.invited_by
+      `select i.id, i.phone, i.role from users u join users i on i.id = u.invited_by
        where u.id = $1 and i.status = 'active' and i.role in ('admin', 'super_admin')`,
       [userId]
     );
     if (inv.length) {
-      // Referral deposit bonus (Prince, 2026-11-05): a player who
-      // joined through any admin's referral link gets a flat bonus
-      // on EVERY completed deposit, on top of the deposit itself.
-      // Idempotent per deposit via the refbonus: external_ref, same
-      // pattern as the cashback above.
-      if (refBonus > 0) {
-        const dupe = await sql('select id from wallet_transactions where external_ref = $1', ['refbonus:' + txnId]);
-        if (!dupe.length) {
-          await sql(
-            `with ins as (
-               insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note)
-               values ($1, 'adjustment', 'Referral deposit bonus', $2, 'completed', $3, $4) returning id
-             )
-             update users set balance_ghs = balance_ghs + $2 where id = $1`,
-            [userId, refBonus, 'refbonus:' + txnId, 'Referral bonus on deposit']
-          );
-        }
-      }
       if (commPct > 0) {
         // Commission is earned in the EARNER's currency: convert the
         // deposit amount first. Booking a naira deposit's raw number
@@ -622,11 +658,43 @@ async function applyDepositRewards(userId, txnId, amountGhs, currency) {
         const basis = convertAmount(amount, depCur, earnCur, s.fx_ngn_per_ghs);
         const earn = Math.round(basis * commPct) / 100;
         if (earn > 0) {
-          await sql(
-            `insert into commissions (earner_id, source_user_id, source_txn_id, basis_ghs, pct, amount_ghs)
-             values ($1, $2, $3, $4, $5, $6) on conflict (source_txn_id) where source_txn_id is not null do nothing`,
-            [inv[0].id, userId, txnId, basis, commPct, earn]
-          );
+          // Split the pot (Prince, 2026-11-09): the referring admin's
+          // share is the constant flat 70 (see splitCommission); the
+          // remainder is the super admin's, booked as his own row in
+          // HIS currency. If the referrer IS the super admin, or no
+          // distinct super admin exists, he simply keeps the whole pot.
+          const parts = splitCommission(earn, earnCur, s.fx_ngn_per_ghs);
+          let sup = null;
+          if (inv[0].role !== 'super_admin' && parts.super > 0) {
+            const supRows = await sql(
+              `select id, phone from users where role = 'super_admin' and status = 'active' order by created_at asc limit 1`
+            );
+            if (supRows.length && supRows[0].id !== inv[0].id) sup = supRows[0];
+          }
+          if (!sup) {
+            await sql(
+              `insert into commissions (earner_id, source_user_id, source_txn_id, basis_ghs, pct, amount_ghs)
+               values ($1, $2, $3, $4, $5, $6) on conflict (earner_id, source_txn_id) where source_txn_id is not null do nothing`,
+              [inv[0].id, userId, txnId, basis, commPct, earn]
+            );
+          } else {
+            await sql(
+              `insert into commissions (earner_id, source_user_id, source_txn_id, basis_ghs, pct, amount_ghs)
+               values ($1, $2, $3, $4, $5, $6) on conflict (earner_id, source_txn_id) where source_txn_id is not null do nothing`,
+              [inv[0].id, userId, txnId, basis, commPct, parts.admin]
+            );
+            const supCur = currencyOfPhone(sup.phone);
+            const supBasis = convertAmount(basis, earnCur, supCur, s.fx_ngn_per_ghs);
+            const supAmt = Math.round(convertAmount(parts.super, earnCur, supCur, s.fx_ngn_per_ghs) * 100) / 100;
+            if (supAmt > 0) {
+              const supPct = supBasis > 0 ? Math.round((supAmt / supBasis) * 10000) / 100 : commPct;
+              await sql(
+                `insert into commissions (earner_id, source_user_id, source_txn_id, basis_ghs, pct, amount_ghs)
+                 values ($1, $2, $3, $4, $5, $6) on conflict (earner_id, source_txn_id) where source_txn_id is not null do nothing`,
+                [sup.id, userId, txnId, supBasis, supPct, supAmt]
+              );
+            }
+          }
         }
       }
     }
@@ -1481,4 +1549,4 @@ async function ensureBookingCode(userId, selections) {
   return null;
 }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission };

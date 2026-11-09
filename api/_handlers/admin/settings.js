@@ -1,6 +1,6 @@
 const { sql, readBody, send, guard, requireAdmin, requireSuperAdmin, ensureAdminTables, getSettings } = require('../../_lib');
 
-const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn', 'cashout_margin_pct', 'fx_ngn_per_ghs'];
+const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn', 'cashout_margin_pct', 'fx_ngn_per_ghs', 'deposit_bonus_ghs_ratio', 'deposit_bonus_ngn_ratio'];
 
 // Platform control settings. Any admin can read them (dashboards show
 // the state); only the super admin can change them: the ShinobiPay
@@ -42,6 +42,13 @@ module.exports = guard(async (req, res) => {
     const v = Number(body.fx_ngn_per_ghs);
     if (!(v >= 10 && v <= 1000)) return send(res, 400, { error: 'invalid_fx', detail: 'Exchange rate (NGN per 1 GHS) must be between 10 and 1000.' });
     updates.fx_ngn_per_ghs = String(v);
+  }
+  for (const k of ['deposit_bonus_ghs_ratio', 'deposit_bonus_ngn_ratio']) {
+    if (body[k] !== undefined) {
+      const v = Number(body[k]);
+      if (!(v >= 0 && v <= 1)) return send(res, 400, { error: 'invalid_bonus_ratio', detail: 'Bonus ratios must be between 0 and 1.' });
+      updates[k] = String(v);
+    }
   }
   if (body.referral_deposit_bonus_ghs !== undefined) {
     const v = Number(body.referral_deposit_bonus_ghs);

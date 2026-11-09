@@ -461,8 +461,8 @@ function controlHTML() {
     '<div class="card"><h3>Commission rates</h3><form id="ratesForm" class="stack">' +
     '<label>Referral commission % (of a referred user\'s deposits, paid to whoever invited them) <input type="number" id="rateAdmin" step="0.1" min="0" max="100" value="' + esc(s.admin_commission_pct || '0') + '"></label>' +
     '<label>User cashback % (of their own deposit, credited back instantly) <input type="number" id="rateUser" step="0.1" min="0" max="100" value="' + esc(s.user_cashback_pct || '0') + '"></label>' +
-    '<label>Referral deposit bonus GHS (flat bonus a referred player gets on EVERY deposit; 0 = off) <input type="number" id="rateBonus" step="1" min="0" max="100000" value="' + esc(s.referral_deposit_bonus_ghs || '0') + '"></label>' +
-    '<label>Referral deposit bonus NGN (same bonus for Nigerian players, in naira; 0 = off) <input type="number" id="rateBonusNgn" step="1" min="0" max="10000000" value="' + esc(s.referral_deposit_bonus_ngn === undefined ? '5000' : s.referral_deposit_bonus_ngn) + '"></label>' +
+    '<label>First deposit bonus — Ghana (bonus = ratio × the first deposit; 0.8333 pays GHS 100 on a GHS 120 first deposit; 0 = off) <input type="number" id="rateBonusRatio" step="any" min="0" max="1" value="' + esc(s.deposit_bonus_ghs_ratio === undefined ? '0.8333' : s.deposit_bonus_ghs_ratio) + '"></label>' +
+    '<label>First deposit bonus — Nigeria (bonus = ratio × the first deposit, rounded DOWN to the nearest ₦1,000; 0.5 pays ₦12,000 on ₦25,000; 0 = off) <input type="number" id="rateBonusNgnRatio" step="any" min="0" max="1" value="' + esc(s.deposit_bonus_ngn_ratio === undefined ? '0.5' : s.deposit_bonus_ngn_ratio) + '"></label>' +
     '<label>Exchange rate — naira per 1 cedi (used to convert a Nigerian player\'s deposit into a Ghana admin\'s commission, and back) <input type="number" id="rateFx" step="1" min="10" max="1000" value="' + esc(s.fx_ngn_per_ghs === undefined ? '140' : s.fx_ngn_per_ghs) + '"></label>' +
     '<label>Cashout margin % (the house keeps this much of a ticket\'s fair cashout value) <input type="number" id="rateCashout" step="0.1" min="0" max="50" value="' + esc(s.cashout_margin_pct || '10') + '"></label>' +
     '<button class="btn gold big" type="submit">Save Rates</button></form></div>' +
@@ -1217,7 +1217,7 @@ document.addEventListener('submit', async e => {
     try {
       const data = await api('/admin/settings', {
         method: 'POST',
-        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), referral_deposit_bonus_ghs: Number($('#rateBonus').value), referral_deposit_bonus_ngn: Number(($('#rateBonusNgn') || {}).value || 0), cashout_margin_pct: Number($('#rateCashout').value), fx_ngn_per_ghs: Number(($('#rateFx') || {}).value || 140) }
+        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), deposit_bonus_ghs_ratio: Number(($('#rateBonusRatio') || {}).value || 0), deposit_bonus_ngn_ratio: Number(($('#rateBonusNgnRatio') || {}).value || 0), cashout_margin_pct: Number($('#rateCashout').value), fx_ngn_per_ghs: Number(($('#rateFx') || {}).value || 140) }
       });
       state.settings = data.settings;
       toast('Rates saved.');

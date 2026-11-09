@@ -146,7 +146,8 @@ function validateConfig(game, cfg) {
 async function openRound(uid, game, stake, state) {
   const rows = await sql(
     `with bal as (
-       update users set balance_ghs = balance_ghs - $3
+       update users set balance_ghs = balance_ghs - $3,
+         bonus_ghs = bonus_ghs - least(bonus_ghs, $3)
        where id = $1 and balance_ghs >= $3 returning id
      ),
      round as (

@@ -1351,7 +1351,7 @@ function momoPanelHTML() {
     return '<div class="card"><h3>Check your phone</h3>' +
       '<p>We sent a payment prompt to <b>' + esc(m.phone) + '</b>. Approve it with your MoMo PIN to deposit <b>' + money(m.amount) + '</b>.</p>' +
       (m.ussd ? '<p class="muted">No prompt? Dial <b>' + esc(m.ussd) + '</b> and approve the pending transaction from your MoMo menu.</p>' : '') +
-      '<p class="muted">Waiting for confirmation… your balance updates automatically once the payment lands. Do not pay twice.</p>' +
+      '<p class="muted">Waiting for confirmation… your balance updates automatically once the payment lands.</p>' +
       '<button class="btn" data-momo-cancel>Cancel</button></div>';
   }
   if (m && m.phase === 'otp') {
@@ -1463,6 +1463,7 @@ function walletHTML() {
   }
   return '<h2>Wallet</h2>' +
     '<div class="card"><div class="muted">Balance</div><div class="bal">' + balMoney(w.balance_ghs) + '</div></div>' +
+    (Number(w.bonus_ghs || 0) > 0 ? '<div class="card"><div class="muted">Bonus — stakes only, cannot be withdrawn</div><div class="bal">' + balMoney(w.bonus_ghs) + '</div></div>' : '') +
     sectionTabs + sectionBody;
 }
 async function loadWallet() {
