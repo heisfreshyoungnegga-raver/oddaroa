@@ -190,7 +190,10 @@ function matchSig(list) {
 async function loadMatches() {
   let changed = true;
   try {
-    const data = await api('/matches');
+    // One fast retry (Prince, 2026-11-09): a single dropped fetch
+    // on a slow network must not strand the list — try again in 3s
+    // before giving up to the 60s tick.
+    const data = await api('/matches').catch(async () => { await new Promise(r => setTimeout(r, 3000)); return api('/matches'); });
     const fresh = data.matches.map(normMatch);
     const sig = matchSig(fresh);
     changed = sig !== lastMatchSig;
@@ -199,7 +202,8 @@ async function loadMatches() {
     state.matchesLoaded = true;
     state.offline = false;
   } catch (e) {
-    state.matches = [];
+    // Keep any list we already have — a failed refresh must never
+    // blank a working board back to the skeleton/empty state.
     state.matchesLoaded = true;
     lastMatchSig = null;
     if (e.code !== 'backend_not_configured') console.warn('matches load failed', e.code);

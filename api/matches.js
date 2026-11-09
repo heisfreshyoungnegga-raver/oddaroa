@@ -111,15 +111,21 @@ module.exports = guard(async (req, res) => {
   const now = new Date();
   // Group 0 is the primary block (API-Football rows, admin manual
   // matches and the featured matches); group 1 is the ESPN block.
+  // List payload diet (Prince, 2026-11-09): crests uploaded as
+  // data: URIs can weigh 100 KB+ EACH — two of them bloated this
+  // list to 639 KB and kept slow phones stuck on the loading
+  // skeleton. The list shows 22px crests and letter tiles cover a
+  // missing one; the full crest still loads on the match page.
+  const slimLogo = v => (typeof v === 'string' && v.startsWith('data:') && v.length > 6000) ? null : v;
   const entries = [];
   for (const m of rows) {
     const grp = m.external_ref && m.external_ref.startsWith('espn:') ? 1 : 0;
     if (isCustomMatch(m)) {
       const st = customMatchState(m, now);
       if (st.status === 'finished' && now - new Date(m.starts_at) > (105 + (m.ht_stoppage || 0) + (m.ft_stoppage || 0) + 180) * 60000) continue;
-      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.has_full } });
+      entries.push({ grp, row: { ...m, home_logo: slimLogo(m.home_logo), away_logo: slimLogo(m.away_logo), odds: fillOdds(m.odds), status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.has_full } });
     } else {
-      entries.push({ grp, row: { ...m, odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.has_full } });
+      entries.push({ grp, row: { ...m, home_logo: slimLogo(m.home_logo), away_logo: slimLogo(m.away_logo), odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.has_full } });
     }
   }
   // De-duplicate across feeds: an ESPN row that is the same real
