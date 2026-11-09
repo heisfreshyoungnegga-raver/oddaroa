@@ -1089,23 +1089,32 @@ document.addEventListener('change', e => {
   if (!file) return;
   const img = new Image();
   img.onload = () => {
-    const scale = Math.min(1, 256 / Math.max(img.width, img.height));
-    const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(img.width * scale));
-    c.height = Math.max(1, Math.round(img.height * scale));
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    // PNG keeps transparency for real crests, but a photo upload can
-    // blow past the server's crest size cap and get silently dropped —
-    // fall back to JPEG, then to a smaller JPEG, so uploads always land.
-    let crestUrl = c.toDataURL('image/png');
-    if (crestUrl.length > 150000) crestUrl = c.toDataURL('image/jpeg', 0.87);
-    if (crestUrl.length > 150000) {
-      const sc = 160 / Math.max(c.width, c.height);
-      const c2 = document.createElement('canvas');
-      c2.width = Math.max(1, Math.round(c.width * sc));
-      c2.height = Math.max(1, Math.round(c.height * sc));
-      c2.getContext('2d').drawImage(c, 0, 0, c2.width, c2.height);
-      crestUrl = c2.toDataURL('image/jpeg', 0.85);
+    // House crest standard (Prince, 2026-11-09 — tools/shrink-crest.py
+    // runs the same ladder offline): at most 128px and at most 24,000
+    // data-URI chars. WebP keeps transparency AND stays tiny; a small
+    // PNG is next; JPEG is the last resort. The old ladder stopped at
+    // the first result under 150,000 chars — which is exactly how
+    // 116 KB crests got stored and bloated every list they joined.
+    const draw = px => {
+      const sc = Math.min(1, px / Math.max(img.width, img.height));
+      const cc = document.createElement('canvas');
+      cc.width = Math.max(1, Math.round(img.width * sc));
+      cc.height = Math.max(1, Math.round(img.height * sc));
+      cc.getContext('2d').drawImage(img, 0, 0, cc.width, cc.height);
+      return cc;
+    };
+    const tries = [
+      () => draw(128).toDataURL('image/webp', 0.85),
+      () => draw(110).toDataURL('image/webp', 0.8),
+      () => draw(128).toDataURL('image/png'),
+      () => draw(96).toDataURL('image/webp', 0.75),
+      () => draw(96).toDataURL('image/jpeg', 0.85)
+    ];
+    let crestUrl = '';
+    for (const t of tries) {
+      const u = t();
+      if (!crestUrl || u.length < crestUrl.length) crestUrl = u;
+      if (crestUrl.length <= 24000) break;
     }
     crestUploads[side] = crestUrl;
     URL.revokeObjectURL(img.src);

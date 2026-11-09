@@ -746,7 +746,7 @@ function cleanGoalSchedule(goals) {
 function cleanCrestUrl(v) {
   const s = String(v || '').trim();
   if (/^https:\/\/\S+$/i.test(s) && s.length <= 500) return s;
-  if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(s) && s.length <= 160000) return s;
+  if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(s) && s.length <= 32000) return s;
   return null;
 }
 function isCustomMatch(m) {
