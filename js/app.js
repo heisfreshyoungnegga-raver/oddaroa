@@ -1038,7 +1038,7 @@ function ticketCardHTML(b) {
       '<span>Odds<b>' + Number(b.total_odds).toFixed(2) + '</b></span>' +
       (settled
         ? '<span>Paid out<b class="' + (paid > 0 ? 'paidwin' : '') + '">' + (paid == null ? '—' : money(paid)) + '</b></span>'
-        : '<span>Potential<b>' + money(b.live_potential_ghs != null ? b.live_potential_ghs : b.potential_ghs) + '</b></span>') +
+        : '<span>Potential<b>' + money(b.potential_ghs) + '</b></span>') +
     '</div>' +
     (b.status === 'open' && b.cashout_ghs
       ? '<button class="btn gold cashout-btn" data-cashout="' + b.id + '">Cash out · ' + money(b.cashout_ghs) + '</button>' : '') +
@@ -1077,7 +1077,7 @@ function legDetailHTML(l) {
 }
 function betDetailsHTML(b) {
   const paid = paidOutOf(b);
-  const ret = b.status === 'open' ? (b.live_potential_ghs != null ? b.live_potential_ghs : b.potential_ghs) : paid;
+  const ret = b.status === 'open' ? b.potential_ghs : paid;
   const statusHead = b.status === 'won'
     ? '<span class="bd-status won">' + TROPHY_ICON + ' WON</span>'
     : '<span class="bd-status ' + b.status + '">' + esc(String(b.status).replace('_', ' ').toUpperCase()) + '</span>';

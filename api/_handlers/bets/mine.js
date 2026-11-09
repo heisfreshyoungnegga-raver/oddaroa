@@ -98,27 +98,13 @@ module.exports = guard(async (req, res) => {
           } catch (e) { s.now_odds = null; }
         }
       }
-      // Live potential (Prince, 2026-11-06): what this ticket
-      // returns if the live prices froze now — the user's stake
-      // carried by the moving odds. Singles and multiples only;
-      // system tickets price per combination, so they keep the
-      // static potential.
-      if ((b.kind === 'multiple' || b.kind === 'single') &&
-          (b.selections || []).some(x => x.match_status === 'live')) {
-        let prod = 1, dead = false;
-        for (const s of b.selections) {
-          if (s.result === 'lost') { dead = true; break; }
-          prod *= s.result === 'won' ? (Number(s.odds) || 1) : (Number(s.now_odds || s.odds) || 1);
-        }
-        // The cap is Prince's rule (2026-11-08): the potential win
-        // may NEVER pass the ticket's real win amount. Live prices
-        // drifting up made a 600 @ 29.57 ticket (true win 17,742)
-        // display a 73,470 "potential" it could never pay.
-        b.live_potential_ghs = dead ? 0
-          : Math.min(
-              Math.round(Number(b.stake_ghs) * prod * (1 + (Number(b.bonus_pct) || 0) / 100) * 100) / 100,
-              Number(b.potential_ghs) || Infinity
-            );
+      // Potential win is FIXED at placement (Prince, 2026-11-09):
+      // the moving live-potential recompute confused users — the
+      // number on the ticket is the number the ticket pays. The
+      // field stays (cached clients read it) but always equals the
+      // placed potential_ghs.
+      if (b.kind === 'multiple' || b.kind === 'single') {
+        b.live_potential_ghs = Number(b.potential_ghs);
       }
     }
   }
