@@ -1479,3 +1479,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 /* Messages stacking fix: this media rule must come AFTER the v2 .mchat
    rule or the desktop columns win the cascade on phones too. */
 @media (max-width: 720px) { .mchat { grid-template-columns: 1fr; } }
+
+/* 18+ age gate on the register modal (Prince, 2026-11-09). */
+.agegate { text-align: center; padding: 10px 0 4px; }
+.agegate h3 { margin: 0 0 6px; }
+.agegate-row { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
+.agegate-row .btn { min-width: 110px; }

@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#070907">
 <title>Oddaroa Ghana | Sports Betting, Live Odds & Aviator</title>
 <meta name="description" content="Oddaroa — sports betting in Ghana: live odds, betslip, booking codes and mobile money wallet. 18+, bet responsibly.">
-<link rel="stylesheet" href="css/styles.css?v=34">
+<link rel="stylesheet" href="css/styles.css?v=35">
 <link rel="stylesheet" href="css/games.css?v=4">
 <script>try { document.documentElement.dataset.theme = localStorage.getItem('od_theme') || 'dark'; } catch (e) {}</script>
 </head>
@@ -78,6 +78,14 @@
     <div class="auth-brand"><span class="logo">ODD<span>AROA</span></span></div>
     <h2 id="authTitle">Welcome back</h2>
     <p class="modal-sub" id="authSub" style="display:none">Welcome back! Log in to pick up right where you left off.</p>
+    <div id="ageGate" class="agegate" style="display:none">
+      <h3>Are you 18 years and above?</h3>
+      <p class="muted">You must be 18 or older to create an Oddaroa account.</p>
+      <div class="agegate-row">
+        <button type="button" class="btn gold big" id="ageYes">Yes</button>
+        <button type="button" class="btn big" id="ageNo">No</button>
+      </div>
+    </div>
     <form id="authForm">
       <label id="authNameRow" style="display:none">Full name
         <input type="text" id="authName" placeholder="Your name" autocomplete="name">
@@ -149,7 +157,7 @@
 <div class="toast" id="toast" role="status"></div>
 
 <script src="js/data.js"></script>
-<script src="js/app.js?v=53"></script>
+<script src="js/app.js?v=54"></script>
 <script src="js/games.js?v=6"></script>
 </body>
 </html>

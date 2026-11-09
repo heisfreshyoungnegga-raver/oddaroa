@@ -83,8 +83,8 @@ function fmtDate(iso) {
 function curCode() { return (state.user && state.user.currency) || 'GHS'; }
 const CUR_SYM = { GHS: 'GHS ', NGN: '₦', KES: 'KES ', UGX: 'UGX ', TZS: 'TZS ' };
 const CUR_RULES = {
-  GHS: { minDeposit: 300, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000 },
-  NGN: { minDeposit: 30000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000 }
+  GHS: { minDeposit: 120, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000 },
+  NGN: { minDeposit: 25000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000 }
 };
 function curSym() { return CUR_SYM[curCode()] || 'GHS '; }
 function curRules() { return CUR_RULES[curCode()] || CUR_RULES.GHS; }
@@ -1369,17 +1369,17 @@ function momoPanelHTML() {
   const phone = state.user ? state.user.phone : '';
   // Gateway deposits use Prince's preset amounts (2026-11-03): the chips
   // fill the amount box; a custom amount can still be typed.
-  const presets = [300, 500, 1000, 1500, 2000];
+  const presets = [120, 300, 500, 1000, 1500, 2000];
   return '<div class="card"><h3>Mobile Money</h3>' +
     '<form id="momoForm" class="stack">' +
     '<div class="amtrow">' + presets.map(a =>
-      '<button type="button" class="amtchip' + (a === 300 ? ' on' : '') + '" data-amt="' + a + '">GHS ' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
-    '<label>Amount (GHS) <input type="number" id="mmAmt" min="300" max="5000" step="0.01" value="300" required></label>' +
+      '<button type="button" class="amtchip' + (a === presets[0] ? ' on' : '') + '" data-amt="' + a + '">GHS ' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
+    '<label>Amount (GHS) <input type="number" id="mmAmt" min="120" max="5000" step="0.01" value="120" required></label>' +
     '<label>MoMo number <input type="tel" id="mmPhone" value="' + esc(phone) + '" required></label>' +
     '<label>Network <select id="mmNet"><option value="MTN">MTN Mobile Money</option><option value="TELECEL">Telecel Cash</option><option value="AIRTELTIGO">AT Money</option></select></label>' +
     '<p class="muted" id="mmFeeLine"></p>' +
     '<button class="btn gold big" type="submit">Send Payment Prompt</button></form>' +
-    '<p class="muted">Minimum deposit is GHS 300. A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
+    '<p class="muted">Minimum deposit is GHS 120. A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
 }
 
 /* ----- Instant NGN deposit (Flutterwave hosted checkout) ----- */
@@ -1429,7 +1429,7 @@ function flwPanelHTML() {
   }
   const flwAdminTier = state.user && (state.user.role === 'admin' || state.user.role === 'super_admin');
   const flwFloor = flwAdminTier ? 10 : 30000;
-  const presets = flwAdminTier ? [10, 100, 1000, 10000, 30000] : [30000, 50000, 100000, 250000, 500000];
+  const presets = flwAdminTier ? [10, 100, 1000, 10000, 30000] : [25000, 30000, 50000, 100000, 250000, 500000];
   return '<div class="card"><h3>Flutterwave</h3>' +
     '<form id="flwForm" class="stack">' +
     '<div class="amtrow">' + presets.map(a =>
@@ -1886,6 +1886,7 @@ function closeSlip() { $('#slipDrawer').classList.remove('open'); $('#scrim').cl
 
 /* ---------- auth ---------- */
 let authMode = 'login';
+let ageOk = false; // 18+ gate: set by the Yes button on the register modal
 function openAuth(mode) {
   authMode = mode || 'login';
   detectCountry();
@@ -1931,6 +1932,18 @@ function syncAuth() {
   // bottom link switches modes.
   const login = authMode === 'login';
   $('#authTitle').textContent = login ? 'Welcome back' : 'Create your account';
+  // 18+ gate (Prince, 2026-11-09): every NEW user registering must
+  // first answer the age note. Yes reveals the form; the No button is
+  // deliberately DEAD — it has no handler anywhere, so pressing it
+  // does nothing at all.
+  const gate = $('#ageGate'), form = $('#authForm'), alt = $('#authAlt');
+  if (gate && form) {
+    const gated = !login && !ageOk;
+    gate.style.display = gated ? '' : 'none';
+    form.style.display = gated ? 'none' : '';
+    if (alt) alt.style.display = gated ? 'none' : '';
+    if (gated) return;
+  }
   $('#authSubmit').textContent = login ? 'Login' : 'Register';
   const show = (id, on) => { const el = $(id); if (el) el.style.display = on ? '' : 'none'; };
   // The login form carries a welcome message under its title
@@ -2421,6 +2434,9 @@ $('#scrim').addEventListener('click', closeSlip);
 $('#loginBtn').addEventListener('click', () => openAuth('login'));
 $('#registerBtn').addEventListener('click', () => openAuth('register'));
 $('#authClose').addEventListener('click', closeAuth);
+// Age gate Yes: the ONLY live button on the gate (No is dead by design).
+const ageYesBtn = $('#ageYes');
+if (ageYesBtn) ageYesBtn.addEventListener('click', () => { ageOk = true; syncAuth(); });
 // Password visibility eye (Prince, 2026-11-04): tap to see what you
 // are typing, tap again to hide it.
 const EYE_OPEN = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';

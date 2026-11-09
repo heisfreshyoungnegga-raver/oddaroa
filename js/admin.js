@@ -331,6 +331,7 @@ function createdGamesHTML() {
       '<div class="muted">' + (custom ? 'Featured' : 'Manual') + ' · ' + esc(m.league) + '</div>' +
       '<div>' + statusLine + '</div></div>' + chip(m.status) +
       '<span>' + (m.status !== 'finished' ? '<button class="btn gold sm" data-edit-match="' + m.id + '">' + (state.editingMatch === m.id ? 'Close' : 'Edit') + '</button> ' : '') +
+      (m.status === 'upcoming' ? '<button class="btn ghost sm" data-lock-match="' + m.id + '" data-locked="' + (m.betting_locked ? '1' : '0') + '">' + (m.betting_locked ? 'Unlock' : 'Lock') + '</button> ' : '') +
       (m.status === 'upcoming' || m.status === 'live' ? '<button class="btn ghost sm" data-postpone-match="' + m.id + '">Postpone</button> ' : '') +
       '<button class="btn ghost sm" data-delete-match="' + m.id + '">Delete</button></span></div>' +
       (state.editingMatch === m.id ? editMatchFormHTML(m, custom) : '');
@@ -389,6 +390,7 @@ function matchesHTML() {
     chip(m.status) +
     '<span>' +
     (m.status === 'upcoming' ? '<button class="btn gold sm" data-golive="' + m.id + '">Go Live</button> ' : '') +
+    (m.status === 'upcoming' ? '<button class="btn ghost sm" data-lock-match="' + m.id + '" data-locked="' + (m.betting_locked ? '1' : '0') + '">' + (m.betting_locked ? 'Unlock' : 'Lock') + '</button> ' : '') +
     (m.status === 'live' ? '<button class="btn ghost sm" data-score="' + m.id + '">Update Score</button> ' : '') +
     (m.status !== 'finished' ? '<button class="btn ghost sm" data-settle="' + m.id + '">Settle</button>' : '') +
     '</span></div>').join('');
@@ -964,6 +966,16 @@ document.addEventListener('click', async e => {
   if (editMatchBtn) {
     state.editingMatch = state.editingMatch === editMatchBtn.dataset.editMatch ? '' : editMatchBtn.dataset.editMatch;
     render();
+    return;
+  }
+  const lockBtn = e.target.closest('[data-lock-match]');
+  if (lockBtn) {
+    const unlock = lockBtn.dataset.locked === '1';
+    try {
+      await api('/admin/lock-match', { method: 'POST', body: { id: lockBtn.dataset.lockMatch, locked: !unlock } });
+      toast(unlock ? 'Betting unlocked — odds are open again.' : 'Match locked — its odds are closed.');
+      loadAll();
+    } catch (err) { toast(err.message); }
     return;
   }
   const postponeBtn = e.target.closest('[data-postpone-match]');
