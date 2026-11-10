@@ -1026,7 +1026,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .oddsgrid label { font-size: 13px; }
 
 /* ---------- team logos ---------- */
-.tlogo { width: 22px; height: 22px; object-fit: contain; vertical-align: -6px; margin-right: 8px; }
+.tbad { width: 26px; height: 26px; flex: 0 0 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; overflow: hidden; }
+.tbad .tlogo { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
+.tbad-txt { color: #ece7da; font-size: 10px; font-weight: 800; letter-spacing: .4px; }
+.md-teams .tbad { width: 34px; height: 34px; flex-basis: 34px; border-radius: 9px; }
+.md-teams .tbad-txt { font-size: 13px; }
 
 /* ---------- admin ESPN sync ---------- */
 .espn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin: 10px 0 14px; }

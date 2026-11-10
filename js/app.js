@@ -325,6 +325,68 @@ function oddsHTML(m) {
 // canvas read is allowed. Any failure leaves the original untouched.
 const logoTrimCache = new Map();
 function logoSrc(u) { return (u && logoTrimCache.get(u)) || u; }
+// The feed provider also serves generic "no badge" graphics under
+// real team logo URLs — a camera icon, an empty shield, an "official
+// logo soon" disc — re-encoded differently per team, so file hashes
+// cannot catch them. These are perceptual fingerprints instead
+// (16x16 alpha-weighted luminance, quantized to hex): every
+// placeholder copy scores 0.0 against its template while the closest
+// real badge in the live list scores 1.27, so the 0.6 threshold
+// cannot misfire either way (measured 2026-11-10).
+const BADGE_PH = '\u0001placeholder';
+const BADGE_TEMPLATES = [
+  '000000000000000000000015553000000002646bab932000000857a6459a800000089952633980000007a828aa369000000798299a46900000079933851980000008aaa5348a90000003555656554000000000000000000000033333413330000001112320121000000021232322100000013333333310000000000000000000',
+  '0000000000000000000133333333100000231222222131000031332222231300003130002013130000313014141213000031314131131300003132131322130000313031320313000031311320131300001313120131310000013130131310000000131331310000000001411310000000000013310000000000000000000000',
+  '000028bddb8200000007dffffffd7000009ffffffffff90007feeeeeeeeeef702eeccdcccdccdfe28fedeeeeeeeedef8bffffffffffffffbdfffeeddddcefffddfffedddcdcefffdbffffffffffffffb8fffeeeeeeeffff82effecccccbeffe207ffeeeeeeeeff70009ffffffffff9000007dffffffd7000000028bddb820000'
+];
+function isPlaceholderBadge(canvas) {
+  const t = document.createElement('canvas'); t.width = 16; t.height = 16;
+  const tc = t.getContext('2d');
+  tc.drawImage(canvas, 0, 0, 16, 16);
+  const d = tc.getImageData(0, 0, 16, 16).data;
+  const sig = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    const lum = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+    sig[i] = Math.min(15, Math.round((lum * (d[i * 4 + 3] / 255)) / 17));
+  }
+  return BADGE_TEMPLATES.some(tpl => {
+    let sum = 0;
+    for (let i = 0; i < 256; i++) sum += Math.abs(sig[i] - parseInt(tpl[i], 16));
+    return sum / 256 <= 0.6;
+  });
+}
+// Every team always gets a badge slot: a missing logo, a broken logo
+// URL (the provider 404s some) or a detected placeholder becomes a
+// coloured initials tile instead of a blank gap (Prince, 2026-11-10).
+function teamInitials(name) {
+  const stop = { FC: 1, SC: 1, CF: 1, FK: 1, SK: 1, IF: 1, BK: 1, FF: 1, AC: 1, AS: 1, US: 1, CD: 1, SD: 1, AFC: 1, W: 1 };
+  const words = String(name || '?').replace(/[^A-Za-zÀ-ÿ]+/g, ' ').split(' ').filter(Boolean);
+  const core = words.filter(wd => !stop[wd.toUpperCase()]);
+  const use = core.length ? core : words;
+  if (use.length >= 2) return (use[0][0] + use[1][0]).toUpperCase();
+  return (use[0] || '?').slice(0, 2).toUpperCase();
+}
+function teamHue(name) {
+  let h = 0; const s = String(name || '');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return h;
+}
+function badgeTileHTML(name) {
+  return '<span class="tbad tbad-txt" style="background:hsl(' + teamHue(name) + ',42%,30%)">' + esc(teamInitials(name)) + '</span>';
+}
+function badgeHTML(name, logo) {
+  const src = logo ? logoSrc(logo) : '';
+  if (!src || src === BADGE_PH) return badgeTileHTML(name);
+  return '<span class="tbad"><img class="tlogo" src="' + esc(src) + '" alt="" loading="lazy" data-init="' + esc(teamInitials(name)) + '" data-hue="' + teamHue(name) + '" onerror="badgeFail(this)"></span>';
+}
+function badgeSwap(img) {
+  const tile = document.createElement('span');
+  tile.className = 'tbad tbad-txt';
+  tile.style.background = 'hsl(' + (img.dataset.hue || 0) + ',42%,30%)';
+  tile.textContent = img.dataset.init || '?';
+  img.replaceWith(tile);
+}
+function badgeFail(img) { badgeSwap(img); }
 function trimLogoImg(img) {
   const url = img.getAttribute('src') || '';
   if (!url || img.dataset.tdone) return;
@@ -339,6 +401,13 @@ function trimLogoImg(img) {
       if (!w || !h) { logoTrimCache.set(url, url); return; }
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const ctx = c.getContext('2d'); ctx.drawImage(probe, 0, 0);
+      if (isPlaceholderBadge(c)) {
+        logoTrimCache.set(url, BADGE_PH);
+        document.querySelectorAll('img.tlogo').forEach(el => {
+          if ((el.getAttribute('src') || '') === url) badgeSwap(el);
+        });
+        return;
+      }
       const data = ctx.getImageData(0, 0, w, h).data;
       let minX = w, minY = h, maxX = -1, maxY = -1;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -377,7 +446,7 @@ function rowHTML(m) {
   // and update with the automatic ESPN refresh like the rest of the
   // row — no separate score column.
   const teamLine = (name, logo, score) =>
-    '<div class="team">' + (logo ? '<img class="tlogo" src="' + esc(logoSrc(logo)) + '" alt="" loading="lazy" onerror="this.remove()">' : '') +
+    '<div class="team">' + badgeHTML(name, logo) +
     '<span class="tname">' + esc(name) + '</span>' +
     (score != null ? '<span class="tscore">' + score + '</span>' : '') + '</div>';
   return '<div class="mrow" data-match="' + m.id + '">' +
@@ -413,7 +482,7 @@ function matchDetailsHTML() {
   const when = m.status === 'live'
     ? '<span class="live-min">' + (m.minute_label || (m.minute != null ? m.minute + '&prime;' : 'LIVE')) + '</span>'
     : esc(fmtDate(m.starts_at));
-  const team = (name, logo, score) => '<div class="team">' + (logo ? '<img class="tlogo" src="' + esc(logoSrc(logo)) + '" alt="" loading="lazy" onerror="this.remove()">' : '') + '<span class="tname">' + esc(name) + '</span>' + (score != null ? '<span class="tscore">' + score + '</span>' : '') + '</div>';
+  const team = (name, logo, score) => '<div class="team">' + badgeHTML(name, logo) + '<span class="tname">' + esc(name) + '</span>' + (score != null ? '<span class="tscore">' + score + '</span>' : '') + '</div>';
   let html = back + '<div class="card"><div class="league">' + esc(m.league) + '</div>' +
     '<div class="md-when">' + when + '</div>' +
     '<div class="md-teams">' + team(m.home, m.home_logo, m.status === 'live' ? m.sh : null) + team(m.away, m.away_logo, m.status === 'live' ? m.sa : null) + '</div></div>';
