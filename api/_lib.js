@@ -158,11 +158,16 @@ const CURRENCY_RULES = {
 };
 function moneyRules(currency) { return CURRENCY_RULES[currency] || CURRENCY_RULES.GHS; }
 
-// Deposit floor for an account: players use the currency's minDeposit;
-// admin-tier accounts in Nigeria may deposit from ₦10 to test the
-// system (Prince's order, 2026-11-07).
-function depositFloorFor(user, currency) {
+// Deposit floor for an account: the super admin sets the minimum per
+// currency in Platform Control (operator_settings deposit_min_ghs /
+// deposit_min_ngn); the CURRENCY_RULES values are only the fallback
+// defaults. Admin-tier accounts in Nigeria may deposit from ₦10 to
+// test the system (Prince's order, 2026-11-07).
+function depositFloorFor(user, currency, settings) {
   if (currency === 'NGN' && user && (user.role === 'admin' || user.role === 'super_admin')) return 10;
+  const key = currency === 'NGN' ? 'deposit_min_ngn' : 'deposit_min_ghs';
+  const v = settings ? Number(settings[key]) : NaN;
+  if (v > 0) return v;
   return moneyRules(currency).minDeposit;
 }
 
@@ -568,8 +573,8 @@ function convertAmount(amount, fromCur, toCur, fxNgnPerGhs) {
   if (fromCur === 'GHS' && toCur === 'NGN') return Math.round(a * fx * 100) / 100;
   return a;
 }
-// First-deposit bonus (Prince, 2026-11-09): Ghana pays 100 on a 120
-// deposit — a ratio of 100/120 of the amount, tunable in Platform
+// First-deposit bonus (Prince, 2026-11-09): Ghana pays 157.50 on a
+// 210 deposit — a ratio of 0.75 of the amount, tunable in Platform
 // Control (deposit_bonus_ghs_ratio). Nigeria pays half of 25,000
 // rounded DOWN to the nearest 1,000 = 12,000 (deposit_bonus_ngn_ratio,
 // floor is a constant). Any other currency: no bonus (no rails yet).
@@ -577,7 +582,7 @@ function firstDepositBonus(amount, currency, s) {
   const a = Number(amount) || 0;
   if (a <= 0) return 0;
   if (currency === 'GHS') {
-    const r = s && s.deposit_bonus_ghs_ratio !== undefined ? Number(s.deposit_bonus_ghs_ratio) : 100 / 120;
+    const r = s && s.deposit_bonus_ghs_ratio !== undefined ? Number(s.deposit_bonus_ghs_ratio) : 0.75;
     return Math.round(a * r * 100) / 100;
   }
   if (currency === 'NGN') {

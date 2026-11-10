@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, readBody, send, guard, requireAuth, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, moneyRules, depositFloorFor } = require('../../_lib');
 
 // Instant MoMo deposit (ShinobiPay direct push): create a payment intent,
 // ShinobiPay pushes the approval prompt to the customer's phone. This
@@ -15,12 +15,14 @@ module.exports = guard(async (req, res) => {
   if (!auth) return;
   if (!shinobiConfig().secretKey) return send(res, 503, { error: 'provider_not_configured' });
   await ensureAdminTables();
-  const settings = await getSettings(['gateway_enabled']);
+  const settings = await getSettings(['gateway_enabled', 'deposit_min_ghs']);
   if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please use Manual transfer.' });
 
   const { amount_ghs, phone, network } = await readBody(req);
   const amount = Number(amount_ghs);
-  if (!(amount >= 210) || amount > 5000) return send(res, 400, { error: 'invalid_amount', detail: 'Enter an amount between GHS 210 and GHS 5,000.' });
+  const rules = moneyRules('GHS');
+  const floor = depositFloorFor(auth, 'GHS', settings);
+  if (!(amount >= floor) || amount > rules.maxDeposit) return send(res, 400, { error: 'invalid_amount', detail: 'Enter an amount between GHS ' + floor.toLocaleString('en-GB') + ' and GHS ' + rules.maxDeposit.toLocaleString('en-GB') + '.' });
   const amountMinor = Math.round(amount * 100);
   if (Math.abs(amount * 100 - amountMinor) > 0.001) return send(res, 400, { error: 'invalid_amount', detail: 'Amount must be in whole pesewas.' });
 

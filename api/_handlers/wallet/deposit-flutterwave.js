@@ -13,7 +13,7 @@ module.exports = guard(async (req, res) => {
   if (!auth) return;
   if (!flwConfig().secretKey) return send(res, 503, { error: 'provider_not_configured' });
   await ensureAdminTables();
-  const settings = await getSettings(['gateway_enabled']);
+  const settings = await getSettings(['gateway_enabled', 'deposit_min_ngn']);
   if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please use Manual transfer.' });
 
   const users = await sql('select phone, email, display_name, role from users where id = $1', [auth.uid]);
@@ -25,7 +25,7 @@ module.exports = guard(async (req, res) => {
   const rules = moneyRules('NGN');
   const { amount_ghs } = await readBody(req);
   const amount = Number(amount_ghs);
-  const floor = depositFloorFor(user, 'NGN');
+  const floor = depositFloorFor(user, 'NGN', settings);
   if (!(amount >= floor) || amount > rules.maxDeposit) {
     return send(res, 400, { error: 'invalid_amount', detail: `Enter an amount between ${rules.symbol}${floor.toLocaleString('en-GB')} and ${rules.symbol}${rules.maxDeposit.toLocaleString('en-GB')}.` });
   }

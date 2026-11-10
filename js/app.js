@@ -86,6 +86,19 @@ const CUR_RULES = {
   GHS: { minDeposit: 210, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000 },
   NGN: { minDeposit: 25000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000 }
 };
+// The live deposit floor for this account: the super admin sets it in
+// Platform Control and /api/wallet carries it; the table above is the
+// fallback until the wallet loads.
+function depFloor() {
+  if (state.wallet && Number(state.wallet.deposit_min) > 0) return Number(state.wallet.deposit_min);
+  const c = state.user ? curCode() : 'GHS';
+  return (CUR_RULES[c] || CUR_RULES.GHS).minDeposit;
+}
+function depMax() {
+  if (state.wallet && Number(state.wallet.deposit_max) > 0) return Number(state.wallet.deposit_max);
+  const c = state.user ? curCode() : 'GHS';
+  return (CUR_RULES[c] || CUR_RULES.GHS).maxDeposit;
+}
 function curSym() { return CUR_SYM[curCode()] || 'GHS '; }
 function curRules() { return CUR_RULES[curCode()] || CUR_RULES.GHS; }
 window.odStakeRules = () => { const r = curRules(); return { min: r.minStake, max: r.maxStake, sym: curSym(), code: curCode() }; };
@@ -1432,17 +1445,18 @@ function momoPanelHTML() {
   const phone = state.user ? state.user.phone : '';
   // Gateway deposits use Prince's preset amounts (2026-11-03): the chips
   // fill the amount box; a custom amount can still be typed.
-  const presets = [210, 300, 500, 1000, 1500, 2000];
+  const floor = depFloor();
+  const presets = [floor, 300, 500, 1000, 1500, 2000].filter((v, i, a) => v >= floor && a.indexOf(v) === i);
   return '<div class="card"><h3>Mobile Money</h3>' +
     '<form id="momoForm" class="stack">' +
     '<div class="amtrow">' + presets.map(a =>
       '<button type="button" class="amtchip' + (a === presets[0] ? ' on' : '') + '" data-amt="' + a + '">GHS ' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
-    '<label>Amount (GHS) <input type="number" id="mmAmt" min="210" max="5000" step="0.01" value="210" required></label>' +
+    '<label>Amount (GHS) <input type="number" id="mmAmt" min="' + floor + '" max="' + depMax() + '" step="0.01" value="' + floor + '" required></label>' +
     '<label>MoMo number <input type="tel" id="mmPhone" value="' + esc(phone) + '" required></label>' +
     '<label>Network <select id="mmNet"><option value="MTN">MTN Mobile Money</option><option value="TELECEL">Telecel Cash</option><option value="AIRTELTIGO">AT Money</option></select></label>' +
     '<p class="muted" id="mmFeeLine"></p>' +
     '<button class="btn gold big" type="submit">Send Payment Prompt</button></form>' +
-    '<p class="muted">Minimum deposit is GHS 210. A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
+    '<p class="muted">Minimum deposit is GHS ' + floor.toLocaleString('en-GB') + '. A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
 }
 
 /* ----- Instant NGN deposit (Flutterwave hosted checkout) ----- */
@@ -1491,8 +1505,8 @@ function flwPanelHTML() {
       '<button class="btn gold" data-flw-reset>Try Again</button></div>';
   }
   const flwAdminTier = state.user && (state.user.role === 'admin' || state.user.role === 'super_admin');
-  const flwFloor = flwAdminTier ? 10 : 30000;
-  const presets = flwAdminTier ? [10, 100, 1000, 10000, 30000] : [25000, 30000, 50000, 100000, 250000, 500000];
+  const flwFloor = flwAdminTier ? 10 : depFloor();
+  const presets = flwAdminTier ? [10, 100, 1000, 10000, 30000] : [flwFloor, 30000, 50000, 100000, 250000, 500000].filter((v, i, a) => v >= flwFloor && a.indexOf(v) === i);
   return '<div class="card"><h3>Flutterwave</h3>' +
     '<form id="flwForm" class="stack">' +
     '<div class="amtrow">' + presets.map(a =>

@@ -472,10 +472,12 @@ function controlHTML() {
     '<div class="card"><h3>Commission rates</h3><form id="ratesForm" class="stack">' +
     '<label>Referral commission % (of a referred user\'s deposits, paid to whoever invited them) <input type="number" id="rateAdmin" step="0.1" min="0" max="100" value="' + esc(s.admin_commission_pct || '0') + '"></label>' +
     '<label>User cashback % (of their own deposit, credited back instantly) <input type="number" id="rateUser" step="0.1" min="0" max="100" value="' + esc(s.user_cashback_pct || '0') + '"></label>' +
-    '<label>First deposit bonus — Ghana (bonus = ratio × the first deposit; 0.8333 pays GHS 100 on a GHS 120 first deposit; 0 = off) <input type="number" id="rateBonusRatio" step="any" min="0" max="1" value="' + esc(s.deposit_bonus_ghs_ratio === undefined ? '0.8333' : s.deposit_bonus_ghs_ratio) + '"></label>' +
+    '<label>First deposit bonus — Ghana (bonus = ratio × the first deposit; 0.75 pays GHS 157.50 on a GHS 210 first deposit; 0 = off) <input type="number" id="rateBonusRatio" step="any" min="0" max="1" value="' + esc(s.deposit_bonus_ghs_ratio === undefined ? '0.75' : s.deposit_bonus_ghs_ratio) + '"></label>' +
     '<label>First deposit bonus — Nigeria (bonus = ratio × the first deposit, rounded DOWN to the nearest ₦1,000; 0.5 pays ₦12,000 on ₦25,000; 0 = off) <input type="number" id="rateBonusNgnRatio" step="any" min="0" max="1" value="' + esc(s.deposit_bonus_ngn_ratio === undefined ? '0.5' : s.deposit_bonus_ngn_ratio) + '"></label>' +
     '<label>Exchange rate — naira per 1 cedi (used to convert a Nigerian player\'s deposit into a Ghana admin\'s commission, and back) <input type="number" id="rateFx" step="1" min="10" max="1000" value="' + esc(s.fx_ngn_per_ghs === undefined ? '140' : s.fx_ngn_per_ghs) + '"></label>' +
     '<label>Cashout margin % (the house keeps this much of a ticket\'s fair cashout value) <input type="number" id="rateCashout" step="0.1" min="0" max="50" value="' + esc(s.cashout_margin_pct || '10') + '"></label>' +
+    '<label>Minimum deposit — Ghana (GHS) (the smallest MoMo or manual deposit a player can make) <input type="number" id="rateMinGhs" step="any" min="1" max="5000" value="' + esc(s.deposit_min_ghs === undefined ? '210' : s.deposit_min_ghs) + '"></label>' +
+    '<label>Minimum deposit — Nigeria (₦) (the smallest Flutterwave or manual deposit a player can make) <input type="number" id="rateMinNgn" step="any" min="10" max="2000000" value="' + esc(s.deposit_min_ngn === undefined ? '25000' : s.deposit_min_ngn) + '"></label>' +
     '<button class="btn gold big" type="submit">Save Rates</button></form></div>' +
     '<div class="card"><h3>Give a bonus</h3><form id="bonusForm" class="stack">' +
     '<label>Who <select id="bonusScope"><option value="all">All active players</option><option value="one">One account</option></select></label>' +
@@ -1422,7 +1424,7 @@ document.addEventListener('submit', async e => {
     try {
       const data = await api('/admin/settings', {
         method: 'POST',
-        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), deposit_bonus_ghs_ratio: Number(($('#rateBonusRatio') || {}).value || 0), deposit_bonus_ngn_ratio: Number(($('#rateBonusNgnRatio') || {}).value || 0), cashout_margin_pct: Number($('#rateCashout').value), fx_ngn_per_ghs: Number(($('#rateFx') || {}).value || 140) }
+        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), deposit_bonus_ghs_ratio: Number(($('#rateBonusRatio') || {}).value || 0), deposit_bonus_ngn_ratio: Number(($('#rateBonusNgnRatio') || {}).value || 0), cashout_margin_pct: Number($('#rateCashout').value), fx_ngn_per_ghs: Number(($('#rateFx') || {}).value || 140), deposit_min_ghs: Number(($('#rateMinGhs') || {}).value || 210), deposit_min_ngn: Number(($('#rateMinNgn') || {}).value || 25000) }
       });
       state.settings = data.settings;
       toast('Rates saved.');
