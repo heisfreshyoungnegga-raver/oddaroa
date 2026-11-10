@@ -2,8 +2,10 @@
 """shrink-crest.py — Oddaroa crest normaliser (Prince, 2026-11-09).
 
 House standard for uploaded team crests: at most 128 px on the long
-side, WebP quality 85, and a hard budget of 24,000 data-URI
-characters (~18 KB). Crests render at 22-44 px on the site; anything
+side, WebP quality 85, and a hard budget of 5,800 data-URI
+characters (~4.3 KB) — under the match list's 6,000-char slim
+cutoff, so a cleaned crest shows in the list as well as on the
+match page (the old 24,000 budget left crests list-hidden). Crests render at 22-44 px on the site; anything
 bigger is dead weight that slows every page carrying the image —
 two 116 KB crests once bloated the match list to 639 KB.
 
@@ -13,7 +15,8 @@ Usage:
 INFILE holds one data: URI (the crest as stored). OUTFILE receives
 the shrunk data: URI. Prints before/after sizes. If WebP output
 would exceed the budget, the ladder steps down (110px/q80,
-96px/q75) before giving up to an optimised PNG.
+96px/q75, 80px/q70, 72px/q65, 64px/q60) before giving up to an
+optimised PNG.
 """
 import base64
 import io
@@ -21,8 +24,8 @@ import sys
 
 from PIL import Image
 
-BUDGET = 24000  # data-URI characters, hard cap for a "normal" crest
-LADDER = [(128, 85), (110, 80), (96, 75)]  # (max_px, webp_quality)
+BUDGET = 5800  # data-URI characters — under the match list's 6,000-char slim cutoff, so a cleaned crest shows everywhere
+LADDER = [(128, 85), (110, 80), (96, 75), (80, 70), (72, 65), (64, 60)]  # (max_px, webp_quality)
 
 
 def to_data_uri(fmt, raw):
