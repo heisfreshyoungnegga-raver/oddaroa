@@ -116,6 +116,7 @@ function tabsHTML() {
   // going live and settling are super admin work.
   if (isSuperPortal) tabs.splice(2, 0, ['matches', 'Matches']);
   if (superTools()) tabs.push(['control', 'Platform Control']);
+  if (superTools()) tabs.push(['depbns', 'Deposit & Bonus']);
   if (superTools()) tabs.push(['badges', 'Badges']);
   // Support chat is super-admin work only (Prince, 2026-11-08): the
   // regular Admin Portal carries no Support/Messages tab at all.
@@ -472,12 +473,8 @@ function controlHTML() {
     '<div class="card"><h3>Commission rates</h3><form id="ratesForm" class="stack">' +
     '<label>Referral commission % (of a referred user\'s deposits, paid to whoever invited them) <input type="number" id="rateAdmin" step="0.1" min="0" max="100" value="' + esc(s.admin_commission_pct || '0') + '"></label>' +
     '<label>User cashback % (of their own deposit, credited back instantly) <input type="number" id="rateUser" step="0.1" min="0" max="100" value="' + esc(s.user_cashback_pct || '0') + '"></label>' +
-    '<label>First deposit bonus — Ghana (bonus = ratio × the first deposit; 0.75 pays GHS 157.50 on a GHS 210 first deposit; 0 = off) <input type="number" id="rateBonusRatio" step="any" min="0" max="1" value="' + esc(s.deposit_bonus_ghs_ratio === undefined ? '0.75' : s.deposit_bonus_ghs_ratio) + '"></label>' +
-    '<label>First deposit bonus — Nigeria (bonus = ratio × the first deposit, rounded DOWN to the nearest ₦1,000; 0.5 pays ₦12,000 on ₦25,000; 0 = off) <input type="number" id="rateBonusNgnRatio" step="any" min="0" max="1" value="' + esc(s.deposit_bonus_ngn_ratio === undefined ? '0.5' : s.deposit_bonus_ngn_ratio) + '"></label>' +
     '<label>Exchange rate — naira per 1 cedi (used to convert a Nigerian player\'s deposit into a Ghana admin\'s commission, and back) <input type="number" id="rateFx" step="1" min="10" max="1000" value="' + esc(s.fx_ngn_per_ghs === undefined ? '140' : s.fx_ngn_per_ghs) + '"></label>' +
     '<label>Cashout margin % (the house keeps this much of a ticket\'s fair cashout value) <input type="number" id="rateCashout" step="0.1" min="0" max="50" value="' + esc(s.cashout_margin_pct || '10') + '"></label>' +
-    '<label>Minimum deposit — Ghana (GHS) (the smallest MoMo or manual deposit a player can make) <input type="number" id="rateMinGhs" step="any" min="1" max="5000" value="' + esc(s.deposit_min_ghs === undefined ? '210' : s.deposit_min_ghs) + '"></label>' +
-    '<label>Minimum deposit — Nigeria (₦) (the smallest Flutterwave or manual deposit a player can make) <input type="number" id="rateMinNgn" step="any" min="10" max="2000000" value="' + esc(s.deposit_min_ngn === undefined ? '25000' : s.deposit_min_ngn) + '"></label>' +
     '<button class="btn gold big" type="submit">Save Rates</button></form></div>' +
     '<div class="card"><h3>Give a bonus</h3><form id="bonusForm" class="stack">' +
     '<label>Who <select id="bonusScope"><option value="all">All active players</option><option value="one">One account</option></select></label>' +
@@ -651,6 +648,7 @@ function render() {
   // hand-typed switch) lands on the Dashboard instead.
   if (state.tab === 'matches' && !isSuperPortal) state.tab = 'dashboard';
   if (state.tab === 'badges' && !superTools()) state.tab = 'dashboard';
+  if (state.tab === 'depbns' && !superTools()) state.tab = 'dashboard';
   root.innerHTML =
     state.tab === 'dashboard' ? dashboardHTML() :
     state.tab === 'queue' ? tabsHTML() + queueHTML(false) :
@@ -658,7 +656,8 @@ function render() {
     state.tab === 'users' ? usersHTML() :
     state.tab === 'earnings' ? earningsHTML() :
     state.tab === 'control' ? controlHTML() :
-    state.tab === 'badges' ? badgesHTML() : supportHTML();
+    state.tab === 'badges' ? badgesHTML() :
+    state.tab === 'depbns' ? depBnsHTML() : supportHTML();
   renderFfGoals();
   renderFfBook();
   if (state.tab === 'badges') loadBadgeTeams();
@@ -695,6 +694,38 @@ function adminBadgeIsPlaceholder(data, w, h) {
   });
 }
 const badgeProbeCache = new Map();
+
+// ---- Deposit & Bonus tab (super only; Prince, 2026-11-10) ---------
+// The platform's deposit floor and first-deposit bonus ratios get
+// their own dashboard: minimum deposit per currency, bonus ratio per
+// currency, and a worked example at the current minimum so the effect
+// of a change is visible before saving. The bonus is stake-only —
+// it can be bet but never withdrawn.
+function depBnsHTML() {
+  if (!superTools()) return tabsHTML() + '<div class="card"><p class="muted">Deposit &amp; Bonus lives in the <a href="super-admin.html">Super Admin Portal</a>.</p></div>';
+  const s = state.settings || {};
+  const minG = s.deposit_min_ghs === undefined ? 210 : Number(s.deposit_min_ghs);
+  const minN = s.deposit_min_ngn === undefined ? 25000 : Number(s.deposit_min_ngn);
+  const rG = s.deposit_bonus_ghs_ratio === undefined ? 0.75 : Number(s.deposit_bonus_ghs_ratio);
+  const rN = s.deposit_bonus_ngn_ratio === undefined ? 0.5 : Number(s.deposit_bonus_ngn_ratio);
+  const bG = Math.round(minG * rG * 100) / 100;
+  const bN = Math.floor((minN * rN) / 1000) * 1000;
+  return tabsHTML() +
+    '<div class="card"><h3>Minimum deposit</h3>' +
+    '<p class="muted">The smallest deposit a player can make. It applies at once to Mobile Money, manual transfer and Flutterwave, and the player wallet (chips, amount box, helper text) follows it automatically.</p>' +
+    '<form id="depMinForm" class="stack">' +
+    '<label>Ghana — minimum deposit (GHS) <input type="number" id="depMinGhs" step="any" min="1" max="5000" value="' + minG + '"></label>' +
+    '<label>Nigeria — minimum deposit (₦) <input type="number" id="depMinNgn" step="any" min="10" max="2000000" value="' + minN + '"></label>' +
+    '<button class="btn gold big" type="submit">Save Minimums</button></form></div>' +
+    '<div class="card"><h3>First-deposit bonus</h3>' +
+    '<p class="muted">A new player\'s FIRST completed deposit earns a bonus of ratio × the deposit, paid into their stakes-only bonus bucket (it can be bet, never withdrawn). Ghana rounds to the pesewa; Nigeria rounds DOWN to the nearest ₦1,000.</p>' +
+    '<form id="depBonusForm" class="stack">' +
+    '<label>Ghana — bonus ratio (0.75 pays ₵157.50 on a ₵210 first deposit) <input type="number" id="depBonusGhs" step="any" min="0" max="1" value="' + rG + '"></label>' +
+    '<label>Nigeria — bonus ratio (0.5 pays ₦12,000 on a ₦25,000 first deposit) <input type="number" id="depBonusNgn" step="any" min="0" max="1" value="' + rN + '"></label>' +
+    '<p class="muted">At today\'s minimums: a Ghana first deposit of <b>GHS ' + minG.toLocaleString('en-GB') + '</b> earns <b>GHS ' + bG.toLocaleString('en-GB') + '</b> bonus — <b>GHS ' + (minG + bG).toLocaleString('en-GB') + '</b> total. A Nigeria first deposit of <b>₦' + minN.toLocaleString('en-GB') + '</b> earns <b>₦' + bN.toLocaleString('en-GB') + '</b> bonus — <b>₦' + (minN + bN).toLocaleString('en-GB') + '</b> total.</p>' +
+    '<button class="btn gold big" type="submit">Save Bonus Ratios</button></form></div>';
+}
+
 function badgesHTML() {
   if (!superTools()) return tabsHTML() + '<div class="card"><p class="muted">Badges live in the <a href="super-admin.html">Super Admin Portal</a>.</p></div>';
   const list = state.badgeTeams;
@@ -1419,12 +1450,28 @@ document.addEventListener('submit', async e => {
       toast('Game updated.');
       loadAll();
     } catch (err) { toast(err.message); }
+  } else if (e.target.id === 'depMinForm') {
+    e.preventDefault();
+    try {
+      const data = await api('/admin/settings', { method: 'POST', body: { deposit_min_ghs: Number($('#depMinGhs').value), deposit_min_ngn: Number($('#depMinNgn').value) } });
+      state.settings = data.settings;
+      toast('Minimum deposits saved — they apply to every deposit path at once.');
+      render();
+    } catch (err) { toast(err.message); }
+  } else if (e.target.id === 'depBonusForm') {
+    e.preventDefault();
+    try {
+      const data = await api('/admin/settings', { method: 'POST', body: { deposit_bonus_ghs_ratio: Number($('#depBonusGhs').value), deposit_bonus_ngn_ratio: Number($('#depBonusNgn').value) } });
+      state.settings = data.settings;
+      toast('Bonus ratios saved.');
+      render();
+    } catch (err) { toast(err.message); }
   } else if (e.target.id === 'ratesForm') {
     e.preventDefault();
     try {
       const data = await api('/admin/settings', {
         method: 'POST',
-        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), deposit_bonus_ghs_ratio: Number(($('#rateBonusRatio') || {}).value || 0), deposit_bonus_ngn_ratio: Number(($('#rateBonusNgnRatio') || {}).value || 0), cashout_margin_pct: Number($('#rateCashout').value), fx_ngn_per_ghs: Number(($('#rateFx') || {}).value || 140), deposit_min_ghs: Number(($('#rateMinGhs') || {}).value || 210), deposit_min_ngn: Number(($('#rateMinNgn') || {}).value || 25000) }
+        body: { admin_commission_pct: Number($('#rateAdmin').value), user_cashback_pct: Number($('#rateUser').value), cashout_margin_pct: Number($('#rateCashout').value), fx_ngn_per_ghs: Number(($('#rateFx') || {}).value || 140) }
       });
       state.settings = data.settings;
       toast('Rates saved.');
