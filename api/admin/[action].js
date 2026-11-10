@@ -16,6 +16,7 @@ const handlers = {
   'odds-preview': require('../_handlers/admin/odds-preview'),
   'edit-match': require('../_handlers/admin/edit-match'),
   'lock-match': require('../_handlers/admin/lock-match'),
+  'team-badges': require('../_handlers/admin/team-badges'),
   'invite-admin': require('../_handlers/admin/invite-admin'),
   'verify-admin': require('../_handlers/admin/verify-admin'),
   'balance-edit': require('../_handlers/admin/balance-edit'),

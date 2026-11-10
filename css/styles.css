@@ -1028,9 +1028,17 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 /* ---------- team logos ---------- */
 .tbad { width: 26px; height: 26px; flex: 0 0 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; overflow: hidden; }
 .tbad .tlogo { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; }
-.tbad-txt { color: #ece7da; font-size: 10px; font-weight: 800; letter-spacing: .4px; }
 .md-teams .tbad { width: 34px; height: 34px; flex-basis: 34px; border-radius: 9px; }
-.md-teams .tbad-txt { font-size: 13px; }
+.brow { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); align-items: flex-start; }
+.brow .tbad { background: rgba(255,255,255,.05); }
+.bmain { flex: 1; min-width: 0; }
+.bname { font-weight: 700; }
+.bstat { font-size: 12.5px; margin: 2px 0 8px; color: var(--muted); }
+.bst-custom { color: var(--win); font-weight: 700; }
+.bst-none, .bst-fake { color: var(--live); font-weight: 700; }
+.bform { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.bform input[type="url"] { flex: 1; min-width: 180px; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font-size: 13.5px; }
+.bform label.btn { margin: 0; cursor: pointer; }
 
 /* ---------- admin ESPN sync ---------- */
 .espn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin: 10px 0 14px; }

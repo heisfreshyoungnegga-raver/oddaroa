@@ -1,4 +1,4 @@
-const { msql, send, guard, isCustomMatch, customMatchState, fillOdds, maybeAutoSettle, ensureMatchColumns } = require('./_lib');
+const { msql, send, guard, isCustomMatch, customMatchState, fillOdds, maybeAutoSettle, ensureMatchColumns , teamBadgeMap, teamBadgeFor } = require('./_lib');
 const singleMatch = require('./_handlers/match-single');
 const { maybeRefreshLive } = require('./_espn');
 const { afEnabled, maybeRefreshAf } = require('./_apifootball');
@@ -117,15 +117,16 @@ module.exports = guard(async (req, res) => {
   // skeleton. The list shows 22px crests and letter tiles cover a
   // missing one; the full crest still loads on the match page.
   const slimLogo = v => (typeof v === 'string' && v.startsWith('data:') && v.length > 6000) ? null : v;
+  const tbMap = await teamBadgeMap().catch(() => null);
   const entries = [];
   for (const m of rows) {
     const grp = m.external_ref && m.external_ref.startsWith('espn:') ? 1 : 0;
     if (isCustomMatch(m)) {
       const st = customMatchState(m, now);
       if (st.status === 'finished' && now - new Date(m.starts_at) > (105 + (m.ht_stoppage || 0) + (m.ft_stoppage || 0) + 180) * 60000) continue;
-      entries.push({ grp, row: { ...m, home_logo: slimLogo(m.home_logo), away_logo: slimLogo(m.away_logo), odds: fillOdds(m.odds), status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.has_full } });
+      entries.push({ grp, row: { ...m, home_logo: teamBadgeFor(tbMap, m.home_team) || slimLogo(m.home_logo), away_logo: teamBadgeFor(tbMap, m.away_team) || slimLogo(m.away_logo), odds: fillOdds(m.odds), status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.has_full } });
     } else {
-      entries.push({ grp, row: { ...m, home_logo: slimLogo(m.home_logo), away_logo: slimLogo(m.away_logo), odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.has_full } });
+      entries.push({ grp, row: { ...m, home_logo: teamBadgeFor(tbMap, m.home_team) || slimLogo(m.home_logo), away_logo: teamBadgeFor(tbMap, m.away_team) || slimLogo(m.away_logo), odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.has_full } });
     }
   }
   // De-duplicate across feeds: an ESPN row that is the same real

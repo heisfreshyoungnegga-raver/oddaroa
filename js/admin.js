@@ -116,6 +116,7 @@ function tabsHTML() {
   // going live and settling are super admin work.
   if (isSuperPortal) tabs.splice(2, 0, ['matches', 'Matches']);
   if (superTools()) tabs.push(['control', 'Platform Control']);
+  if (superTools()) tabs.push(['badges', 'Badges']);
   // Support chat is super-admin work only (Prince, 2026-11-08): the
   // regular Admin Portal carries no Support/Messages tab at all.
   if (!isSuperPortal) { const si = tabs.findIndex(t => t[0] === 'support'); if (si >= 0) tabs.splice(si, 1); }
@@ -639,16 +640,164 @@ function render() {
   // The Admin Portal has no Matches tab; a stale tab state (or a
   // hand-typed switch) lands on the Dashboard instead.
   if (state.tab === 'matches' && !isSuperPortal) state.tab = 'dashboard';
+  if (state.tab === 'badges' && !superTools()) state.tab = 'dashboard';
   root.innerHTML =
     state.tab === 'dashboard' ? dashboardHTML() :
     state.tab === 'queue' ? tabsHTML() + queueHTML(false) :
     state.tab === 'matches' ? matchesHTML() :
     state.tab === 'users' ? usersHTML() :
     state.tab === 'earnings' ? earningsHTML() :
-    state.tab === 'control' ? controlHTML() : supportHTML();
+    state.tab === 'control' ? controlHTML() :
+    state.tab === 'badges' ? badgesHTML() : supportHTML();
   renderFfGoals();
   renderFfBook();
+  if (state.tab === 'badges') loadBadgeTeams();
 }
+
+// ---- Team badges (super only; Prince, 2026-11-10) -----------------
+// The feed has no real logo for some teams: no URL at all, a dead
+// link, or a generic placeholder graphic. Those teams show NO badge
+// on the player site. Here the super admin gives a team a real badge
+// (upload or URL); it is stored per team and wins over the feed logo
+// on every match that team plays.
+const BADGE_TEMPLATES = [
+  '0000000000000000000000255530000000026579998320000008379645998000000899536429800000089929993780000008992999478000000899448619800000089994238980000003555555554000000000000000000000032333313330000001122410121000000121232322000000012233232310000000000000000000',
+  '0000000000000000000133333333100000130111111041000030422222230300003130003013030000313004131303000031303131130300003133141313030000313031320303000031411320030300001414110041400000014130031300000000141441400000000001400400000000000014310000000000000000000000',
+  '000027bddb7200000007dffffffd7000009ffffffffff90007edeedeeeeeef702dddcddddddcdfd27ffdefeedeeedef7bffffffffffffffbdfffeeddcdcffffddfffecddcccffffdbffffffffffffffb7fffedeedeeefff72dffecdddcceffd207fffeeeeeefff70009ffffffffff9000007dffffffd7000000027bddb720000'
+];
+function adminBadgeIsPlaceholder(data, w, h) {
+  const sig = new Array(256).fill(0);
+  const cnt = new Array(256).fill(0);
+  for (let y = 0; y < h; y++) {
+    const cy = Math.min(15, (y * 16 / h) | 0);
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4, cell = cy * 16 + Math.min(15, (x * 16 / w) | 0);
+      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      sig[cell] += lum * (data[i + 3] / 255);
+      cnt[cell]++;
+    }
+  }
+  for (let i = 0; i < 256; i++) sig[i] = Math.min(15, Math.round((sig[i] / cnt[i]) / 17));
+  return BADGE_TEMPLATES.some(tpl => {
+    let sum = 0;
+    for (let i = 0; i < 256; i++) sum += Math.abs(sig[i] - parseInt(tpl[i], 16));
+    return sum / 256 <= 0.6;
+  });
+}
+const badgeProbeCache = new Map();
+function badgesHTML() {
+  if (!superTools()) return tabsHTML() + '<div class="card"><p class="muted">Badges live in the <a href="super-admin.html">Super Admin Portal</a>.</p></div>';
+  const list = state.badgeTeams;
+  let body;
+  if (state.badgesError) body = '<p class="empty">The team list could not load just now. <button class="btn ghost sm" id="badgesRetry">Retry</button></p>';
+  else if (!list) body = '<p class="muted">Loading teams…</p>';
+  else if (!list.length) body = '<p class="empty">No teams on the board right now.</p>';
+  else body = list.map((t, i) => badgeRowHTML(t, i)).join('');
+  return tabsHTML() + '<div class="card"><h3>Team badges</h3>' +
+    '<p class="muted">Teams with no real badge show nothing on the site. Add a badge for a team here — upload an image or paste an image URL — and it appears on every match that team plays. <b>FAKE</b> means the feed is showing a placeholder picture; <b>NONE</b> and <b>DEAD LINK</b> mean nothing shows at all.</p>' +
+    body + '</div>';
+}
+function badgeRowHTML(t, i) {
+  const shown = t.override || t.logo || '';
+  const stat = t.override
+    ? '<span class="bst-custom">CUSTOM — your badge is live on the site</span>'
+    : (!t.logo ? '<span class="bst-none">NONE — nothing shows on the site</span>' : '<span data-bfeed="' + i + '">Feed badge — checking…</span>');
+  return '<div class="brow">' +
+    '<span class="tbad">' + (shown ? '<img class="tlogo" src="' + esc(shown) + '" alt="">' : '') + '</span>' +
+    '<div class="bmain"><div class="bname">' + esc(t.team) + ' <span class="muted">(' + t.matches + ' match' + (t.matches === 1 ? '' : 'es') + ')</span></div>' +
+    '<div class="bstat">' + stat + '</div>' +
+    '<div class="bform"><input type="url" placeholder="Badge image URL" id="burl-' + i + '" value="' + (t.override && t.override.indexOf('http') === 0 ? esc(t.override) : '') + '">' +
+    '<label class="btn ghost sm">Upload<input type="file" accept="image/*" data-bfile="' + i + '" hidden></label>' +
+    '<button class="btn sm" data-bsave="' + i + '">Save badge</button>' +
+    (t.override ? '<button class="btn ghost sm" data-bclear="' + i + '">Remove</button>' : '') +
+    '</div></div></div>';
+}
+async function loadBadgeTeams(force) {
+  if (state.badgesLoading) return;
+  if (state.badgeTeams && !force) { markBadgePlaceholders(); return; }
+  state.badgesLoading = true;
+  try {
+    const d = await api('/admin/team-badges');
+    state.badgeTeams = d.teams || [];
+    state.badgesError = false;
+  } catch (e) { state.badgesError = true; }
+  state.badgesLoading = false;
+  if (state.tab === 'badges') { render(); markBadgePlaceholders(); }
+}
+function markBadgePlaceholders() {
+  (state.badgeTeams || []).forEach((t, i) => {
+    if (t.override || !t.logo || !/^https?:/i.test(t.logo)) return;
+    const el = document.querySelector('[data-bfeed="' + i + '"]');
+    if (!el) return;
+    if (badgeProbeCache.has(t.logo)) {
+      el.innerHTML = badgeProbeCache.get(t.logo);
+      return;
+    }
+    const probe = new Image();
+    probe.crossOrigin = 'anonymous';
+    probe.onload = () => {
+      let html = 'Feed badge — real badge on the site';
+      try {
+        const c = document.createElement('canvas'); c.width = probe.naturalWidth; c.height = probe.naturalHeight;
+        const cx = c.getContext('2d'); cx.drawImage(probe, 0, 0);
+        const data = cx.getImageData(0, 0, c.width, c.height).data;
+        if (adminBadgeIsPlaceholder(data, c.width, c.height)) html = '<span class="bst-fake">FAKE — feed placeholder picture; add a real badge</span>';
+      } catch (e) { /* canvas blocked: leave the neutral label */ }
+      badgeProbeCache.set(t.logo, html);
+      const el2 = document.querySelector('[data-bfeed="' + i + '"]');
+      if (el2) el2.innerHTML = html;
+    };
+    probe.onerror = () => {
+      const html = '<span class="bst-none">DEAD LINK — nothing shows on the site</span>';
+      badgeProbeCache.set(t.logo, html);
+      const el2 = document.querySelector('[data-bfeed="' + i + '"]');
+      if (el2) el2.innerHTML = html;
+    };
+    probe.src = t.logo;
+  });
+}
+function encodeBadgeFile(file, cb) {
+  const img = new Image();
+  img.onload = () => {
+    const draw = px => {
+      const sc = Math.min(1, px / Math.max(img.width, img.height));
+      const cc = document.createElement('canvas');
+      cc.width = Math.max(1, Math.round(img.width * sc));
+      cc.height = Math.max(1, Math.round(img.height * sc));
+      cc.getContext('2d').drawImage(img, 0, 0, cc.width, cc.height);
+      return cc;
+    };
+    const tries = [
+      () => draw(128).toDataURL('image/webp', 0.85),
+      () => draw(110).toDataURL('image/webp', 0.8),
+      () => draw(128).toDataURL('image/png'),
+      () => draw(96).toDataURL('image/webp', 0.75),
+      () => draw(96).toDataURL('image/jpeg', 0.85)
+    ];
+    let best = '';
+    for (const t of tries) {
+      const u = t();
+      if (!best || u.length < best.length) best = u;
+      if (best.length <= 24000) break;
+    }
+    URL.revokeObjectURL(img.src);
+    cb(best);
+  };
+  img.onerror = () => toast('That image could not be read.');
+  img.src = URL.createObjectURL(file);
+}
+async function saveBadge(i, logo) {
+  const t = (state.badgeTeams || [])[i];
+  if (!t) return;
+  try {
+    await api('/admin/team-badges', { method: 'POST', body: { team: t.team, logo } });
+    if (state.badgeUploads) delete state.badgeUploads[i];
+    toast(logo ? ('Badge saved for ' + t.team + ' — it goes live on the site within a minute.') : ('Badge removed for ' + t.team + '.'));
+    state.badgeTeams = null;
+    loadBadgeTeams(true);
+  } catch (err) { toast(err.message); }
+}
+
 // ---- Payout SMS receipt (Prince, 2026-11-05, admins only) ---------
 // Confirming a withdrawal plays an animated banner styled like a
 // phone SMS. The device itself picks the costume (Prince: "add a
@@ -754,6 +903,19 @@ async function loadAll() {
 
 document.addEventListener('click', async e => {
   if (e.target.id === 'createdRetry') { loadAll(); return; }
+  if (e.target.id === 'badgesRetry') { state.badgeTeams = null; loadBadgeTeams(true); return; }
+  const bsave = e.target.closest ? e.target.closest('[data-bsave]') : null;
+  if (bsave) {
+    const i = Number(bsave.dataset.bsave);
+    const staged = (state.badgeUploads || {})[i] || '';
+    const url = ($('#burl-' + i) ? $('#burl-' + i).value.trim() : '');
+    const logo = staged || url;
+    if (!logo) { toast('Upload an image or paste an image URL first.'); return; }
+    saveBadge(i, logo);
+    return;
+  }
+  const bclear = e.target.closest ? e.target.closest('[data-bclear]') : null;
+  if (bclear) { saveBadge(Number(bclear.dataset.bclear), ''); return; }
   if (e.target.id === 'emStartNow') {
     const el = document.querySelector('#emStart');
     if (el) { const d = new Date(); d.setSeconds(0, 0); el.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
@@ -1083,6 +1245,17 @@ document.addEventListener('change', e => {
     state.workAdmin = e.target.value; render(); return;
   }
   if (e.target.dataset && e.target.dataset.book !== undefined) { emBookDirty = true; return; }
+  if (e.target.dataset && e.target.dataset.bfile !== undefined) {
+    const bf2 = e.target.files && e.target.files[0];
+    if (!bf2) return;
+    const bi = e.target.dataset.bfile;
+    encodeBadgeFile(bf2, url => {
+      state.badgeUploads = state.badgeUploads || {};
+      state.badgeUploads[bi] = url;
+      toast('Badge image ready — press Save badge.');
+    });
+    return;
+  }
   const side = e.target.dataset ? e.target.dataset.crest : null;
   if (!side) return;
   const file = e.target.files && e.target.files[0];

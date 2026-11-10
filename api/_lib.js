@@ -1577,4 +1577,32 @@ async function findCreatedDuplicate(home, away, start) {
   return rows[0] || null;
 }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate };
+
+// Team badge overrides (Prince, 2026-11-10): badges the super admin
+// sets per team in the portal's Badges tab live in team_badges and
+// win over whatever logo the feed carries, on every match that team
+// plays. Cached for 60s per instance; the admin handler busts it.
+let teamBadgeState = { at: 0, map: null, ensured: false };
+async function ensureTeamBadges() {
+  if (teamBadgeState.ensured) return;
+  await msql('create table if not exists team_badges (team_key text primary key, team_name text not null, logo text not null, updated_at timestamptz not null default now())');
+  teamBadgeState.ensured = true;
+}
+async function teamBadgeMap() {
+  if (teamBadgeState.map && Date.now() - teamBadgeState.at < 60000) return teamBadgeState.map;
+  const map = new Map();
+  try {
+    const rows = await msql('select team_key, logo from team_badges');
+    for (const r of rows) map.set(r.team_key, r.logo);
+  } catch (e) { /* table missing -> no overrides */ }
+  teamBadgeState.map = map;
+  teamBadgeState.at = Date.now();
+  return map;
+}
+function teamBadgeFor(map, team) {
+  if (!map || !team) return null;
+  return map.get(String(team).trim().toLowerCase()) || null;
+}
+function bustTeamBadges() { teamBadgeState.map = null; teamBadgeState.at = 0; }
+
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges };

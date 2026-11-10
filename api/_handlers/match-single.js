@@ -1,4 +1,4 @@
-const { msql: sql, send, guard, fillOdds, isCustomMatch, customMatchState, ensureMatchColumns } = require('../_lib');
+const { msql: sql, send, guard, fillOdds, isCustomMatch, customMatchState, ensureMatchColumns, teamBadgeMap, teamBadgeFor } = require('../_lib');
 
 // One match, in full: the list endpoint ships a has_full flag and
 // keeps the heavy market book out of the list payload; the details
@@ -22,7 +22,8 @@ module.exports = guard(async (req, res) => {
   );
   if (!rows.length) return send(res, 404, { error: 'match_not_found' });
   const m = rows[0];
-  let out = { ...m, odds: fillOdds(m.odds), goal_events: undefined };
+  const tbMap = await teamBadgeMap().catch(() => null);
+  let out = { ...m, home_logo: teamBadgeFor(tbMap, m.home_team) || m.home_logo, away_logo: teamBadgeFor(tbMap, m.away_team) || m.away_logo, odds: fillOdds(m.odds), goal_events: undefined };
   if (isCustomMatch(m)) {
     const st = customMatchState(m, new Date());
     out = { ...out, status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away };

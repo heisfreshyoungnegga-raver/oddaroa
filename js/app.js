@@ -363,36 +363,18 @@ function isPlaceholderBadge(data, w, h) {
     return sum / 256 <= 0.6;
   });
 }
-// Every team always gets a badge slot: a missing logo, a broken logo
-// URL (the provider 404s some) or a detected placeholder becomes a
-// coloured initials tile instead of a blank gap (Prince, 2026-11-10).
-function teamInitials(name) {
-  const stop = { FC: 1, SC: 1, CF: 1, FK: 1, SK: 1, IF: 1, BK: 1, FF: 1, AC: 1, AS: 1, US: 1, CD: 1, SD: 1, AFC: 1, W: 1 };
-  const words = String(name || '?').replace(/[^A-Za-zÀ-ÿ]+/g, ' ').split(' ').filter(Boolean);
-  const core = words.filter(wd => !stop[wd.toUpperCase()]);
-  const use = core.length ? core : words;
-  if (use.length >= 2) return (use[0][0] + use[1][0]).toUpperCase();
-  return (use[0] || '?').slice(0, 2).toUpperCase();
-}
-function teamHue(name) {
-  let h = 0; const s = String(name || '');
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-  return h;
-}
-function badgeTileHTML(name) {
-  return '<span class="tbad tbad-txt" style="background:hsl(' + teamHue(name) + ',42%,30%)">' + esc(teamInitials(name)) + '</span>';
-}
+// Teams with no real badge show NO badge at all (Prince,
+// 2026-11-10): no initials tiles, no placeholders — the super admin
+// adds real badges per team in the portal's Badges tab, and until
+// then the team name simply stands alone.
 function badgeHTML(name, logo) {
   const src = logo ? logoSrc(logo) : '';
-  if (!src || src === BADGE_PH) return badgeTileHTML(name);
-  return '<span class="tbad"><img class="tlogo" src="' + esc(src) + '" alt="" loading="lazy" data-init="' + esc(teamInitials(name)) + '" data-hue="' + teamHue(name) + '" onerror="badgeFail(this)"></span>';
+  if (!src || src === BADGE_PH) return '';
+  return '<span class="tbad"><img class="tlogo" src="' + esc(src) + '" alt="" loading="lazy" onerror="badgeFail(this)"></span>';
 }
 function badgeSwap(img) {
-  const tile = document.createElement('span');
-  tile.className = 'tbad tbad-txt';
-  tile.style.background = 'hsl(' + (img.dataset.hue || 0) + ',42%,30%)';
-  tile.textContent = img.dataset.init || '?';
-  img.replaceWith(tile);
+  const wrap = img.closest ? img.closest('.tbad') : null;
+  if (wrap) wrap.remove(); else img.remove();
 }
 function badgeFail(img) { badgeSwap(img); }
 function trimLogoImg(img) {
