@@ -726,9 +726,12 @@ async function loadBadgeTeams(force) {
 }
 function markBadgePlaceholders() {
   (state.badgeTeams || []).forEach((t, i) => {
-    if (t.override || !t.logo || !/^https?:/i.test(t.logo)) return;
+    if (t.override || !t.logo) return;
     const el = document.querySelector('[data-bfeed="' + i + '"]');
     if (!el) return;
+    // Uploaded crests (created games) are data URIs — there is
+    // nothing to probe; an uploaded crest is a real badge.
+    if (!/^https?:/i.test(t.logo)) { el.textContent = 'Feed badge — real badge on the site'; return; }
     if (badgeProbeCache.has(t.logo)) {
       el.innerHTML = badgeProbeCache.get(t.logo);
       return;
