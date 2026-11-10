@@ -455,12 +455,20 @@ function controlHTML() {
   const inviteRows = state.invites.map(i =>
     '<div class="txrow"><div><b>' + esc(i.kind) + ' invite</b><div class="muted">expires ' + fmtDate(i.expires_at) + '</div></div>' +
     '<button class="btn ghost sm" data-copy="' + esc(siteLink('/admin.html?admin_invite=' + i.token)) + '">Copy Link</button></div>').join('');
+  const fs = state.feedStatus;
+  const feedCard = !fs ? '' : '<div class="card"><h3>Football data feed</h3>' + (!fs.configured
+    ? '<p class="muted">The API-Football key is not set on this host.</p>'
+    : (fs.error
+      ? '<p class="muted">Could not reach API-Football just now — try reloading.</p>'
+      : '<div class="txrow"><div><b>' + esc(fs.plan || 'API-Football') + ' plan</b><div class="muted">' + (fs.active ? 'Active' : 'INACTIVE') + (fs.ends ? ' · ends ' + fmtDate(fs.ends) : '') + '</div></div>' +
+        '<div><b>' + (fs.used == null ? '—' : fs.used) + ' / ' + (fs.limit == null ? '—' : fs.limit) + '</b><div class="muted">requests used today</div></div></div>')) + '</div>';
   return tabsHTML() +
     '<div class="card"><h3>Switches</h3>' +
     '<div class="txrow"><div><b>ShinobiPay gateway</b><div class="muted">Off = instant MoMo deposits stop; manual transfer keeps working.</div></div>' +
     '<button class="btn ' + (on(s.gateway_enabled) ? 'gold' : 'ghost') + ' sm" data-toggle="gateway">' + (on(s.gateway_enabled) ? 'ON' : 'OFF') + '</button></div>' +
     '<div class="txrow"><div><b>Payouts</b><div class="muted">Frozen = users cannot request withdrawals and the queue cannot confirm them.</div></div>' +
     '<button class="btn ' + (on(s.payouts_frozen) ? 'gold' : 'ghost') + ' sm" data-toggle="freeze">' + (on(s.payouts_frozen) ? 'FROZEN' : 'OPEN') + '</button></div></div>' +
+    feedCard +
     '<div class="card"><h3>Commission rates</h3><form id="ratesForm" class="stack">' +
     '<label>Referral commission % (of a referred user\'s deposits, paid to whoever invited them) <input type="number" id="rateAdmin" step="0.1" min="0" max="100" value="' + esc(s.admin_commission_pct || '0') + '"></label>' +
     '<label>User cashback % (of their own deposit, credited back instantly) <input type="number" id="rateUser" step="0.1" min="0" max="100" value="' + esc(s.user_cashback_pct || '0') + '"></label>' +
@@ -894,7 +902,8 @@ async function loadAll() {
     if (superTools()) jobs.push(api('/admin/invite-admin').catch(() => null));
     if (superTools()) jobs.push(api('/admin/matches?created=1').catch(() => api('/admin/matches?created=1')).catch(() => null));
     if (isSuperPortal) jobs.push(api('/admin/support?threads=1').catch(() => null));
-    const [stats, queue, matches, users, support, settings, myDash, work, invites, created, chatT] = await Promise.all(jobs);
+    if (superTools()) jobs.push(api('/admin/feed-status').catch(() => null));
+    const [stats, queue, matches, users, support, settings, myDash, work, invites, created, chatT, feed] = await Promise.all(jobs);
     state.stats = stats.stats; state.queue = queue.queue; state.matches = matches.matches;
     state.users = users.users; state.support = support.messages;
     if (chatT) state.chatThreads = chatT.threads || [];
@@ -902,6 +911,7 @@ async function loadAll() {
     if (myDash) state.myDash = myDash;
     if (work) state.work = work;
     if (invites) state.invites = invites.invites || [];
+    if (feed) state.feedStatus = feed;
     if (created) { state.createdMatches = created.matches || []; state.createdLoaded = true; }
   } catch (e) { toast(e.message); }
   render();

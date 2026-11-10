@@ -17,6 +17,7 @@ const handlers = {
   'edit-match': require('../_handlers/admin/edit-match'),
   'lock-match': require('../_handlers/admin/lock-match'),
   'team-badges': require('../_handlers/admin/team-badges'),
+  'feed-status': require('../_handlers/admin/feed-status'),
   'invite-admin': require('../_handlers/admin/invite-admin'),
   'verify-admin': require('../_handlers/admin/verify-admin'),
   'balance-edit': require('../_handlers/admin/balance-edit'),
