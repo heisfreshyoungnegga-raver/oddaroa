@@ -1440,7 +1440,6 @@ function momoPanelHTML() {
   if (m && m.phase === 'failed') {
     return '<div class="card"><h3>Payment not completed</h3>' +
       '<p class="lock-note">' + esc(m.message || 'The payment did not go through. Nothing was charged.') + '</p>' +
-      '<p class="muted">If the gateway keeps failing for your number, use <b>Manual Transfer</b> below instead — an admin confirms it by hand.</p>' +
       '<button class="btn gold" data-momo-reset>Try Again</button></div>';
   }
   const phone = state.user ? state.user.phone : '';
@@ -1458,29 +1457,6 @@ function momoPanelHTML() {
     '<p class="muted" id="mmFeeLine"></p>' +
     '<button class="btn gold big" type="submit">Send Payment Prompt</button></form>' +
     '<p class="muted">Minimum deposit is GHS ' + floor.toLocaleString('en-GB') + '. A prompt is sent to your phone — approve it with your PIN and your wallet is credited automatically.</p></div>';
-}
-
-/* ----- Manual transfer deposit (gateway fallback, Prince 2026-11-10) -----
-   The gateway blocks some numbers outright (ShinobiPay number_blocked);
-   those players were hitting a dead end. The manual rail always worked
-   server-side — pending deposit, admin confirms — it just had no UI. */
-function manualPanelHTML() {
-  const md = (state.wallet && state.wallet.manual_deposit) || {};
-  if (!md.number) return '';
-  if (state.manualSent) {
-    return '<div class="card"><h3>Manual Transfer</h3>' +
-      '<p class="lock-note">Received — your deposit is <b>pending</b>. An admin will confirm it as soon as the money lands and your balance will update. You can watch it under History.</p>' +
-      '<button class="btn" data-manual-again>Make another manual deposit</button></div>';
-  }
-  const floor = depFloor();
-  return '<div class="card"><h3>Manual Transfer</h3>' +
-    '<p class="muted">Gateway not working for your number? Send the money yourself, then give us the transaction ID — an admin confirms it and your wallet is credited.</p>' +
-    '<div class="manualbox"><div class="muted">' + esc(md.network || 'Mobile Money') + ' · ' + esc(md.name || '') + '</div><div class="mannum">' + esc(md.number) + '</div></div>' +
-    '<form id="manualDepForm" class="stack">' +
-    '<label>Amount (GHS) <input type="number" id="mdAmt" min="' + floor + '" max="' + depMax() + '" step="0.01" value="' + floor + '" required></label>' +
-    '<label>Number you sent from <input type="tel" id="mdPhone" value="' + esc(state.user ? state.user.phone : '') + '" required></label>' +
-    '<label>Transaction ID (from the MoMo message) <input type="text" id="mdRef" placeholder="e.g. 29384756102" required></label>' +
-    '<button class="btn gold big" type="submit">I Have Sent It</button></form></div>';
 }
 
 /* ----- Instant NGN deposit (Flutterwave hosted checkout) ----- */
@@ -1556,7 +1532,7 @@ function walletHTML() {
       '<button class="' + (sec === k ? 'on' : '') + '" data-wsec="' + k + '">' + label + '</button>').join('') + '</div>';
   let sectionBody = '';
   if (sec === 'deposit') {
-    sectionBody = depositPanel + (curCode() === 'GHS' ? manualPanelHTML() : '');
+    sectionBody = depositPanel;
   } else if (sec === 'withdraw') {
     sectionBody = withdrawCardHTML(w);
   } else {
@@ -2330,9 +2306,6 @@ document.addEventListener('click', e => {
   if (e.target.closest('[data-momo-cancel]') || e.target.closest('[data-momo-reset]')) {
     stopMomoPoll(); state.momo = null; render(); return;
   }
-  if (e.target.closest('[data-manual-again]')) {
-    state.manualSent = false; render(); return;
-  }
   if (e.target.closest('[data-flw-cancel]') || e.target.closest('[data-flw-reset]')) {
     stopFlwPoll(); state.flw = null; localStorage.removeItem('od_flw_ref'); localStorage.removeItem('od_flw_amt'); render(); return;
   }
@@ -2372,17 +2345,6 @@ document.addEventListener('input', e => {
 
 document.addEventListener('submit', async e => {
   const id = e.target.id;
-  if (id === 'manualDepForm') {
-    e.preventDefault();
-    try {
-      await api('/wallet/deposit-manual', { method: 'POST', body: { amount_ghs: parseFloat($('#mdAmt').value) || 0, sender_phone: $('#mdPhone').value.trim(), external_ref: $('#mdRef').value.trim() } });
-      state.manualSent = true;
-      toast('Deposit sent for confirmation.');
-      loadWallet();
-      render();
-    } catch (err) { toast(err.message); }
-    return;
-  }
   if (id === 'momoForm') {
     e.preventDefault();
     const amt = parseFloat($('#mmAmt').value) || 0;

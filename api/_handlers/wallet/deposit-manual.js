@@ -5,6 +5,11 @@ const { sql, readBody, send, guard, requireAuth, currencyOfPhone, moneyRules, de
 // actually arrived.
 module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
+  // Manual deposits are OFF (Prince, 2026-11-10: 'take off the manual
+  // way, I don't want it'). The player UI no longer offers them and new
+  // submissions are refused; the admin queue can still settle any
+  // manual deposit recorded before the switch-off.
+  return send(res, 410, { error: 'manual_deposits_off', detail: 'Manual deposits are off. Please use the instant deposit.' });
   const auth = requireAuth(req, res);
   if (!auth) return;
   const { amount_ghs, sender_phone, external_ref, proof_image } = await readBody(req);
