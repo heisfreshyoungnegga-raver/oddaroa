@@ -335,20 +335,28 @@ function logoSrc(u) { return (u && logoTrimCache.get(u)) || u; }
 // cannot misfire either way (measured 2026-11-10).
 const BADGE_PH = '\u0001placeholder';
 const BADGE_TEMPLATES = [
-  '000000000000000000000015553000000002646bab932000000857a6459a800000089952633980000007a828aa369000000798299a46900000079933851980000008aaa5348a90000003555656554000000000000000000000033333413330000001112320121000000021232322100000013333333310000000000000000000',
-  '0000000000000000000133333333100000231222222131000031332222231300003130002013130000313014141213000031314131131300003132131322130000313031320313000031311320131300001313120131310000013130131310000000131331310000000001411310000000000013310000000000000000000000',
-  '000028bddb8200000007dffffffd7000009ffffffffff90007feeeeeeeeeef702eeccdcccdccdfe28fedeeeeeeeedef8bffffffffffffffbdfffeeddddcefffddfffedddcdcefffdbffffffffffffffb8fffeeeeeeeffff82effecccccbeffe207ffeeeeeeeeff70009ffffffffff9000007dffffffd7000000028bddb820000'
+  '0000000000000000000000255530000000026579998320000008379645998000000899536429800000089929993780000008992999478000000899448619800000089994238980000003555555554000000000000000000000032333313330000001122410121000000121232322000000012233232310000000000000000000',
+  '0000000000000000000133333333100000130111111041000030422222230300003130003013030000313004131303000031303131130300003133141313030000313031320303000031411320030300001414110041400000014130031300000000141441400000000001400400000000000014310000000000000000000000',
+  '000027bddb7200000007dffffffd7000009ffffffffff90007edeedeeeeeef702dddcddddddcdfd27ffdefeedeeedef7bffffffffffffffbdfffeeddcdcffffddfffecddcccffffdbffffffffffffffb7fffedeedeeefff72dffecdddcceffd207fffeeeeeefff70009ffffffffff9000007dffffffd7000000027bddb720000'
 ];
-function isPlaceholderBadge(canvas) {
-  const t = document.createElement('canvas'); t.width = 16; t.height = 16;
-  const tc = t.getContext('2d');
-  tc.drawImage(canvas, 0, 0, 16, 16);
-  const d = tc.getImageData(0, 0, 16, 16).data;
-  const sig = new Array(256);
-  for (let i = 0; i < 256; i++) {
-    const lum = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
-    sig[i] = Math.min(15, Math.round((lum * (d[i * 4 + 3] / 255)) / 17));
+// The fingerprint is block-averaged from the full-resolution pixels
+// by hand: shrinking the canvas in one drawImage step aliases badly
+// in some browsers and the same placeholder graphic then scores 0.91
+// instead of 0.0 — measured live 2026-11-10, that is why the first
+// version of this check missed every placeholder in a real browser.
+function isPlaceholderBadge(data, w, h) {
+  const sig = new Array(256).fill(0);
+  const cnt = new Array(256).fill(0);
+  for (let y = 0; y < h; y++) {
+    const cy = Math.min(15, (y * 16 / h) | 0);
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4, cell = cy * 16 + Math.min(15, (x * 16 / w) | 0);
+      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      sig[cell] += lum * (data[i + 3] / 255);
+      cnt[cell]++;
+    }
   }
+  for (let i = 0; i < 256; i++) sig[i] = Math.min(15, Math.round((sig[i] / cnt[i]) / 17));
   return BADGE_TEMPLATES.some(tpl => {
     let sum = 0;
     for (let i = 0; i < 256; i++) sum += Math.abs(sig[i] - parseInt(tpl[i], 16));
@@ -401,14 +409,14 @@ function trimLogoImg(img) {
       if (!w || !h) { logoTrimCache.set(url, url); return; }
       const c = document.createElement('canvas'); c.width = w; c.height = h;
       const ctx = c.getContext('2d'); ctx.drawImage(probe, 0, 0);
-      if (isPlaceholderBadge(c)) {
+      const data = ctx.getImageData(0, 0, w, h).data;
+      if (isPlaceholderBadge(data, w, h)) {
         logoTrimCache.set(url, BADGE_PH);
         document.querySelectorAll('img.tlogo').forEach(el => {
           if ((el.getAttribute('src') || '') === url) badgeSwap(el);
         });
         return;
       }
-      const data = ctx.getImageData(0, 0, w, h).data;
       let minX = w, minY = h, maxX = -1, maxY = -1;
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
         if (data[(y * w + x) * 4 + 3] > 12) {
