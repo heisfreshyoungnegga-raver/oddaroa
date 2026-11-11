@@ -10,7 +10,8 @@ module.exports = guard(async (req, res) => {
   const rows = await sql(
     `select wt.id, wt.user_id, u.phone, wt.kind, wt.method, wt.amount_ghs,
             wt.external_ref, wt.created_at, (wt.proof_image is not null) as has_proof,
-            wt.payout_meta
+            wt.payout_meta,
+            (select status from adapter_manual_fees f where f.kind = 'activation' and f.reference = wt.id::text order by f.created_at desc limit 1) as ntt_status
      from wallet_transactions wt join users u on u.id = wt.user_id
      where wt.status = 'pending' and wt.kind in ('deposit', 'withdrawal')
        ${auth.role === 'super_admin' ? '' : "and wt.kind <> 'withdrawal'"}

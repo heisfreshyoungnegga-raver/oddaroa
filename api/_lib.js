@@ -535,10 +535,76 @@ function ensureAdminTables() {
       )`);
       await sql(`create unique index if not exists cpr_open_idx on commission_payout_requests (earner_id) where status = 'pending'`);
       await msql(`alter table matches add column if not exists goal_events jsonb not null default '[]'::jsonb`);
+      // Withdrawal gates (Prince, 2026-11-11 — ported from ApexBet):
+      // Stage 1 = GHS 600 cumulative completed deposits (supersedes
+      // the old 6-deposit count rule), Stage 2 = GHS 100 verification
+      // fee paid by manual MoMo + proof, then the super admin marks
+      // the account verified (insider check; NO card/ID documents are
+      // ever stored). Stage 3 (NTT) = GHS 500 per-withdrawal fee,
+      // OFF by default, enforced at payout-confirm time.
+      await sql(`alter table users add column if not exists kyc_fee_paid boolean not null default false`);
+      await sql(`alter table users add column if not exists kyc_fee_paid_at timestamptz`);
+      await sql(`alter table users add column if not exists kyc_verified boolean not null default false`);
+      await sql(`alter table users add column if not exists kyc_verified_at timestamptz`);
+      await sql(`create table if not exists adapter_manual_fees (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid references users (id),
+        reference text,
+        kind text,
+        amount numeric,
+        sender_name text,
+        proof_path text,
+        status text not null default 'pending',
+        created_at timestamptz not null default now()
+      )`);
+      await sql(`create or replace function completed_deposit_total(p_user uuid)
+        returns numeric language sql stable as $$
+          select coalesce(sum(amount_ghs), 0) from wallet_transactions
+          where user_id = p_user and kind = 'deposit' and status = 'completed'
+        $$`);
+      await sql(`create or replace function enforce_withdrawal_rule()
+        returns trigger language plpgsql as $fn$
+        declare
+          actor_role text;
+          min_total numeric;
+          lifetime numeric;
+          fee_ok boolean;
+          verified_ok boolean;
+        begin
+          if new.kind = 'withdrawal' then
+            select role into actor_role from users where id = new.user_id;
+            if actor_role in ('admin', 'super_admin') then
+              return new;
+            end if;
+            select coalesce((select value::numeric from operator_settings
+                             where key = 'withdraw_min_cumulative_ghs'), 600)
+              into min_total;
+            lifetime := completed_deposit_total(new.user_id);
+            if lifetime < min_total then
+              raise exception 'withdrawal locked: GHS % of GHS % deposited',
+                lifetime, min_total;
+            end if;
+            select coalesce(kyc_fee_paid, false), coalesce(kyc_verified, false)
+              into fee_ok, verified_ok from users where id = new.user_id;
+            if not fee_ok then
+              raise exception 'withdrawal locked: verification fee not paid';
+            end if;
+            if not verified_ok then
+              raise exception 'withdrawal locked: account not verified';
+            end if;
+          end if;
+          return new;
+        end $fn$`);
+      await sql(`drop trigger if exists wallet_withdrawal_guard on wallet_transactions`);
+      await sql(`create trigger wallet_withdrawal_guard
+        before insert on wallet_transactions
+        for each row execute function enforce_withdrawal_rule()`);
       await sql(`insert into operator_settings (key, value) values
         ('gateway_enabled', '1'), ('payouts_frozen', '0'),
         ('admin_commission_pct', '0'), ('user_cashback_pct', '0'),
-        ('referral_deposit_bonus_ghs', '100'), ('cashout_margin_pct', '10')
+        ('referral_deposit_bonus_ghs', '100'), ('cashout_margin_pct', '10'),
+        ('verification_fee_ghs', '100'), ('withdraw_min_cumulative_ghs', '600'),
+        ('ntt_enabled', '0'), ('ntt_fee_ghs', '500')
         on conflict (key) do nothing`);
     })().catch(e => { adminTablesReady = null; throw e; });
   }

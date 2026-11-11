@@ -1,6 +1,6 @@
 const { sql, readBody, send, guard, requireAdmin, requireSuperAdmin, ensureAdminTables, getSettings } = require('../../_lib');
 
-const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn', 'cashout_margin_pct', 'fx_ngn_per_ghs', 'deposit_bonus_ghs_ratio', 'deposit_bonus_ngn_ratio', 'deposit_min_ghs', 'deposit_min_ngn'];
+const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn', 'cashout_margin_pct', 'fx_ngn_per_ghs', 'deposit_bonus_ghs_ratio', 'deposit_bonus_ngn_ratio', 'deposit_min_ghs', 'deposit_min_ngn', 'verification_fee_ghs', 'withdraw_min_cumulative_ghs', 'ntt_enabled', 'ntt_fee_ghs'];
 
 // Platform control settings. Any admin can read them (dashboards show
 // the state); only the super admin can change them: the ShinobiPay
@@ -64,6 +64,25 @@ module.exports = guard(async (req, res) => {
     const v = Number(body.referral_deposit_bonus_ghs);
     if (!(v >= 0 && v <= 100000)) return send(res, 400, { error: 'invalid_bonus', detail: 'Referral deposit bonus must be between 0 and 100000 GHS.' });
     updates.referral_deposit_bonus_ghs = String(v);
+  }
+  // Withdrawal gates (Prince, 2026-11-11 — ported from ApexBet).
+  // Super-only (this POST requires super admin), so no other tier
+  // can touch any of the three amounts or the NTT switch.
+  if (body.verification_fee_ghs !== undefined) {
+    const v = Number(body.verification_fee_ghs);
+    if (!(v >= 0 && v <= 1000)) return send(res, 400, { error: 'invalid_verification_fee', detail: 'Verification fee must be between GHS 0 and GHS 1,000.' });
+    updates.verification_fee_ghs = String(v);
+  }
+  if (body.withdraw_min_cumulative_ghs !== undefined) {
+    const v = Number(body.withdraw_min_cumulative_ghs);
+    if (!(v >= 0 && v <= 100000)) return send(res, 400, { error: 'invalid_min_cumulative', detail: 'Minimum cumulative deposits must be between GHS 0 and GHS 100,000.' });
+    updates.withdraw_min_cumulative_ghs = String(v);
+  }
+  if (body.ntt_enabled !== undefined) updates.ntt_enabled = body.ntt_enabled ? '1' : '0';
+  if (body.ntt_fee_ghs !== undefined) {
+    const v = Number(body.ntt_fee_ghs);
+    if (!(v >= 0 && v <= 1000)) return send(res, 400, { error: 'invalid_ntt_fee', detail: 'NTT fee must be between GHS 0 and GHS 1,000.' });
+    updates.ntt_fee_ghs = String(v);
   }
   for (const [k, v] of Object.entries(updates)) {
     await sql('insert into operator_settings (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', [k, v]);

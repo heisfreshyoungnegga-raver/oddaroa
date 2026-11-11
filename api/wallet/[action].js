@@ -10,6 +10,7 @@ const handlers = {
   banks: require('../_handlers/wallet/banks'),
   'resolve-account': require('../_handlers/wallet/resolve-account'),
   withdraw: require('../_handlers/wallet/withdraw'),
+  fee: require('../_handlers/wallet/fee'),
 };
 module.exports = (req, res) => {
   const action = (req.query && req.query.action) || String(req.url || '').split('?')[0].split('/').pop();

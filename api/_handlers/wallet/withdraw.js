@@ -61,20 +61,40 @@ module.exports = guard(async (req, res) => {
     );
   } catch (e) {
     if (String(e.dbMessage || '').includes('withdrawal locked')) {
-      // The trigger reports "withdrawal locked: X of Y required
-      // deposits completed". The client receives only how many
-      // deposits are DONE — never the required total and never the
-      // raw trigger text (Prince, 2026-11-04: the verification
-      // prompt fills a progress bar per deposit without revealing
-      // the number needed).
-      const cm = /(\d+) of (\d+)/.exec(e.dbMessage || '');
+      // The trigger reports one of three stages (Prince, 2026-11-11):
+      // Stage 1 "GHS X of GHS Y deposited", Stage 2a "verification
+      // fee not paid", Stage 2b "account not verified". The client
+      // now SHOWS the GHS 600 progress on the Withdraw page (his
+      // order, superseding the 2026-11-04 conceal-the-total rule).
+      const msg = String(e.dbMessage || '');
+      const cm = /GHS ([\d.]+) of GHS ([\d.]+) deposited/.exec(msg);
+      if (msg.includes('verification fee not paid')) {
+        return send(res, 403, { error: 'withdrawal_locked', reason: 'kyc_fee' });
+      }
+      if (msg.includes('account not verified')) {
+        return send(res, 403, { error: 'withdrawal_locked', reason: 'kyc_verify' });
+      }
       return send(res, 403, {
         error: 'withdrawal_locked',
-        deposits_done: cm ? Number(cm[1]) : 0,
+        reason: 'min_deposit',
+        lifetime_deposited: cm ? Number(cm[1]) : 0,
+        min_required: cm ? Number(cm[2]) : 600,
       });
     }
     throw e;
   }
   if (!rows.length) return send(res, 400, { error: 'insufficient_balance' });
+  // Stage 3 (NTT) pre-paid binding (Prince, 2026-11-11 — ported from
+  // ApexBet, where the activate page did this): a fee the player paid
+  // in advance (reference-less, approved) is spent on the first
+  // withdrawal that is requested, so one fee covers exactly one
+  // payout and the payout-confirm gate sees it bound.
+  await sql(
+    `update adapter_manual_fees set reference = $2
+     where id = (select id from adapter_manual_fees
+                 where user_id = $1 and kind = 'activation' and status = 'paid' and reference is null
+                 order by created_at asc limit 1)`,
+    [auth.uid, rows[0].id]
+  ).catch(() => {});
   send(res, 201, { transaction: rows[0] });
 });

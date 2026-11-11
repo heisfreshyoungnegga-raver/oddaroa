@@ -28,6 +28,8 @@ const handlers = {
   'payout-request': require('../_handlers/admin/payout-request'),
   'delete-user': require('../_handlers/admin/delete-user'),
   'deposit-proof': require('../_handlers/admin/deposit-proof'),
+  kyc: require('../_handlers/admin/kyc'),
+  'fee-proof': require('../_handlers/admin/fee-proof'),
 };
 module.exports = (req, res) => {
   const action = (req.query && req.query.action) || String(req.url || '').split('?')[0].split('/').pop();

@@ -11,6 +11,9 @@ module.exports = guard(async (req, res) => {
   const rows = await sql(
     `select u.id, u.phone, u.display_name, u.role, u.status, u.balance_ghs, u.created_at,
             u.invited_by, i.phone as inviter_phone,
+            u.kyc_fee_paid, u.kyc_verified,
+            (select status from adapter_manual_fees f where f.user_id = u.id and f.kind = 'verification' order by f.created_at desc limit 1) as kyc_fee_status,
+            (select status from adapter_manual_fees f where f.user_id = u.id and f.kind = 'activation' order by f.created_at desc limit 1) as ntt_fee_status,
             completed_deposit_count(u.id) as deposits_completed,
             (select count(*) from bets b where b.user_id = u.id) as bets_count
      from users u

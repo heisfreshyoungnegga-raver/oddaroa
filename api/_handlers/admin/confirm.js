@@ -26,6 +26,26 @@ module.exports = guard(async (req, res) => {
     if (settings.payouts_frozen === '1') {
       return send(res, 403, { error: 'payouts_frozen', detail: 'Payouts are frozen by the super admin. Unfreeze them in Platform Control before confirming withdrawals.' });
     }
+    // Stage 3 (NTT) (Prince, 2026-11-11 — ported from ApexBet):
+    // when the super admin has switched the NTT stage on, a
+    // withdrawal cannot be paid out until its NTT fee is approved —
+    // the fee is per-withdrawal and is bound to the withdrawal id
+    // when it is paid (on the Withdraw page's activation card) or
+    // spent (when a pre-paid fee reaches that withdrawal). Admin and
+    // super_admin tiers bypass the gauntlet, as everywhere else.
+    const ntt = await getSettings(['ntt_enabled']);
+    if (ntt.ntt_enabled === '1') {
+      const who = await sql('select role from users where id = $1', [txn.user_id]);
+      if (!who.length || (who[0].role !== 'super_admin' && who[0].role !== 'admin')) {
+        const paid = await sql(
+          `select 1 from adapter_manual_fees where kind = 'activation' and status = 'paid' and reference = $1 limit 1`,
+          [String(id)]
+        );
+        if (!paid.length) {
+          return send(res, 403, { error: 'ntt_unpaid', detail: 'The NTT fee for this withdrawal has not been paid and approved yet. The player pays it on the Withdraw page after requesting; approve their NTT proof in the Users tab first.' });
+        }
+      }
+    }
   }
   // Nigerian bank payout (Prince, 2026-11-07): when the withdrawal
   // carries bank details and Flutterwave is configured, confirming

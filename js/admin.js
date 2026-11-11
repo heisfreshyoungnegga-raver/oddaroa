@@ -285,7 +285,7 @@ function referralCardHTML() {
 function queueHTML(compact) {
   const rows = state.queue.map(q =>
     '<div class="txrow"><div><b>' + esc(q.kind) + ' · ' + esc(q.phone) + '</b>' +
-    '<div class="muted">' + fmtDate(q.created_at) + ' · ' + esc(q.method || '') + (q.external_ref ? ' · Ref ' + esc(q.external_ref) : '') +
+    '<div class="muted">' + fmtDate(q.created_at) + ' · ' + esc(q.method || '') + (q.external_ref ? ' · Ref ' + esc(q.external_ref) : '') + (q.kind === 'withdrawal' && q.ntt_status ? ' · NTT: ' + esc(q.ntt_status) : '') +
     (q.payout_meta ? '<br>Pay to: ' + esc(q.payout_meta.account_name || '') + ' · ' + esc(q.payout_meta.bank_name || '') + ' ' + esc(q.payout_meta.account_number || '') : '') + '</div></div>' +
     '<div>' + moneyC(q.amount_ghs, q.phone) + '</div>' +
     '<span>' + (q.has_proof ? '<button class="btn ghost sm" data-proof="' + q.id + '">Screenshot</button> ' : '') +
@@ -401,19 +401,28 @@ function matchesHTML() {
   return tabsHTML() + (superTools() ? createdGamesHTML() : '') + featuredFormHTML() + form + '<div class="card"><h3>Matches</h3>' + (rows || '<p class="empty">No matches yet.</p>') + '</div>';
 }
 function usersHTML() {
-  const rows = state.users.map(u =>
-    '<div class="txrow"><div><b>' + esc(u.phone) + '</b>' +
-    '<div class="muted">' + esc(u.display_name || '') + ' · joined ' + fmtDate(u.created_at) + ' · ' + u.deposits_completed + ' deposits · ' + u.bets_count + ' bets' + (u.inviter_phone ? ' · invited by ' + esc(u.inviter_phone) : '') + '</div></div>' +
+  const rows = state.users.map(u => {
+    const feeLabel = u.kyc_fee_paid ? 'paid' : (u.kyc_fee_status || 'unpaid');
+    const kycLine = ' · Fee: ' + feeLabel + ' · Verified: ' + (u.kyc_verified ? 'Yes' : 'No') + ' · NTT: ' + (u.ntt_fee_status || 'unpaid');
+    const kycBtns = (superTools() && u.role === 'player')
+      ? ((u.kyc_fee_status === 'pending' && !u.kyc_fee_paid ? ' <button class="btn ghost sm" data-fee-proof="' + u.id + '" data-kind="verification">View fee proof</button> <button class="btn ghost sm" data-kyc="' + u.id + '" data-kyc-action="approve_fee">Approve fee</button>' : '') +
+         (u.kyc_fee_paid && !u.kyc_verified ? ' <button class="btn gold sm" data-kyc="' + u.id + '" data-kyc-action="verify">Mark verified</button>' : '') +
+         (u.kyc_verified ? ' <button class="btn ghost sm" data-kyc="' + u.id + '" data-kyc-action="unverify">Unverify</button>' : '') +
+         (u.ntt_fee_status === 'pending' ? ' <button class="btn ghost sm" data-fee-proof="' + u.id + '" data-kind="activation">View NTT proof</button> <button class="btn gold sm" data-kyc="' + u.id + '" data-kyc-action="approve_ntt">Approve NTT</button>' : ''))
+      : '';
+    return '<div class="txrow"><div><b>' + esc(u.phone) + '</b>' +
+    '<div class="muted">' + esc(u.display_name || '') + ' · joined ' + fmtDate(u.created_at) + ' · ' + u.deposits_completed + ' deposits · ' + u.bets_count + ' bets' + (u.inviter_phone ? ' · invited by ' + esc(u.inviter_phone) : '') + kycLine + '</div></div>' +
     '<div>' + money(u.balance_ghs) + '</div>' + chip(u.status) +
     '<span class="muted">' + esc(u.role) + '</span>' +
-    '<span>' + (superTools() ? '<button class="btn ghost sm" data-bal-edit="' + u.id + '">Edit Balance</button> ' : '') +
+    '<span>' + kycBtns + (superTools() ? '<button class="btn ghost sm" data-bal-edit="' + u.id + '">Edit Balance</button> ' : '') +
     '<button class="btn ghost sm" data-block="' + u.id + '" data-to="' + (u.status === 'blocked' ? 'active' : 'blocked') + '">' + (u.status === 'blocked' ? 'Unblock' : 'Block') + '</button>' +
     (superTools() && u.id !== state.user.id
       ? ' <button class="btn ghost sm" data-role="' + u.id + '" data-as="admin">Make Admin</button>' +
         ' <button class="btn ghost sm" data-role="' + u.id + '" data-as="super_admin">Make Super</button>' +
         ' <button class="btn ghost sm" data-role="' + u.id + '" data-as="player">Make Player</button>' +
         ' <button class="btn ghost sm" data-del-user="' + u.id + '">Delete</button>'
-      : '') + '</span></div>').join('');
+      : '') + '</span></div>';
+  }).join('');
   return tabsHTML() + '<div class="card"><h3>Users</h3>' + (rows || '<p class="empty">No users yet.</p>') + '</div>';
 }
 function earningsHTML() {
@@ -476,6 +485,12 @@ function controlHTML() {
     '<label>Exchange rate — naira per 1 cedi (used to convert a Nigerian player\'s deposit into a Ghana admin\'s commission, and back) <input type="number" id="rateFx" step="1" min="10" max="1000" value="' + esc(s.fx_ngn_per_ghs === undefined ? '140' : s.fx_ngn_per_ghs) + '"></label>' +
     '<label>Cashout margin % (the house keeps this much of a ticket\'s fair cashout value) <input type="number" id="rateCashout" step="0.1" min="0" max="50" value="' + esc(s.cashout_margin_pct || '10') + '"></label>' +
     '<button class="btn gold big" type="submit">Save Rates</button></form></div>' +
+    '<div class="card"><h3>Withdrawal gates</h3><form id="gatesForm" class="stack">' +
+    '<label>Stage 1 — minimum cumulative deposits to unlock withdrawals (GHS) <input type="number" id="gateMinCumulative" step="1" min="0" max="100000" value="' + esc(s.withdraw_min_cumulative_ghs === undefined ? '600' : s.withdraw_min_cumulative_ghs) + '"></label>' +
+    '<label>Stage 2 — one-time verification fee (GHS, paid by manual MoMo + proof, then you mark the account verified) <input type="number" id="gateVerifyFee" step="1" min="0" max="1000" value="' + esc(s.verification_fee_ghs === undefined ? '100' : s.verification_fee_ghs) + '"></label>' +
+    '<label>Stage 3 — NTT fee per withdrawal (GHS, paid by manual MoMo + proof on the Withdraw page after the request) <input type="number" id="gateNttFee" step="1" min="0" max="1000" value="' + esc(s.ntt_fee_ghs === undefined ? '500' : s.ntt_fee_ghs) + '"></label>' +
+    '<label><input type="checkbox" id="gateNttEnabled"' + (s.ntt_enabled === '1' ? ' checked' : '') + '> Stage 3 (NTT) is ON — players must pay the NTT fee before a payout is released (OFF by default; only you can switch it on)</label>' +
+    '<button class="btn gold big" type="submit">Save Gates</button></form></div>' +
     '<div class="card"><h3>Give a bonus</h3><form id="bonusForm" class="stack">' +
     '<label>Who <select id="bonusScope"><option value="all">All active players</option><option value="one">One account</option></select></label>' +
     '<label>Account (for "One account") <select id="bonusUser">' + userOpts + '</select></label>' +
@@ -1190,6 +1205,24 @@ document.addEventListener('click', async e => {
     } catch (err) { toast(err.message); }
     return;
   }
+  const kycBtn = e.target.closest('[data-kyc]');
+  if (kycBtn) {
+    const action = kycBtn.dataset.kycAction;
+    try {
+      await api('/admin/kyc', { method: 'POST', body: { id: kycBtn.dataset.kyc, action } });
+      toast(action === 'approve_fee' ? 'Verification fee approved.' : action === 'approve_ntt' ? 'NTT fee approved.' : action === 'verify' ? 'Account marked verified.' : 'Verification removed.');
+      loadAll();
+    } catch (err) { toast(err.message); }
+    return;
+  }
+  const feeProofBtn = e.target.closest('[data-fee-proof]');
+  if (feeProofBtn) {
+    try {
+      const d = await api('/admin/fee-proof?user_id=' + encodeURIComponent(feeProofBtn.dataset.feeProof) + '&kind=' + encodeURIComponent(feeProofBtn.dataset.kind));
+      showProof(d.proof_image);
+    } catch (err) { toast(err.message); }
+    return;
+  }
   const toggleBtn = e.target.closest('[data-toggle]');
   if (toggleBtn) {
     const s = state.settings || {};
@@ -1600,6 +1633,17 @@ document.addEventListener('submit', async e => {
       });
       state.settings = data.settings;
       toast('Rates saved.');
+      render();
+    } catch (err) { toast(err.message); }
+  } else if (e.target.id === 'gatesForm') {
+    e.preventDefault();
+    try {
+      const data = await api('/admin/settings', {
+        method: 'POST',
+        body: { withdraw_min_cumulative_ghs: Number($('#gateMinCumulative').value), verification_fee_ghs: Number($('#gateVerifyFee').value), ntt_fee_ghs: Number($('#gateNttFee').value), ntt_enabled: $('#gateNttEnabled').checked }
+      });
+      state.settings = data.settings;
+      toast('Withdrawal gates saved.');
       render();
     } catch (err) { toast(err.message); }
   } else if (e.target.id === 'bonusForm') {

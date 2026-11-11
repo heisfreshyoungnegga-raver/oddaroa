@@ -165,7 +165,7 @@ function errToast(e, fallback) {
     invalid_email: 'Enter a valid email address.',
     email_already_registered: 'That email is already registered — log in instead.',
     account_blocked: 'This account has been blocked. Contact support.',
-    withdrawal_locked: 'Withdrawals are not available on your account yet — please contact support.',
+    withdrawal_locked: 'Withdrawals are locked for your account — see the stages on the Withdraw page.',
     cashout_unavailable: 'Cashout is not available for this ticket right now.',
     bet_not_open: 'That ticket is already settled.',
     match_finished: 'One of those matches has already finished.',
@@ -1348,34 +1348,105 @@ function withdrawCardHTML(w) {
 // a withdrawal is refused — a GHC300 verification deposit ask plus a
 // progress bar that fills a step with every completed deposit. The
 // required total is never shown anywhere in the UI.
-const VERIFY_DEPOSITS_REQUIRED = 6;
-function showVerifyModal(info) {
-  closeVerifyModal();
-  const done = Number(info && info.deposits_done) || 0;
-  const pct = Math.min(100, Math.round((done / VERIFY_DEPOSITS_REQUIRED) * 100));
-  const el = document.createElement('div');
-  el.className = 'modalwrap open';
-  el.id = 'verifyWrap';
-  el.innerHTML = '<div class="modal">' +
-    '<button class="iconbtn modal-x" data-close-verify aria-label="Close">&times;</button>' +
-    '<p class="modal-sub">Second verification</p>' +
-    '<h2>Complete your verification</h2>' +
-    '<p>Make a <b>' + money(curRules().verifyAmount) + '</b> deposit to unlock withdrawals on your Oddaroa account.</p>' +
-    '<div class="vbar"><i></i></div>' +
-    '<button class="btn gold big" data-goto-deposit>Deposit ' + money(curRules().verifyAmount) + ' to verify</button>' +
-    '<button class="btn ghost big" data-done-verify>I\'ve completed a deposit</button>' +
-    '<p class="muted">Deposits go to your own betting wallet. The money stays yours to bet with \u2014 it is not a fee, and nothing is taken from your balance to release a withdrawal.</p>' +
-    '</div>';
-  document.body.appendChild(el);
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    const fill = el.querySelector('.vbar i');
-    if (fill) fill.style.width = pct + '%';
-  }));
+// ---- Withdrawal gates (Prince, 2026-11-11 — ported from ApexBet) ----
+// Stage 1 = GHS 600 cumulative completed deposits (shown openly now),
+// Stage 2 = GHS 100 one-time verification fee (manual MoMo + proof,
+// then the super admin marks the account verified — no card or ID
+// documents are stored anywhere), Stage 3 (NTT) = GHS 500 per
+// withdrawal, OFF unless the super admin switches it on. Admin and
+// super_admin tiers bypass the gauntlet, as before.
+function withdrawGatesHTML(w) {
+  if (!w) return '';
+  const privileged = state.user && (state.user.role === 'admin' || state.user.role === 'super_admin');
+  if (privileged) {
+    return '<div class="card"><h3>Withdrawal stages</h3><p class="muted">Admin accounts are not gated — your withdrawals go straight through.</p></div>';
+  }
+  const min = Number(w.withdraw_min_cumulative_ghs) || 600;
+  const life = Number(w.lifetime_deposited) || 0;
+  const fee = Number(w.verification_fee_ghs) || 100;
+  const nttOn = !!w.ntt_enabled;
+  const nttFee = Number(w.ntt_fee_ghs) || 500;
+  const tick = ok => ok ? '<b style="color:#2ecc71">✓ Done</b>' : '<b style="color:#e74c3c">Not yet</b>';
+  const pct = Math.min(100, Math.round((life / min) * 100));
+  let html = '<div class="card"><h3>Withdrawal stages</h3>' +
+    '<div class="txrow"><div><b>Stage 1 — Deposits</b><div class="muted">Withdrawals unlock after GHS ' + min.toLocaleString('en-GB') + ' total deposits. You have deposited GHS ' + life.toLocaleString('en-GB') + '.</div><div class="vbar"><i style="width:' + pct + '%"></i></div></div><span>' + tick(life >= min) + '</span></div>' +
+    '<div class="txrow"><div><b>Stage 2 — Verification fee</b><div class="muted">One-time GHS ' + fee.toLocaleString('en-GB') + ' fee, paid by manual MoMo with a screenshot — then the admin marks your account verified.</div></div><span>' +
+    (w.kyc_verified ? tick(true) : (w.kyc_fee_paid ? 'Fee paid — waiting for the admin to mark you verified' : '<button class="btn gold sm" data-fee-kind="verification">Pay GHS ' + fee.toLocaleString('en-GB') + ' fee</button>')) + '</span></div>';
+  if (nttOn) {
+    html += '<div class="txrow"><div><b>Stage 3 — NTT fee</b><div class="muted">GHS ' + nttFee.toLocaleString('en-GB') + ' per withdrawal, paid by manual MoMo + proof after you request. One fee covers one payout.</div></div><span>' +
+      (w.ntt_prepaid ? tick(true) + ' (pre-paid)' : '<button class="btn gold sm" data-fee-kind="activation">Pay NTT fee in advance</button>') + '</span></div>';
+  } else {
+    html += '<div class="txrow"><div><b>Stage 3 — NTT fee</b><div class="muted">Switched off — no extra fee on your withdrawals.</div></div><span>' + tick(true) + '</span></div>';
+  }
+  // Pending withdrawals that still need their NTT fee (Oddaroa-native
+  // activation step: the fee is paid here, on the Withdraw page).
+  (w.pending_withdrawals || []).forEach(pw => {
+    if (!nttOn) return;
+    const amt = Math.abs(Number(pw.amount_ghs) || 0);
+    const st = pw.ntt_status;
+    if (st === 'paid') {
+      html += '<div class="txrow"><div><b>Withdrawal GHS ' + amt.toLocaleString('en-GB') + '</b><div class="muted">NTT fee approved — your payout is released when the admin confirms it.</div></div><span>' + tick(true) + '</span></div>';
+    } else if (st === 'pending') {
+      html += '<div class="txrow"><div><b>Withdrawal GHS ' + amt.toLocaleString('en-GB') + '</b><div class="muted">NTT proof received — waiting for the admin to approve it.</div></div><span>Waiting</span></div>';
+    } else {
+      html += '<div class="txrow"><div><b>Withdrawal GHS ' + amt.toLocaleString('en-GB') + '</b><div class="muted">Pay the GHS ' + nttFee.toLocaleString('en-GB') + ' NTT fee to release this payout.</div></div><span><button class="btn gold sm" data-fee-kind="activation" data-fee-ref="' + pw.id + '">Pay NTT fee</button></span></div>';
+    }
+  });
+  return html + '</div>';
 }
-function closeVerifyModal() {
-  const el = $('#verifyWrap');
+function closeFeeModal() {
+  const el = $('#feeWrap');
   if (el) el.remove();
 }
+function shrinkProofFile(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const sc = Math.min(1, 1280 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * sc));
+      c.height = Math.max(1, Math.round(img.height * sc));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = () => reject(new Error('That image could not be read.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function showFeeModal(kind, reference) {
+  closeFeeModal();
+  const ref = reference || '';
+  let d;
+  try {
+    d = await api('/wallet/fee?kind=' + kind + (ref ? '&reference=' + encodeURIComponent(ref) : ''));
+  } catch (e) { toast('Could not load the fee details — try again.'); return; }
+  const md = d.manual || {};
+  const title = kind === 'verification' ? 'Verification fee' : 'NTT fee';
+  const el = document.createElement('div');
+  el.className = 'modalwrap open';
+  el.id = 'feeWrap';
+  let body;
+  if (d.status === 'paid') {
+    body = '<p class="lock-note">This fee is already paid and approved.</p>';
+  } else if (d.status === 'pending') {
+    body = '<p class="lock-note">Your proof was received and is waiting for the admin to approve it.</p>';
+  } else {
+    body = '<p>Send <b>GHS ' + Number(d.fee || 0).toLocaleString('en-GB') + '</b> by manual MoMo, then attach the screenshot.</p>' +
+      '<div class="manualbox"><div class="muted">' + esc(md.network || 'Mobile Money') + ' · ' + esc(md.name || '') + '</div><div class="mannum">' + esc(md.number || '') + '</div></div>' +
+      '<form id="feeForm" class="stack">' +
+      '<label>Your name <input type="text" id="feeName" value="' + esc(state.user ? (state.user.display_name || '') : '') + '"></label>' +
+      '<label>Payment screenshot <input type="file" id="feeProof" accept="image/*" required></label>' +
+      '<button class="btn gold big" type="submit">I Have Sent It</button></form>';
+  }
+  el.innerHTML = '<div class="modal">' +
+    '<button class="iconbtn modal-x" data-close-fee aria-label="Close">&times;</button>' +
+    '<p class="modal-sub">' + (kind === 'verification' ? 'Stage 2' : 'Stage 3') + '</p>' +
+    '<h2>' + title + '</h2>' + body + '</div>';
+  document.body.appendChild(el);
+  state.feeCtx = { kind, reference: ref };
+}
+
 /* ----- Instant MoMo deposit (ShinobiPay direct push) ----- */
 function detectNetworkJS(raw) {
   const digits = String(raw || '').replace(/[\s+]/g, '');
@@ -1534,7 +1605,7 @@ function walletHTML() {
   if (sec === 'deposit') {
     sectionBody = depositPanel;
   } else if (sec === 'withdraw') {
-    sectionBody = withdrawCardHTML(w);
+    sectionBody = withdrawGatesHTML(w) + withdrawCardHTML(w);
   } else {
     sectionBody = '<div class="card"><h3>Transactions</h3>' + (tx || '<p class="empty">No transactions yet.</p>') + '</div>';
   }
@@ -2222,25 +2293,13 @@ document.addEventListener('click', e => {
     render();
     return;
   }
-  if (e.target.id === 'verifyWrap' || e.target.closest('[data-close-verify]')) {
-    closeVerifyModal();
+  if (e.target.id === 'feeWrap' || e.target.closest('[data-close-fee]')) {
+    closeFeeModal();
     return;
   }
-  if (e.target.closest('[data-done-verify]')) {
-    closeVerifyModal();
-    loadWallet();
-    return;
-  }
-  if (e.target.closest('[data-goto-deposit]')) {
-    closeVerifyModal();
-    // The prompt appears over the Withdraw section, where the
-    // deposit form is not rendered — switch the wallet to Deposit
-    // first, or the button visibly does nothing.
-    state.view = 'wallet';
-    state.walletSection = 'deposit';
-    render();
-    const amt = $('#mmAmt');
-    if (amt) amt.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const feeBtn = e.target.closest ? e.target.closest('[data-fee-kind]') : null;
+  if (feeBtn) {
+    showFeeModal(feeBtn.dataset.feeKind, feeBtn.dataset.feeRef || '');
     return;
   }
   const mrow = e.target.closest('[data-match]');
@@ -2411,6 +2470,17 @@ document.addEventListener('submit', async e => {
     openAuth('register');
     applyCountry(country);
     if (num) $('#authPhone').value = num;
+  } else if (id === 'feeForm') {
+    e.preventDefault();
+    const file = ($('#feeProof') || {}).files && $('#feeProof').files[0];
+    if (!file) { toast('Attach a screenshot of the MoMo payment.'); return; }
+    try {
+      const proof = await shrinkProofFile(file);
+      await api('/wallet/fee', { method: 'POST', body: { kind: state.feeCtx.kind, reference: state.feeCtx.reference || null, sender_name: ($('#feeName') || {}).value || '', proof_image: proof } });
+      closeFeeModal();
+      toast('Proof sent — the admin will approve it shortly.');
+      loadWallet();
+    } catch (err) { toast(err.message || 'That screenshot could not be sent.'); }
   } else if (id === 'withdrawForm') {
     e.preventDefault();
     try {
@@ -2439,11 +2509,16 @@ document.addEventListener('submit', async e => {
       }
     } catch (err) {
       if (err.code === 'withdrawal_locked') {
-        const done = Number(err.data && err.data.deposits_done) || 0;
-        // The verification prompt only appears once the player has
-        // completed a first deposit (Prince, 2026-11-04); before
-        // that the plain support message below stands.
-        if (done >= 1) { showVerifyModal(err.data); return; }
+        await loadWallet();
+        render();
+        const d = err.data || {};
+        if (d.reason === 'kyc_fee') { toast('Pay the verification fee first — it is on the Withdraw page above.'); return; }
+        if (d.reason === 'kyc_verify') { toast('Your verification payment was received — wait for the admin to mark you verified.'); return; }
+        if (d.reason === 'min_deposit') {
+          const left = Math.max(0, Math.round(((Number(d.min_required) || 600) - (Number(d.lifetime_deposited) || 0)) * 100) / 100);
+          toast('Withdrawals unlock after GHS ' + (Number(d.min_required) || 600) + ' total deposits — deposit GHS ' + left + ' more.');
+          return;
+        }
       }
       errToast(err, 'Withdrawal request failed.');
     }
