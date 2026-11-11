@@ -735,7 +735,7 @@ function badgesHTML() {
   else if (!list.length) body = '<p class="empty">No teams on the board right now.</p>';
   else body = list.map((t, i) => badgeRowHTML(t, i)).join('');
   return tabsHTML() + '<div class="card"><h3>Team badges</h3>' +
-    '<p class="muted">Teams with no real badge show nothing on the site. Add a badge for a team here — upload an image or paste an image URL — and it appears on every match that team plays. <b>FAKE</b> means the feed is showing a placeholder picture; <b>NONE</b> and <b>DEAD LINK</b> mean nothing shows at all.</p>' +
+    '<p class="muted">Teams with no real badge show nothing on the site. Add a badge for a team here — upload an image or paste an image URL — and it appears on every match that team plays. <b>FAKE</b> means the feed is showing a placeholder picture; <b>NONE</b> and <b>DEAD LINK</b> mean nothing shows at all. <b>Make site-perfect</b> cleans any badge automatically — strips its metadata, trims empty edges, centres it and shrinks it to the site standard — then saves it for that team.</p>' +
     body + '</div>';
 }
 function badgeRowHTML(t, i) {
@@ -750,6 +750,7 @@ function badgeRowHTML(t, i) {
     '<div class="bform"><input type="url" placeholder="Badge image URL" id="burl-' + i + '" value="' + (t.override && t.override.indexOf('http') === 0 ? esc(t.override) : '') + '">' +
     '<label class="btn ghost sm">Upload<input type="file" accept="image/*" data-bfile="' + i + '" hidden></label>' +
     '<button class="btn sm" data-bsave="' + i + '">Save badge</button>' +
+    '<button class="btn gold sm" data-bfix="' + i + '">Make site-perfect</button>' +
     (t.override ? '<button class="btn ghost sm" data-bclear="' + i + '">Remove</button>' : '') +
     '</div></div></div>';
 }
@@ -833,6 +834,101 @@ function encodeBadgeFile(file, cb) {
   img.onerror = () => toast('That image could not be read.');
   img.src = URL.createObjectURL(file);
 }
+// ---- Badge synthesizer (Prince, 2026-11-11) -----------------------
+// One tap turns any badge source into the site standard: metadata is
+// stripped (a canvas re-encode carries none), transparent borders are
+// trimmed so the crest fills its slot, the crest is centred on a
+// square transparent pad, and the result is shrunk through the same
+// ladder uploads use until it fits the 5,800-char site budget.
+function loadBadgeImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    if (/^https?:/i.test(src)) img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('That image could not be loaded.'));
+    img.src = src;
+  });
+}
+function perfectBadgeURI(img) {
+  // Work at a sane analysis size.
+  const cap = 512;
+  const sc0 = Math.min(1, cap / Math.max(img.width, img.height));
+  const base = document.createElement('canvas');
+  base.width = Math.max(1, Math.round(img.width * sc0));
+  base.height = Math.max(1, Math.round(img.height * sc0));
+  const bx = base.getContext('2d');
+  bx.drawImage(img, 0, 0, base.width, base.height);
+  // Trim transparent borders (alpha <= 10 counts as empty). Fully
+  // opaque images keep their full frame — their background cannot be
+  // told apart from the crest itself.
+  let x0 = 0, y0 = 0, x1 = base.width, y1 = base.height;
+  try {
+    const d = bx.getImageData(0, 0, base.width, base.height).data;
+    let minX = base.width, minY = base.height, maxX = -1, maxY = -1, hasTrans = false;
+    for (let y = 0; y < base.height; y++) {
+      for (let x = 0; x < base.width; x++) {
+        const a = d[(y * base.width + x) * 4 + 3];
+        if (a <= 10) { hasTrans = true; continue; }
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+    }
+    if (hasTrans && maxX >= minX && maxY >= minY) { x0 = minX; y0 = minY; x1 = maxX + 1; y1 = maxY + 1; }
+  } catch (e) { /* canvas unreadable: keep the full frame */ }
+  const cw = x1 - x0, ch = y1 - y0;
+  const side = Math.max(cw, ch);
+  const pad = Math.round(side * 0.06);
+  const drawAt = px => {
+    const out = document.createElement('canvas');
+    out.width = px; out.height = px;
+    const cx = out.getContext('2d');
+    const avail = px - pad * 2 * (px / (side + pad * 2));
+    const scale = avail / side;
+    const dw = cw * scale, dh = ch * scale;
+    cx.drawImage(base, x0, y0, cw, ch, (px - dw) / 2, (px - dh) / 2, dw, dh);
+    return out;
+  };
+  const tries = [
+    () => drawAt(128).toDataURL('image/webp', 0.85),
+    () => drawAt(110).toDataURL('image/webp', 0.8),
+    () => drawAt(96).toDataURL('image/webp', 0.75),
+    () => drawAt(80).toDataURL('image/webp', 0.7),
+    () => drawAt(72).toDataURL('image/webp', 0.65),
+    () => drawAt(64).toDataURL('image/webp', 0.6),
+    () => drawAt(96).toDataURL('image/png'),
+    () => drawAt(64).toDataURL('image/png')
+  ];
+  let best = '';
+  for (const t of tries) {
+    let u;
+    try { u = t(); } catch (e) { throw new Error('That picture is protected by its host — download it and use Upload instead.'); }
+    if (!u || u.indexOf('data:image') !== 0) continue;
+    if (!best || u.length < best.length) best = u;
+    if (best.length <= 5800) break;
+  }
+  if (!best) throw new Error('That image could not be processed.');
+  return best;
+}
+async function makeBadgePerfect(i, btn) {
+  const t = (state.badgeTeams || [])[i];
+  if (!t) return;
+  const staged = (state.badgeUploads || {})[i] || '';
+  const url = ($('#burl-' + i) ? $('#burl-' + i).value.trim() : '');
+  const src = staged || url || t.override || t.logo || '';
+  if (!src) { toast('Nothing to perfect yet — upload an image or paste a URL first.'); return; }
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Perfecting…'; }
+  try {
+    const img = await loadBadgeImage(src);
+    const uri = perfectBadgeURI(img);
+    await saveBadge(i, uri);
+    toast(t.team + ' badge perfected — cleaned, centred and shrunk to ' + Math.max(1, Math.round(uri.length * 3 / 4 / 102.4) / 10) + ' KB.');
+  } catch (err) {
+    toast(err.message || 'That image could not be processed.');
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
 async function saveBadge(i, logo) {
   const t = (state.badgeTeams || [])[i];
   if (!t) return;
@@ -965,6 +1061,8 @@ document.addEventListener('click', async e => {
   }
   const bclear = e.target.closest ? e.target.closest('[data-bclear]') : null;
   if (bclear) { saveBadge(Number(bclear.dataset.bclear), ''); return; }
+  const bfix = e.target.closest ? e.target.closest('[data-bfix]') : null;
+  if (bfix) { makeBadgePerfect(Number(bfix.dataset.bfix), bfix); return; }
   if (e.target.id === 'emStartNow') {
     const el = document.querySelector('#emStart');
     if (el) { const d = new Date(); d.setSeconds(0, 0); el.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
