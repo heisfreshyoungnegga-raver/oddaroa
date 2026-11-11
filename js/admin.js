@@ -844,7 +844,7 @@ function encodeBadgeFile(file, cb) {
       () => draw(96).toDataURL('image/jpeg', 0.85),
       () => draw(80).toDataURL('image/webp', 0.7),
       () => draw(72).toDataURL('image/webp', 0.65),
-      () => draw(64).toDataURL('image/webp', 0.6)
+      () => draw(64).toDataURL('image/webp', 0.6), () => draw(56).toDataURL('image/png'), () => draw(48).toDataURL('image/png'), () => draw(40).toDataURL('image/png')
     ];
     let best = '';
     for (const t of tries) {
@@ -920,7 +920,10 @@ function perfectBadgeURI(img) {
     () => drawAt(72).toDataURL('image/webp', 0.65),
     () => drawAt(64).toDataURL('image/webp', 0.6),
     () => drawAt(96).toDataURL('image/png'),
-    () => drawAt(64).toDataURL('image/png')
+    () => drawAt(64).toDataURL('image/png'),
+    () => drawAt(56).toDataURL('image/png'),
+    () => drawAt(48).toDataURL('image/png'),
+    () => drawAt(40).toDataURL('image/png')
   ];
   let best = '';
   for (const t of tries) {
@@ -1456,7 +1459,7 @@ document.addEventListener('change', e => {
       () => draw(96).toDataURL('image/jpeg', 0.85),
       () => draw(80).toDataURL('image/webp', 0.7),
       () => draw(72).toDataURL('image/webp', 0.65),
-      () => draw(64).toDataURL('image/webp', 0.6)
+      () => draw(64).toDataURL('image/webp', 0.6), () => draw(56).toDataURL('image/png'), () => draw(48).toDataURL('image/png'), () => draw(40).toDataURL('image/png')
     ];
     let crestUrl = '';
     for (const t of tries) {

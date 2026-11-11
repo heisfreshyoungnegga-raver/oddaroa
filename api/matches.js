@@ -117,6 +117,13 @@ module.exports = guard(async (req, res) => {
   // skeleton. The list shows 22px crests and letter tiles cover a
   // missing one; the full crest still loads on the match page.
   const slimLogo = v => (typeof v === 'string' && v.startsWith('data:') && v.length > 6000) ? null : v;
+  // Created games keep their crests at any accepted size (Kilo,
+  // 2026-11-11): the operator uploaded them, there are only a
+  // handful on the board, and the 32k server cap bounds the cost —
+  // the same treatment team_badges overrides already get. Without
+  // this, a phone that cannot encode WebP bottoms the upload ladder
+  // out above 6,000 chars and the game posts with no badges at all.
+  const keepLogo = (m, v) => isCustomMatch(m) ? (v || null) : slimLogo(v);
   const tbMap = await teamBadgeMap().catch(() => null);
   const entries = [];
   for (const m of rows) {
@@ -124,9 +131,9 @@ module.exports = guard(async (req, res) => {
     if (isCustomMatch(m)) {
       const st = customMatchState(m, now);
       if (st.status === 'finished' && now - new Date(m.starts_at) > (105 + (m.ht_stoppage || 0) + (m.ft_stoppage || 0) + 180) * 60000) continue;
-      entries.push({ grp, row: { ...m, home_logo: teamBadgeFor(tbMap, m.home_team) || slimLogo(m.home_logo), away_logo: teamBadgeFor(tbMap, m.away_team) || slimLogo(m.away_logo), odds: fillOdds(m.odds), status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.has_full } });
+      entries.push({ grp, row: { ...m, home_logo: teamBadgeFor(tbMap, m.home_team) || keepLogo(m, m.home_logo), away_logo: teamBadgeFor(tbMap, m.away_team) || keepLogo(m, m.away_logo), odds: fillOdds(m.odds), status: st.status, minute: st.minute, minute_label: st.minute_label, score_home: st.score_home, score_away: st.score_away, goal_events: undefined, has_full: !!m.has_full } });
     } else {
-      entries.push({ grp, row: { ...m, home_logo: teamBadgeFor(tbMap, m.home_team) || slimLogo(m.home_logo), away_logo: teamBadgeFor(tbMap, m.away_team) || slimLogo(m.away_logo), odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.has_full } });
+      entries.push({ grp, row: { ...m, home_logo: teamBadgeFor(tbMap, m.home_team) || keepLogo(m, m.home_logo), away_logo: teamBadgeFor(tbMap, m.away_team) || keepLogo(m, m.away_logo), odds: fillOdds(m.odds), goal_events: undefined, has_full: !!m.has_full } });
     }
   }
   // De-duplicate across feeds: an ESPN row that is the same real
