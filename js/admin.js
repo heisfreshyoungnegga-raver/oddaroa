@@ -766,6 +766,8 @@ async function loadBadgeTeams(force) {
   state.badgesLoading = false;
   if (state.tab === 'badges') { render(); markBadgePlaceholders(); }
 }
+let badgeProbeQueue = [];
+let badgeProbeActive = 0;
 function markBadgePlaceholders() {
   (state.badgeTeams || []).forEach((t, i) => {
     if (t.override || !t.logo) return;
@@ -778,28 +780,50 @@ function markBadgePlaceholders() {
       el.innerHTML = badgeProbeCache.get(t.logo);
       return;
     }
-    const probe = new Image();
-    probe.crossOrigin = 'anonymous';
-    probe.onload = () => {
-      let html = 'Feed badge — real badge on the site';
-      try {
-        const c = document.createElement('canvas'); c.width = probe.naturalWidth; c.height = probe.naturalHeight;
-        const cx = c.getContext('2d'); cx.drawImage(probe, 0, 0);
-        const data = cx.getImageData(0, 0, c.width, c.height).data;
-        if (adminBadgeIsPlaceholder(data, c.width, c.height)) html = '<span class="bst-fake">FAKE — feed placeholder picture; add a real badge</span>';
-      } catch (e) { /* canvas blocked: leave the neutral label */ }
-      badgeProbeCache.set(t.logo, html);
-      const el2 = document.querySelector('[data-bfeed="' + i + '"]');
-      if (el2) el2.innerHTML = html;
-    };
-    probe.onerror = () => {
-      const html = '<span class="bst-none">DEAD LINK — nothing shows on the site</span>';
-      badgeProbeCache.set(t.logo, html);
-      const el2 = document.querySelector('[data-bfeed="' + i + '"]');
-      if (el2) el2.innerHTML = html;
-    };
-    probe.src = t.logo;
+    if (!badgeProbeQueue.some(j => j.logo === t.logo)) badgeProbeQueue.push({ logo: t.logo, idx: i });
   });
+  pumpBadgeProbes();
+}
+// At most 6 probes in flight, each with an 8s timeout: 473 rows must
+// never flood the connection at once or hang on "checking…" forever.
+function pumpBadgeProbes() {
+  while (badgeProbeActive < 6 && badgeProbeQueue.length) {
+    const job = badgeProbeQueue.shift();
+    if (badgeProbeCache.has(job.logo)) continue;
+    badgeProbeActive++;
+    runBadgeProbe(job.logo, html => {
+      badgeProbeCache.set(job.logo, html);
+      (state.badgeTeams || []).forEach((t, i) => {
+        if (t.logo === job.logo && !t.override) {
+          const el = document.querySelector('[data-bfeed="' + i + '"]');
+          if (el) el.innerHTML = html;
+        }
+      });
+      badgeProbeActive--;
+      pumpBadgeProbes();
+    });
+  }
+}
+function runBadgeProbe(logo, done) {
+  const neutral = 'Feed badge — real badge on the site';
+  let settled = false;
+  const finish = html => { if (!settled) { settled = true; done(html); } };
+  const timer = setTimeout(() => finish(neutral), 8000);
+  const probe = new Image();
+  probe.crossOrigin = 'anonymous';
+  probe.onload = () => {
+    clearTimeout(timer);
+    let html = neutral;
+    try {
+      const c = document.createElement('canvas'); c.width = probe.naturalWidth; c.height = probe.naturalHeight;
+      const cx = c.getContext('2d'); cx.drawImage(probe, 0, 0);
+      const data = cx.getImageData(0, 0, c.width, c.height).data;
+      if (adminBadgeIsPlaceholder(data, c.width, c.height)) html = '<span class="bst-fake">FAKE — feed placeholder picture; add a real badge</span>';
+    } catch (e) { /* canvas blocked: keep the neutral label */ }
+    finish(html);
+  };
+  probe.onerror = () => { clearTimeout(timer); finish('<span class="bst-none">DEAD LINK — nothing shows on the site</span>'); };
+  probe.src = logo;
 }
 function encodeBadgeFile(file, cb) {
   const img = new Image();
