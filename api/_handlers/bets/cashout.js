@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth, getSettings, cashoutQuoteFor, matchesById } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, getSettings, cashoutQuoteFor, matchesById, maintenanceBlocked } = require('../../_lib');
 
 // Cashout (Prince, 2026-11-05): an open ticket can be sold back to
 // the house for its current mathematical value — potential payout
@@ -12,6 +12,8 @@ module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const auth = requireAuth(req, res);
   if (!auth) return;
+  const maint = await maintenanceBlocked(auth);
+  if (maint) return send(res, 503, { error: 'maintenance_mode', detail: maint });
   const { bet_id } = await readBody(req);
   if (!bet_id || !/^[0-9a-f-]{36}$/i.test(String(bet_id))) return send(res, 400, { error: 'bet_required' });
   const bets = await sql('select * from bets where id = $1 and user_id = $2', [bet_id, auth.uid]);

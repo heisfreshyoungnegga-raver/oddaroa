@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, readBody, send, guard, requireAuth, flwConfig, flwFetch, ensurePaymentTables, ensureAdminTables, getSettings, currencyOfPhone, moneyRules, depositFloorFor } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, flwConfig, flwFetch, ensurePaymentTables, ensureAdminTables, getSettings, currencyOfPhone, moneyRules, depositFloorFor, maintenanceBlocked } = require('../../_lib');
 
 // Instant NGN deposit (Flutterwave hosted checkout): create a payment
 // attempt, send the payer to Flutterwave's hosted page (card, bank
@@ -11,6 +11,8 @@ module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const auth = requireAuth(req, res);
   if (!auth) return;
+  const maint = await maintenanceBlocked(auth);
+  if (maint) return send(res, 503, { error: 'maintenance_mode', detail: maint });
   if (!flwConfig().secretKey) return send(res, 503, { error: 'provider_not_configured' });
   await ensureAdminTables();
   const settings = await getSettings(['gateway_enabled', 'deposit_min_ngn']);

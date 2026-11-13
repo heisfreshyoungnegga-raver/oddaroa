@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, maintenanceBlocked } = require('../../_lib');
 const G = require('../../_games');
 
 // One action inside an open round — today that is a Penalty
@@ -8,6 +8,8 @@ module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const auth = requireAuth(req, res);
   if (!auth) return;
+  const maint = await maintenanceBlocked(auth);
+  if (maint) return send(res, 503, { error: 'maintenance_mode', detail: maint });
   await G.ensureGameTables();
   const { round_id, zone } = await readBody(req);
   if (!Number.isInteger(zone) || zone < 0 || zone > 5) return send(res, 400, { error: 'invalid_zone' });

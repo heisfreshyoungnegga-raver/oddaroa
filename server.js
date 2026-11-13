@@ -17,6 +17,7 @@ const exactRoutes = {
   // side reaches it through the vercel.json rewrite).
   '/api/match': require('./api/matches'),
   '/api/support': require('./api/support'),
+  '/api/maintenance': require('./api/maintenance'),
   '/api/tips': require('./api/_handlers/tips/list'),
   '/api/wallet': require('./api/_handlers/wallet/index'),
   '/api/payments/shinobipay-webhook': require('./api/payments/shinobipay-webhook'),

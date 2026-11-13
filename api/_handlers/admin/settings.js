@@ -1,6 +1,6 @@
 const { sql, readBody, send, guard, requireAdmin, requireSuperAdmin, ensureAdminTables, getSettings } = require('../../_lib');
 
-const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn', 'cashout_margin_pct', 'fx_ngn_per_ghs', 'deposit_bonus_ghs_ratio', 'deposit_bonus_ngn_ratio', 'deposit_min_ghs', 'deposit_min_ngn', 'verification_fee_ghs', 'withdraw_min_cumulative_ghs', 'ntt_enabled', 'ntt_fee_ghs'];
+const KEYS = ['gateway_enabled', 'payouts_frozen', 'admin_commission_pct', 'user_cashback_pct', 'referral_deposit_bonus_ghs', 'referral_deposit_bonus_ngn', 'cashout_margin_pct', 'fx_ngn_per_ghs', 'deposit_bonus_ghs_ratio', 'deposit_bonus_ngn_ratio', 'deposit_min_ghs', 'deposit_min_ngn', 'verification_fee_ghs', 'withdraw_min_cumulative_ghs', 'ntt_enabled', 'ntt_fee_ghs', 'maintenance_mode', 'maintenance_message'];
 
 // Platform control settings. Any admin can read them (dashboards show
 // the state); only the super admin can change them: the ShinobiPay
@@ -83,6 +83,14 @@ module.exports = guard(async (req, res) => {
     const v = Number(body.ntt_fee_ghs);
     if (!(v >= 0 && v <= 1000)) return send(res, 400, { error: 'invalid_ntt_fee', detail: 'NTT fee must be between GHS 0 and GHS 1,000.' });
     updates.ntt_fee_ghs = String(v);
+  }
+  // Maintenance mode (Prince, 2026-11-13): super-only, like the gates.
+  // The toggle is a checkbox boolean; the message is plain text.
+  if (body.maintenance_mode !== undefined) updates.maintenance_mode = body.maintenance_mode ? '1' : '0';
+  if (body.maintenance_message !== undefined) {
+    const v = String(body.maintenance_message).trim().slice(0, 300);
+    if (!v) return send(res, 400, { error: 'invalid_maintenance_message', detail: 'The maintenance message cannot be empty.' });
+    updates.maintenance_message = v;
   }
   for (const [k, v] of Object.entries(updates)) {
     await sql('insert into operator_settings (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value', [k, v]);

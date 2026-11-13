@@ -491,6 +491,11 @@ function controlHTML() {
     '<label>Stage 3 — NTT fee per withdrawal (GHS, paid by manual MoMo + proof on the Withdraw page after the request) <input type="number" id="gateNttFee" step="1" min="0" max="1000" value="' + esc(s.ntt_fee_ghs === undefined ? '500' : s.ntt_fee_ghs) + '"></label>' +
     '<label><input type="checkbox" id="gateNttEnabled"' + (s.ntt_enabled === '1' ? ' checked' : '') + '> Stage 3 (NTT) is ON — players must pay the NTT fee before a payout is released (OFF by default; only you can switch it on)</label>' +
     '<button class="btn gold big" type="submit">Save Gates</button></form></div>' +
+    '<div class="card"><h3>Maintenance mode</h3><form id="maintForm" class="stack">' +
+    '<p class="muted">Put the whole player site down. Players see the message below on entry and on refresh; deposits, withdrawals, bets, cashouts and casino games refuse until you switch it off. Admins are never locked out, so you can always turn it back on here.</p>' +
+    '<label><input type="checkbox" id="maintEnabled"' + (s.maintenance_mode === '1' ? ' checked' : '') + '> Maintenance mode is ON — the player site is down</label>' +
+    '<label>Message players see <input type="text" id="maintMessage" maxlength="300" value="' + esc(s.maintenance_message === undefined ? 'The site is currently under maintenance and all issues will be fixed soon.' : s.maintenance_message) + '"></label>' +
+    '<button class="btn gold big" type="submit">Save Maintenance</button></form></div>' +
     '<div class="card"><h3>Give a bonus</h3><form id="bonusForm" class="stack">' +
     '<label>Who <select id="bonusScope"><option value="all">All active players</option><option value="one">One account</option></select></label>' +
     '<label>Account (for "One account") <select id="bonusUser">' + userOpts + '</select></label>' +
@@ -1644,6 +1649,17 @@ document.addEventListener('submit', async e => {
       });
       state.settings = data.settings;
       toast('Withdrawal gates saved.');
+      render();
+    } catch (err) { toast(err.message); }
+  } else if (e.target.id === 'maintForm') {
+    e.preventDefault();
+    try {
+      const data = await api('/admin/settings', {
+        method: 'POST',
+        body: { maintenance_mode: $('#maintEnabled').checked, maintenance_message: $('#maintMessage').value.trim() }
+      });
+      state.settings = data.settings;
+      toast($('#maintEnabled').checked ? 'Maintenance mode is ON — the player site is down.' : 'Maintenance mode is OFF — the site is back up.');
       render();
     } catch (err) { toast(err.message); }
   } else if (e.target.id === 'bonusForm') {

@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth, ensureAdminTables, ensurePaymentTables, getSettings, currencyOfPhone } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, ensureAdminTables, ensurePaymentTables, getSettings, currencyOfPhone, maintenanceBlocked } = require('../../_lib');
 
 // Withdrawal request: the balance is held immediately, and the database
 // trigger refuses the insert until the user reaches the required number
@@ -8,6 +8,8 @@ module.exports = guard(async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
   await ensureAdminTables();
+  const maint = await maintenanceBlocked(auth);
+  if (maint) return send(res, 503, { error: 'maintenance_mode', detail: maint });
   const settings = await getSettings(['payouts_frozen']);
   if (settings.payouts_frozen === '1') {
     return send(res, 403, { error: 'payouts_frozen', detail: 'Withdrawals are temporarily paused by the operator. Please check back shortly.' });

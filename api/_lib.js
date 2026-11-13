@@ -604,7 +604,9 @@ function ensureAdminTables() {
         ('admin_commission_pct', '0'), ('user_cashback_pct', '0'),
         ('referral_deposit_bonus_ghs', '100'), ('cashout_margin_pct', '10'),
         ('verification_fee_ghs', '100'), ('withdraw_min_cumulative_ghs', '600'),
-        ('ntt_enabled', '0'), ('ntt_fee_ghs', '500')
+        ('ntt_enabled', '0'), ('ntt_fee_ghs', '500'),
+        ('maintenance_mode', '0'),
+        ('maintenance_message', 'The site is currently under maintenance and all issues will be fixed soon.')
         on conflict (key) do nothing`);
     })().catch(e => { adminTablesReady = null; throw e; });
   }
@@ -616,6 +618,22 @@ async function getSettings(keys) {
   const out = {};
   rows.forEach(r => { out[r.key] = r.value; });
   return out;
+}
+
+// Maintenance mode (Prince, 2026-11-13): when the super admin puts
+// the site down, players cannot move money — deposits, withdrawals,
+// bets, cashouts and casino games all refuse with 503
+// maintenance_mode carrying the super admin's message. Admins and
+// super admins bypass it, so the portal stays usable to turn it off.
+// Read-only browsing (matches, wallet view) is unaffected. Returns
+// the message to show when blocked, or null when the action may go
+// ahead.
+const MAINTENANCE_DEFAULT_MESSAGE = 'The site is currently under maintenance and all issues will be fixed soon.';
+async function maintenanceBlocked(auth) {
+  const s = await getSettings(['maintenance_mode', 'maintenance_message']);
+  if (s.maintenance_mode !== '1') return null;
+  if (auth && (auth.role === 'admin' || auth.role === 'super_admin')) return null;
+  return s.maintenance_message || MAINTENANCE_DEFAULT_MESSAGE;
 }
 
 // Rewards that hang off a completed deposit, run once per deposit txn:
@@ -1676,4 +1694,4 @@ function teamBadgeFor(map, team) {
 }
 function bustTeamBadges() { teamBadgeState.map = null; teamBadgeState.at = 0; }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges, maintenanceBlocked, MAINTENANCE_DEFAULT_MESSAGE };

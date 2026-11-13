@@ -1,4 +1,4 @@
-const { sql, msql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns, ensureBookingCode } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns, ensureBookingCode, maintenanceBlocked } = require('../../_lib');
 
 // Place bet(s) from the slip: Single (one ticket per selection, each
 // with its own stake), Multiple (one accumulator ticket) or System
@@ -14,6 +14,8 @@ module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const auth = requireAuth(req, res);
   if (!auth) return;
+  const maint = await maintenanceBlocked(auth);
+  if (maint) return send(res, 503, { error: 'maintenance_mode', detail: maint });
   await ensureBetColumns();
   const body = await readBody(req);
   const { selections } = body;

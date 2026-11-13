@@ -2385,6 +2385,7 @@ document.addEventListener('click', e => {
     syncBetsBadge();
     syncHeader();
     render();
+    checkMaintenance();
     toast('Logged out');
   }
 });
@@ -2508,6 +2509,7 @@ document.addEventListener('submit', async e => {
         toast('Withdrawal requested — waiting for admin approval.');
       }
     } catch (err) {
+      if (err.code === 'maintenance_mode') { toast(err.detail || 'The site is under maintenance — please check back soon.'); return; }
       if (err.code === 'withdrawal_locked') {
         await loadWallet();
         render();
@@ -2675,6 +2677,7 @@ $('#authForm').addEventListener('submit', async e => {
     closeAuth();
     toast(authMode === 'login' ? 'Welcome back' : 'Account created — welcome to Oddaroa');
     render();
+    checkMaintenance();
     if (state.view === 'wallet') loadWallet();
     if (state.view === 'bets') loadBets();
   } catch (err) {
@@ -2824,6 +2827,53 @@ if (urlParams.get('ref')) {
   }
 }
 
+/* ---------- maintenance mode ---------- */
+// When the super admin puts the site down, players see a full-screen
+// notice instead of the site (Prince, 2026-11-13). Admins never see
+// it. The notice polls the public status every 30s so it clears on
+// its own when the site comes back — no refresh needed. A signed-out
+// admin can still reach the login form through the small link at the
+// bottom, so the portal can always be reached to turn it off.
+let maintTimer = null;
+function showMaintenance(msg) {
+  let ov = document.getElementById('maintOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'maintOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:#07130c;color:#f5f0e1;padding:24px;text-align:center';
+    ov.innerHTML =
+      '<div style="max-width:520px">' +
+      '<div style="font-size:14px;letter-spacing:4px;color:#c9a227;font-weight:700">ODDAROA</div>' +
+      '<h1 style="font-size:30px;margin:16px 0 12px;color:#f5f0e1">We will be right back</h1>' +
+      '<p id="maintMsg" style="font-size:17px;line-height:1.6;color:#cfc8b8;margin:0 0 24px"></p>' +
+      '<button id="maintRetry" class="btn gold big" type="button">Check again</button>' +
+      '<p style="margin-top:28px"><a href="#" id="maintAdmin" style="color:#8a8578;font-size:13px">Admin sign-in</a></p>' +
+      '</div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#maintRetry').addEventListener('click', () => checkMaintenance());
+    ov.querySelector('#maintAdmin').addEventListener('click', e => {
+      e.preventDefault();
+      hideMaintenance();
+      openAuth('login');
+    });
+  }
+  ov.querySelector('#maintMsg').textContent = msg;
+  ov.style.display = 'flex';
+}
+function hideMaintenance() {
+  const ov = document.getElementById('maintOverlay');
+  if (ov) ov.style.display = 'none';
+  if (maintTimer) { clearInterval(maintTimer); maintTimer = null; }
+}
+async function checkMaintenance() {
+  let data;
+  try { data = await api('/maintenance'); } catch (e) { return; }
+  const privileged = state.user && (state.user.role === 'admin' || state.user.role === 'super_admin');
+  if (!data.maintenance || privileged) { hideMaintenance(); return; }
+  showMaintenance(data.message || 'The site is currently under maintenance and all issues will be fixed soon.');
+  if (!maintTimer) maintTimer = setInterval(checkMaintenance, 30000);
+}
+
 // boot: restore session, then load real matches
 applyTheme(state.theme);
 $('#burgerBtn').addEventListener('click', openMenu);
@@ -2834,5 +2884,6 @@ $('#drawerShade').addEventListener('click', closeMenu);
   renderSlip();
   render();
   if (state.token) await refreshUser();
+  checkMaintenance();
   loadMatches();
 })();

@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { sql, readBody, send, guard, requireAuth, currencyOfPhone, moneyRules } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, currencyOfPhone, moneyRules, maintenanceBlocked } = require('../../_lib');
 const G = require('../../_games');
 
 // Start a game round. The stake debit and the round row are one
@@ -9,6 +9,8 @@ module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const auth = requireAuth(req, res);
   if (!auth) return;
+  const maint = await maintenanceBlocked(auth);
+  if (maint) return send(res, 503, { error: 'maintenance_mode', detail: maint });
   await G.ensureGameTables();
   const { game, stake_ghs, config } = await readBody(req);
   if (!G.GAME_NAMES[game]) return send(res, 400, { error: 'unknown_game' });

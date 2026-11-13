@@ -133,6 +133,7 @@
     } catch (e) {
       if (e.code === 'insufficient_balance') toast('Not enough balance — top up in Wallet');
       else if (e.code === 'too_fast') toast('Slow down a moment, then play again');
+      else if (e.code === 'maintenance_mode') toast(e.detail || 'The site is under maintenance — please check back soon');
       else toast('Could not start the round — try again');
       return null;
     }
@@ -365,7 +366,7 @@
         const d = await api('/games/cashout', { method: 'POST', body: { round_id: S.round.id } });
         setBalance(d.balance);
         finish(d.round, d.round.cashed_at);
-      } catch (e) { toast('Cash out failed — the flight is still live'); S.cashing = false; cashBtn.disabled = false; }
+      } catch (e) { if (e.code === 'maintenance_mode') toast(e.detail || 'The site is under maintenance — please check back soon'); else toast('Cash out failed — the flight is still live'); S.cashing = false; cashBtn.disabled = false; }
     });
   }
 
@@ -711,7 +712,7 @@
           // Ball and keeper stay where the kick left them — the
           // next kick's animation resets the scene itself.
         }
-      } catch (e) { toast('That kick did not register — try again'); }
+      } catch (e) { if (e.code === 'maintenance_mode') toast(e.detail || 'The site is under maintenance — please check back soon'); else toast('That kick did not register — try again'); }
       S.busy = false;
     }));
     $g('#soCash').addEventListener('click', async () => {
@@ -722,7 +723,7 @@
         setBalance(d.balance);
         banner('win', 'Cashed out — <b>' + money(d.round.payout) + '</b> landed in your wallet.');
         endRound(d.round);
-      } catch (e) { toast('Cash out failed — the shootout is still live'); }
+      } catch (e) { if (e.code === 'maintenance_mode') toast(e.detail || 'The site is under maintenance — please check back soon'); else toast('Cash out failed — the shootout is still live'); }
       S.busy = false;
     });
   }
