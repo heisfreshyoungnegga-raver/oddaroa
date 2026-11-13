@@ -31,6 +31,25 @@ module.exports = guard(async (req, res) => {
       x.away_team = m ? m.away_team : null;
       x.league = m ? m.league : null;
       x.starts_at = m ? m.starts_at : null;
+      // Settled tickets (Bet History) need the final score too
+      // (Prince approved 2026-11-11): the open-bet block below only
+      // attaches match_status/live_home/live_away to OPEN bets, so
+      // settled legs rendered WON/LOST with no FT score — the same
+      // display-only bug fixed on PrimeStake (c9722c0e). Feed
+      // matches carry the final score on the row; custom matches
+      // derive it from their clock/goal script.
+      if (b.status !== 'open' && m) {
+        if (isCustomMatch(m)) {
+          const st = customMatchState(m);
+          x.match_status = st.status;
+          x.live_home = st.score_home;
+          x.live_away = st.score_away;
+        } else {
+          x.match_status = m.status;
+          x.live_home = m.score_home;
+          x.live_away = m.score_away;
+        }
+      }
     }
   }
   // Attach a live cashout quote to each open ticket (null when no
