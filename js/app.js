@@ -2921,7 +2921,11 @@ function stopMaintPoll() {
 }
 async function checkMaintenance() {
   let data;
-  try { data = await api('/maintenance'); } catch (e) { return; }
+  // Cache-buster: the plain /maintenance URL was served stale (OFF)
+  // by a browser/edge cache after the switch flipped ON, so the notice
+  // appeared on load and then vanished (Prince, 2026-11-13). A unique
+  // URL per check can never be answered from cache.
+  try { data = await api('/maintenance?nocache=' + Date.now()); } catch (e) { return; }
   const privileged = state.user && (state.user.role === 'admin' || state.user.role === 'super_admin');
   // Remember the state for the hero carousel: the maintenance slide
   // joins the rotation while the site is down (players only).
