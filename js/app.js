@@ -24,6 +24,8 @@ const state = {
   user: null,
   token: localStorage.getItem('od_token') || '',
   heroIdx: 0,
+  maintOn: false, // site down for players: maintenance slide joins the hero carousel
+  maintMsg: '',
   matches: [],
   matchesLoaded: false,
   offline: false,
@@ -620,13 +622,43 @@ function loadHeroImages() {
     }).catch(() => {});
   });
 }
+const MAINT_DEFAULT_MSG = 'The site is currently under maintenance and all issues will be fixed soon.';
+// Hero slides in use: while the site is down, players (and signed-out
+// visitors) get the maintenance notice as the FIRST slide of the home
+// carousel so it is seen in the rotation (Prince, 2026-11-13). Admins
+// never see it — checkMaintenance() only sets maintOn for players.
+function heroSlides() {
+  if (!state.maintOn) return HERO_SLIDES;
+  return [{
+    kicker: 'ODDAROA — MAINTENANCE',
+    title: 'We will be right back.',
+    sub: state.maintMsg || MAINT_DEFAULT_MSG,
+    cta: 'Check again',
+    img: 'assets/hero-stadium.jpg',
+  }].concat(HERO_SLIDES);
+}
+// Refresh the hero in place when the slide list changes (site goes
+// down / comes back up): clamp the index and swap the element.
+// No-op when the home hero is not on screen.
+function syncHeroSlides() {
+  const slides = heroSlides();
+  if (state.heroIdx >= slides.length) state.heroIdx = 0;
+  if (state.view !== 'home') return;
+  const cur = document.querySelector('.hero');
+  if (!cur) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = heroHTML();
+  if (tmp.firstElementChild) cur.replaceWith(tmp.firstElementChild);
+}
 function heroHTML() {
-  const s = HERO_SLIDES[state.heroIdx];
+  const slides = heroSlides();
+  if (state.heroIdx >= slides.length) state.heroIdx = 0;
+  const s = slides[state.heroIdx];
   return '<section class="hero"><img class="bg" src="' + (heroUrls[s.img] || s.img || 'assets/hero-stadium.jpg') + '" alt="">' +
     '<div class="hero-in"><p class="kicker">' + s.kicker + '</p><h1>' + s.title + '</h1>' +
     '<p>' + s.sub + '</p><button class="btn gold" data-hero-cta>' + s.cta + '</button></div>' +
-    '<span class="hero-count">' + (state.heroIdx + 1) + ' of ' + HERO_SLIDES.length + '</span>' +
-    '<div class="hero-dots">' + HERO_SLIDES.map((_, i) => '<i class="' + (i === state.heroIdx ? 'on' : '') + '"></i>').join('') + '</div></section>';
+    '<span class="hero-count">' + (state.heroIdx + 1) + ' of ' + slides.length + '</span>' +
+    '<div class="hero-dots">' + slides.map((_, i) => '<i class="' + (i === state.heroIdx ? 'on' : '') + '"></i>').join('') + '</div></section>';
 }
 function filtersHTML() {
   const chips = (list, kind, cur) => list
@@ -2072,7 +2104,15 @@ function detectCountry() {
   } catch (e) { /* detection is best-effort; Ghana stays the default */ }
   if (code) applyCountry(code);
 }
-function closeAuth() { $('#authWrap').classList.remove('open'); }
+function closeAuth() {
+  $('#authWrap').classList.remove('open');
+  // Closing the login popup — the × button or after a sign-in — must
+  // re-check maintenance at once: otherwise a player who opened the
+  // form from the maintenance notice (or closed it without logging in
+  // as an admin) is left on the live site while the site is still
+  // down (Prince, 2026-11-13).
+  checkMaintenance();
+}
 function syncAuth() {
   // Form layout follows Prince's reference designs (2026-11-04):
   // Register = full name, country, mobile (with dial-prefix box),
@@ -2348,7 +2388,12 @@ document.addEventListener('click', e => {
     return;
   }
   if (e.target.closest('[data-hero-cta]')) {
-    const cta = HERO_SLIDES[state.heroIdx].cta;
+    const slides = heroSlides();
+    if (state.heroIdx >= slides.length) state.heroIdx = 0;
+    const cta = slides[state.heroIdx].cta;
+    // The maintenance slide's button re-checks the status: if the
+    // site just came back up, checkMaintenance() drops the slide.
+    if (cta === 'Check again') { checkMaintenance(); return; }
     if (cta === 'See Games') { state.view = 'games'; render(); }
     else { state.view = 'live'; render(); }
     return;
@@ -2771,7 +2816,7 @@ setInterval(() => {
   if (state.view !== 'home' || document.hidden) return;
   const cur = $('.hero');
   if (!cur) return;
-  state.heroIdx = (state.heroIdx + 1) % HERO_SLIDES.length;
+  state.heroIdx = (state.heroIdx + 1) % heroSlides().length;
   const tmp = document.createElement('div');
   tmp.innerHTML = heroHTML();
   if (tmp.firstElementChild) cur.replaceWith(tmp.firstElementChild);
@@ -2860,18 +2905,41 @@ function showMaintenance(msg) {
   ov.querySelector('#maintMsg').textContent = msg;
   ov.style.display = 'flex';
 }
+// Hiding the notice must NOT stop the poll: the notice is hidden
+// while the login form is open, and the poll is what brings it back
+// for a player. The old version cleared the timer here, so after the
+// "Admin sign-in" link was used, no re-check ever ran again and a
+// player stayed on the live site with maintenance still ON (Prince,
+// 2026-11-13). The timer now only stops when the site comes back up
+// or the signed-in user is an admin.
 function hideMaintenance() {
   const ov = document.getElementById('maintOverlay');
   if (ov) ov.style.display = 'none';
+}
+function stopMaintPoll() {
   if (maintTimer) { clearInterval(maintTimer); maintTimer = null; }
 }
 async function checkMaintenance() {
   let data;
   try { data = await api('/maintenance'); } catch (e) { return; }
   const privileged = state.user && (state.user.role === 'admin' || state.user.role === 'super_admin');
-  if (!data.maintenance || privileged) { hideMaintenance(); return; }
-  showMaintenance(data.message || 'The site is currently under maintenance and all issues will be fixed soon.');
-  if (!maintTimer) maintTimer = setInterval(checkMaintenance, 30000);
+  // Remember the state for the hero carousel: the maintenance slide
+  // joins the rotation while the site is down (players only).
+  const wasOn = state.maintOn;
+  state.maintOn = !!data.maintenance && !privileged;
+  state.maintMsg = data.message || MAINT_DEFAULT_MSG;
+  if (!data.maintenance || privileged) { hideMaintenance(); stopMaintPoll(); }
+  else {
+    // Never cover the login form itself: while it is open the player
+    // cannot reach the site behind it anyway (full-screen modal), and
+    // the re-check on close (closeAuth) brings the notice straight back.
+    const authOpen = document.getElementById('authWrap') && document.getElementById('authWrap').classList.contains('open');
+    if (!authOpen) showMaintenance(state.maintMsg);
+    if (!maintTimer) maintTimer = setInterval(checkMaintenance, 30000);
+  }
+  // The slide list changed: refresh the hero in place so the slide
+  // appears/disappears without a full page rebuild.
+  if (state.maintOn !== wasOn) syncHeroSlides();
 }
 
 // boot: restore session, then load real matches
@@ -2881,9 +2949,13 @@ $('#drawerClose').addEventListener('click', closeMenu);
 $('#drawerShade').addEventListener('click', closeMenu);
 
 (async () => {
+  // Gate first, before the board renders or the session refresh runs:
+  // the notice used to appear up to ~10s after the homepage because
+  // this check waited behind refreshUser() (Prince, 2026-11-13).
+  checkMaintenance();
   renderSlip();
   render();
   if (state.token) await refreshUser();
-  checkMaintenance();
+  checkMaintenance(); // re-evaluate with the real role (hides it for admins)
   loadMatches();
 })();

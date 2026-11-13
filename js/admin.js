@@ -493,7 +493,7 @@ function controlHTML() {
     '<button class="btn gold big" type="submit">Save Gates</button></form></div>' +
     '<div class="card"><h3>Maintenance mode</h3><form id="maintForm" class="stack">' +
     '<p class="muted">Put the whole player site down. Players see the message below on entry and on refresh; deposits, withdrawals, bets, cashouts and casino games refuse until you switch it off. Admins are never locked out, so you can always turn it back on here.</p>' +
-    '<label><input type="checkbox" id="maintEnabled"' + (s.maintenance_mode === '1' ? ' checked' : '') + '> Maintenance mode is ON — the player site is down</label>' +
+    '<label><input type="checkbox" id="maintEnabled"' + (s.maintenance_mode === '1' ? ' checked' : '') + '> <span id="maintLabel">' + (s.maintenance_mode === '1' ? 'Maintenance mode is ON — the player site is down' : 'Maintenance mode is OFF — the player site is up') + '</span></label>' +
     '<label>Message players see <input type="text" id="maintMessage" maxlength="300" value="' + esc(s.maintenance_message === undefined ? 'The site is currently under maintenance and all issues will be fixed soon.' : s.maintenance_message) + '"></label>' +
     '<button class="btn gold big" type="submit">Save Maintenance</button></form></div>' +
     '<div class="card"><h3>Give a bonus</h3><form id="bonusForm" class="stack">' +
@@ -1659,6 +1659,8 @@ document.addEventListener('submit', async e => {
         body: { maintenance_mode: $('#maintEnabled').checked, maintenance_message: $('#maintMessage').value.trim() }
       });
       state.settings = data.settings;
+      const ml = $('#maintLabel');
+      if (ml) ml.textContent = $('#maintEnabled').checked ? 'Maintenance mode is ON — the player site is down' : 'Maintenance mode is OFF — the player site is up';
       toast($('#maintEnabled').checked ? 'Maintenance mode is ON — the player site is down.' : 'Maintenance mode is OFF — the site is back up.');
       render();
     } catch (err) { toast(err.message); }
