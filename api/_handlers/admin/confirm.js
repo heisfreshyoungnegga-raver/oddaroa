@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAdmin, ensureAdminTables, getSettings, applyDepositRewards, flwConfig, flwFetch, currencyOfPhone } = require('../../_lib');
+const { sql, readBody, send, guard, requireAdmin, ensureAdminTables, getSettings, applyDepositRewards, flwConfig, flwFetch, currencyOfPhone, convertAmount } = require('../../_lib');
 
 // Confirm a pending deposit or withdrawal. A confirmed deposit credits
 // the balance in the same statement and then pays the deposit rewards
@@ -81,10 +81,28 @@ module.exports = guard(async (req, res) => {
       [id, JSON.stringify({ flw_ref: ref, flw_transfer_id: String((tr.data.data && tr.data.data.id) || '') })]
     );
   }
+  // Manual deposits: a Nigerian's pending row holds raw naira (the
+  // deposit-manual handler stores the entered amount). Convert to
+  // cedis before crediting and rewrite the row so the ledger stays
+  // in cedis — crediting the raw number booked ~116x too much.
+  let creditAmt = Number(txn.amount_ghs);
+  let creditNote = null;
+  if (txn.kind === 'deposit') {
+    const du0 = await sql('select phone from users where id = $1', [txn.user_id]);
+    const depCur = du0.length ? currencyOfPhone(du0[0].phone) : 'GHS';
+    if (depCur === 'NGN') {
+      const fs = await getSettings(['fx_ngn_per_ghs']);
+      const fx = Number(fs.fx_ngn_per_ghs) > 0 ? Number(fs.fx_ngn_per_ghs) : 140;
+      creditAmt = convertAmount(Number(txn.amount_ghs), 'NGN', 'GHS', fx);
+      creditNote = ` (manual NGN ${Number(txn.amount_ghs).toLocaleString('en-GB')} @ ${fx} -> GHS ${creditAmt.toFixed(2)})`;
+    }
+  }
   const rows = await sql(
     `with t as (
        update wallet_transactions
-       set status = 'completed', confirmed_by = $2, confirmed_at = now()
+       set status = 'completed', confirmed_by = $2, confirmed_at = now(),
+           amount_ghs = case when kind = 'deposit' then $3 else amount_ghs end,
+           note = case when $4::text is not null then coalesce(note, '') || $4 else note end
        where id = $1 and status = 'pending'
        returning user_id, kind, amount_ghs
      ),
@@ -94,7 +112,7 @@ module.exports = guard(async (req, res) => {
        returning id
      )
      select (select count(*) from t) as updated`,
-    [id, auth.uid]
+    [id, auth.uid, creditAmt, creditNote]
   );
   if (!rows.length || Number(rows[0].updated) === 0) return send(res, 404, { error: 'pending_transaction_not_found' });
   if (txn.kind === 'deposit') {

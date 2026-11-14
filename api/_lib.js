@@ -688,9 +688,16 @@ function splitCommission(earnPot, earnCur, fxNgnPerGhs) {
   return { admin: Math.round(admin * 100) / 100, super: Math.round((pot - admin) * 100) / 100 };
 }
 async function applyDepositRewards(userId, txnId, amountGhs, currency) {
-  const amount = Number(amountGhs);
-  if (!(amount > 0)) return;
+  // `amountGhs` arrives in the DEPOSIT currency (Flutterwave attempts
+  // hold raw naira in the amount_ghs column). Normalize once to the
+  // wallet currency (GHS) so cashback, bonus and commission all
+  // compute on cedis — the raw number used to be credited as cedis
+  // (GH₵30,000 on a ₦30,000 deposit, Nov 2026).
+  const rawAmount = Number(amountGhs);
+  if (!(rawAmount > 0)) return;
   const s = await getSettings(['admin_commission_pct', 'user_cashback_pct', 'fx_ngn_per_ghs', 'deposit_bonus_ghs_ratio', 'deposit_bonus_ngn_ratio']);
+  const depCur = currency || 'GHS';
+  const amount = convertAmount(rawAmount, depCur, 'GHS', s.fx_ngn_per_ghs);
   const cashPct = Number(s.user_cashback_pct || 0);
   const commPct = Number(s.admin_commission_pct || 0);
   if (cashPct > 0) {
@@ -721,7 +728,10 @@ async function applyDepositRewards(userId, txnId, amountGhs, currency) {
     [userId, txnId]
   );
   if (priorDeps[0].n === 0) {
-    const bonus = firstDepositBonus(amount, currency || 'GHS', s);
+    // First-deposit bonus keeps its deposit-currency rule (Nigeria:
+    // half, floored to the nearest 1,000) — computed on the raw naira
+    // amount first, then converted to cedis for the credit.
+    const bonus = convertAmount(firstDepositBonus(rawAmount, depCur, s), depCur, 'GHS', s.fx_ngn_per_ghs);
     if (bonus > 0) {
       const dupe = await sql('select id from wallet_transactions where external_ref = $1', ['firstbonus:' + txnId]);
       if (!dupe.length) {
@@ -745,12 +755,12 @@ async function applyDepositRewards(userId, txnId, amountGhs, currency) {
     if (inv.length) {
       if (commPct > 0) {
         // Commission is earned in the EARNER's currency: convert the
-        // deposit amount first. Booking a naira deposit's raw number
-        // into a cedi admin's earnings paid out ~100x too much
-        // (GH₵21,000 booked on a ₦30,000 deposit, 2026-11-08).
-        const depCur = currency || 'GHS';
+        // (already GHS-normalized, see top of this function) deposit
+        // amount. Booking a naira deposit's raw number into a cedi
+        // admin's earnings paid out ~100x too much (GH₵21,000 booked
+        // on a ₦30,000 deposit, 2026-11-08).
         const earnCur = currencyOfPhone(inv[0].phone);
-        const basis = convertAmount(amount, depCur, earnCur, s.fx_ngn_per_ghs);
+        const basis = convertAmount(amount, 'GHS', earnCur, s.fx_ngn_per_ghs);
         const earn = Math.round(basis * commPct) / 100;
         if (earn > 0) {
           // Split the pot on the FIRST deposit only (Prince,
@@ -1214,6 +1224,17 @@ async function settleFlwAttempt(attempt) {
     } catch (e) { /* diagnostics only */ }
     return 'unverified';
   }
+  // NAIRA LEAK FIX (2026-11-14): payment_attempts.amount_ghs holds the
+  // PROVIDER amount — for Flutterwave that is raw naira. Crediting it
+  // as cedis booked ~116x too much (GH₵30,000 on a ₦30,000 deposit).
+  // Convert to the wallet currency (GHS) at the platform rate
+  // (fx_ngn_per_ghs, editable in Platform Control) before any credit.
+  const fxSettings = await getSettings(['fx_ngn_per_ghs']);
+  const fx = Number(fxSettings.fx_ngn_per_ghs) > 0 ? Number(fxSettings.fx_ngn_per_ghs) : 140;
+  const creditGhs = convertAmount(Number(attempt.amount_ghs), attempt.currency || 'NGN', 'GHS', fx);
+  const depNote = (attempt.currency || 'NGN') === 'NGN'
+    ? `Flutterwave deposit (NGN ${Number(attempt.amount_ghs).toLocaleString('en-GB')} @ ${fx} -> GHS ${creditGhs.toFixed(2)})`
+    : 'Flutterwave deposit';
   const out = await sql(
     `with a as (
        update payment_attempts set status = 'succeeded', settled_at = now()
@@ -1222,15 +1243,15 @@ async function settleFlwAttempt(attempt) {
      ),
      ins as (
        insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note)
-       select user_id, 'deposit', 'Flutterwave', amount_ghs, 'completed', $2, 'Flutterwave deposit'
+       select user_id, 'deposit', 'Flutterwave', $3, 'completed', $2, $4
        from a returning id
      ),
      cred as (
-       update users set balance_ghs = balance_ghs + (select amount_ghs from a)
+       update users set balance_ghs = balance_ghs + $3
        where id = (select user_id from a) returning id
      )
      select (select count(*) from a) as settled, (select id from ins) as txn_id`,
-    [attempt.id, 'flw:' + attempt.intent_id]
+    [attempt.id, 'flw:' + attempt.intent_id, creditGhs, depNote]
   );
   if (Number(out[0].settled) === 1 && out[0].txn_id) {
     await ensureAdminTables();
