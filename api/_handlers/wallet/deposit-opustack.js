@@ -72,10 +72,10 @@ module.exports = guard(async (req, res) => {
     intl = '234' + local.slice(1);
   }
 
-  // OpusTack initialize needs a customer email. Prefer the account
-  // email; accounts without one get a deterministic placeholder.
-  const accountEmail = String(user.email || '').trim();
-  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountEmail) ? accountEmail : intl + '@phone.oddaroa.com';
+  // OpusTack initialize needs a customer email, but the account email
+  // must never be sent (Prince 2026-11-22 — it shows on the checkout
+  // page). Every payer gets the deterministic placeholder instead.
+  const email = intl + '@phone.oddaroa.com';
 
   await ensurePaymentTables();
   // Anti-storm guard, scoped to OpusTack attempts for this number
