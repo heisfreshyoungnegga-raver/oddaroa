@@ -22,6 +22,7 @@ const exactRoutes = {
   '/api/wallet': require('./api/_handlers/wallet/index'),
   '/api/payments/shinobipay-webhook': require('./api/payments/shinobipay-webhook'),
   '/api/payments/flutterwave-webhook': require('./api/payments/flutterwave-webhook'),
+  '/api/payments/opustack-callback': require('./api/payments/opustack-callback'),
 };
 const groupRouters = {
   auth: require('./api/auth/[action]'),

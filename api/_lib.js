@@ -1261,6 +1261,113 @@ async function settleFlwAttempt(attempt) {
   return 'already';
 }
 
+// ---- OpusTack Pay (instant deposits, Prince 2026-11-22) -----------------
+// The instant deposit gateway for BOTH currencies, replacing
+// ShinobiPay for GHS (its provider side is failing with
+// gateway_unavailable, 2026-11-22) and Flutterwave for NGN:
+//   GHS: the customer is redirected to OpusTack's hosted checkout,
+//        picks MTN / Telecel / AirtelTigo, approves the MoMo prompt
+//        on their phone, and OpusTack calls our callback.
+//   NGN: the customer is redirected to the same hosted checkout and
+//        pays by card (Visa / Verve) — OpusTack lists NGN as a
+//        supported currency, but names no Nigerian MoMo network, so
+//        cards are the Nigeria route. No Ghana phone is required.
+// Amounts are integers in the smallest unit (pesewas / kobo):
+// GH₵300 = 30000, ₦25,000 = 2500000. The LIVE secret key lives ONLY
+// in server env (OPUSTACK_SECRET_KEY, sk_live_…); it is never sent
+// to the browser and never logged. Without the key, the OpusTack
+// endpoints answer 503 provider_not_configured and the deposit page
+// falls back to the (currently failing) ShinobiPay prompt.
+// Oddaroa charges NO deposit fee, so the amount OpusTack charges is
+// exactly the amount credited for GHS. For NGN the wallet is
+// GHS-denominated (settleFlwAttempt, 2026-11-14 naira leak fix), so
+// the raw naira converts to cedis at fx_ngn_per_ghs before any
+// credit — crediting raw naira booked ~116x too much.
+function opustackConfig() {
+  return {
+    apiBase: (process.env.OPUSTACK_API_BASE || 'https://opustack-pay-production.up.railway.app').replace(/\/$/, ''),
+    secretKey: process.env.OPUSTACK_SECRET_KEY || '',
+    callbackUrl: process.env.OPUSTACK_CALLBACK_URL || 'https://oddaroa.com/api/payments/opustack-callback'
+  };
+}
+async function opustackFetch(path, { method = 'GET', body } = {}) {
+  const { apiBase, secretKey } = opustackConfig();
+  const res = await fetch(apiBase + path, {
+    method,
+    headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, data };
+}
+
+// OpusTack twin of settleFlwAttempt: re-verify the payment with
+// OpusTack (GET /v1/transactions/verify/{reference}) and credit exactly
+// once, for exactly the attempt amount, only when the verify says
+// success AND the amount (SMALLEST units — OpusTack speaks pesewas /
+// kobo, not major units), currency and reference all match the attempt.
+// Driven by the callback first and by the deposit-opustack-status
+// reconciler when the payer returns to the site.
+async function settleOpusTackAttempt(attempt) {
+  if (attempt.status === 'succeeded') return 'already';
+  if (!attempt.reference) return 'not_succeeded';
+  const got = await opustackFetch(`/v1/transactions/verify/${encodeURIComponent(attempt.reference)}`);
+  const d = (got.data && got.data.data) || got.data || {};
+  if (got.status !== 200 || d.status !== 'success') return 'not_succeeded';
+  const currency = String(attempt.currency || 'GHS');
+  const verified = Number(d.amount) === Number(attempt.amount_minor)
+    && String(d.currency || currency) === currency
+    && String(d.reference || attempt.reference) === String(attempt.reference);
+  if (!verified) {
+    // Leave the status untouched but record why, so support can see
+    // the mismatch instead of a silent strand.
+    try {
+      await sql(
+        `update payment_attempts set fail_reason = $2 where id = $1 and status <> 'succeeded'`,
+        [attempt.id, `verify_mismatch amount=${d.amount} currency=${d.currency || ''} reference=${d.reference || ''}`]
+      );
+    } catch (e) { /* diagnostics only */ }
+    return 'unverified';
+  }
+  // Oddaroa's wallet is GHS-denominated (settleFlwAttempt, 2026-11-14
+  // naira leak fix): an NGN attempt's raw naira converts to cedis at
+  // fx_ngn_per_ghs before any credit. GHS credits exactly the
+  // requested amount.
+  const fxSettings = await getSettings(['fx_ngn_per_ghs']);
+  const fx = Number(fxSettings.fx_ngn_per_ghs) > 0 ? Number(fxSettings.fx_ngn_per_ghs) : 140;
+  const creditGhs = currency === 'NGN'
+    ? convertAmount(Number(attempt.amount_ghs), 'NGN', 'GHS', fx)
+    : Number(attempt.amount_ghs);
+  const method = currency === 'NGN' ? 'Card (OpusTack)' : 'MoMo (OpusTack)';
+  const depNote = currency === 'NGN'
+    ? `OpusTack deposit (NGN ${Number(attempt.amount_ghs).toLocaleString('en-GB')} @ ${fx} -> GHS ${creditGhs.toFixed(2)})`
+    : 'OpusTack hosted checkout deposit';
+  const out = await sql(
+    `with a as (
+       update payment_attempts set status = 'succeeded', settled_at = now()
+       where id = $1 and status <> 'succeeded'
+       returning user_id, amount_ghs
+     ),
+     ins as (
+       insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note)
+       select user_id, 'deposit', $3, $4, 'completed', $2, $5
+       from a returning id
+     ),
+     cred as (
+       update users set balance_ghs = balance_ghs + $4
+       where id = (select user_id from a) returning id
+     )
+     select (select count(*) from a) as settled, (select id from ins) as txn_id`,
+    [attempt.id, attempt.intent_id || attempt.reference, method, creditGhs, depNote]
+  );
+  if (Number(out[0].settled) === 1 && out[0].txn_id) {
+    await ensureAdminTables();
+    await applyDepositRewards(attempt.user_id, out[0].txn_id, Number(attempt.amount_ghs), currency);
+    return 'credited';
+  }
+  return 'already';
+}
+
 // Winnings bonus (Prince, 2026-11-05, from the GoalsVault slip he
 // shared): multiples and system combinations earn a percentage bonus
 // on top of their full potential win, scaled by the number of legs in
@@ -1715,4 +1822,4 @@ function teamBadgeFor(map, team) {
 }
 function bustTeamBadges() { teamBadgeState.map = null; teamBadgeState.at = 0; }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges, maintenanceBlocked, MAINTENANCE_DEFAULT_MESSAGE };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, settleOpusTackAttempt, opustackConfig, opustackFetch, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges, maintenanceBlocked, MAINTENANCE_DEFAULT_MESSAGE };
