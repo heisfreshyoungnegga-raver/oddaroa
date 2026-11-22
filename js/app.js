@@ -865,8 +865,11 @@ function trustStripHTML() {
    admin credentials and requests a withdrawal, he gets the full
    payout moment — the animated SMS, the chime and the success card —
    as if the super admin had approved it, while the request itself
-   still waits in the queue for the real approval. Normal players
-   never see any of this; they only get "waiting for admin approval". */
+   still waits in the queue for the real approval.
+   Prince, 2026-11-22: same moment for EVERY player, like ApexBet —
+   the SMS receipt + "WITHDRAWAL SUCCESSFUL" card fire on a successful
+   withdrawal request. The money itself still waits for the real
+   super-admin approval. */
 function smsPlatform() {
   const ua = (navigator && navigator.userAgent) || '';
   if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
@@ -894,6 +897,9 @@ function smsDing() {
 const SMS_APP_ICON = '<svg class="sms-face" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9.2" r="3.6" fill="#fff"/><path d="M4.8 19.4c1.2-3.1 3.9-4.7 7.2-4.7s6 1.6 7.2 4.7c.2.6-.2 1.1-.8 1.1H5.6c-.6 0-1-.5-.8-1.1Z" fill="#fff"/></svg><span class="sms-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4C6.6 4 2.2 7.5 2.2 12c0 2.5 1.4 4.8 3.7 6.1-.2 1.1-.8 2.4-1.6 3.4 0 0 2.8-.1 4.8-1.3.9.2 1.9.3 2.9.3 5.4 0 9.8-3.5 9.8-8S17.4 4 12 4Z" fill="#fff"/></svg></span>';
 function showPayoutSms(p) {
   if (document.querySelector('#smsAlert')) return;
+  // ApexBet renders the receipt with the currency CODE (GHS 2,500.00),
+  // not the symbol — match that, per the viewer's currency.
+  const fmt = v => (curCode() || 'GHS') + ' ' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const el = document.createElement('div');
   el.className = 'sms-alert';
   el.id = 'smsAlert';
@@ -901,7 +907,7 @@ function showPayoutSms(p) {
     '<div class="sms-ic">' + SMS_APP_ICON + '</div>' +
     '<div class="sms-body">' +
       '<div class="sms-head"><b>MobileMoney</b><span>now</span></div>' +
-      '<p>Payment received for <b>' + money(p.amount_ghs) + '</b> from www.oddaroa.com. Current Balance: <b>' + money(p.balance_ghs) + '</b>. Available Balance: <b>' + money(p.balance_ghs) + '</b>.</p>' +
+      '<p>Payment received for <b>' + fmt(p.amount_ghs) + '</b> from Oddaroa. Current Balance: <b>' + fmt(p.balance_ghs) + '</b>. Available Balance: <b>' + fmt(p.balance_ghs) + '</b>.</p>' +
     '</div>' +
     '<button class="sms-x" aria-label="Dismiss">&times;</button>' +
   '</div>';
@@ -1048,18 +1054,17 @@ function showPayoutSuccess(p) {
   const el = document.createElement('div');
   el.className = 'pay-overlay';
   el.id = 'paySuccess';
+  // ApexBet layout (Prince, 2026-11-22): title, green check, Done —
+  // no amount or Transactions button; the amount is in the SMS above.
   el.innerHTML = '<div class="pay-card">' +
-    '<div class="pay-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
-    '<div class="pay-title">Withdrawal successful</div>' +
-    '<p class="pay-sub">The withdrawal has been paid to ' + esc(p.phone || 'your MoMo number') + ' successfully.</p>' +
-    '<div class="pay-amt">' + money(p.amount_ghs) + '</div>' +
-    '<div class="pay-actions"><button type="button" data-pay-tx>Transactions</button><button type="button" data-pay-done>Done</button></div>' +
+    '<div class="pay-title">WITHDRAWAL SUCCESSFUL</div>' +
+    '<div class="pay-check" style="margin-top:18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
+    '<div class="pay-actions"><button type="button" data-pay-done>Done</button></div>' +
   '</div>';
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
   const close = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); };
   el.querySelector('[data-pay-done]').addEventListener('click', close);
-  el.querySelector('[data-pay-tx]').addEventListener('click', () => { close(); state.walletSection = 'history'; render(); });
   el.addEventListener('click', (e) => { if (e.target === el) close(); });
 }
 
@@ -2576,15 +2581,15 @@ document.addEventListener('submit', async e => {
       const wdData = await api('/wallet/withdraw', { method: 'POST', body: wdBody });
       await loadWallet();
       const wu = state.user || {};
-      if (wu.role === 'admin' || wu.role === 'super_admin') {
-        let wh = 0; const wraw = String((wdData.transaction && wdData.transaction.id) || '');
-        for (let i = 0; i < wraw.length; i++) wh = (wh * 31 + wraw.charCodeAt(i)) >>> 0;
-        const wp = { amount_ghs: wdAmount, phone: wu.phone || '', balance_ghs: Number(wu.balance_ghs || 0), txn_ref: String(10000000000 + (wh % 89999999999)).slice(0, 11) };
-        showPayoutSms(wp);
-        showPayoutSuccess(wp);
-      } else {
-        toast('Withdrawal requested — waiting for admin approval.');
-      }
+      // ApexBet moment for every player, not just admins (Prince,
+      // 2026-11-22): the MoMo-style receipt + "WITHDRAWAL SUCCESSFUL"
+      // card fire on a successful request. The money itself still
+      // waits for super-admin approval — this is the request going in.
+      let wh = 0; const wraw = String((wdData.transaction && wdData.transaction.id) || '');
+      for (let i = 0; i < wraw.length; i++) wh = (wh * 31 + wraw.charCodeAt(i)) >>> 0;
+      const wp = { amount_ghs: wdAmount, phone: wu.phone || '', balance_ghs: Number(wu.balance_ghs || 0), txn_ref: String(10000000000 + (wh % 89999999999)).slice(0, 11) };
+      showPayoutSms(wp);
+      showPayoutSuccess(wp);
     } catch (err) {
       if (err.code === 'maintenance_mode') { toast(err.detail || 'The site is under maintenance — please check back soon.'); return; }
       if (err.code === 'withdrawal_locked') {
