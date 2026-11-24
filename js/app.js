@@ -1527,7 +1527,7 @@ function apayPanelHTML() {
   }
   if (a && a.phase === 'wait') {
     return '<div class="card"><h3>Complete your payment</h3>' +
-      '<p>Approve the payment of <b>' + money(a.amount) + '</b> on your phone with your MoMo PIN. Your wallet is credited automatically once it lands — do not pay twice.</p>' +
+      '<p>Approve the payment on your phone with your MoMo PIN — the prompt shows your <b>' + money(a.amount) + '</b> deposit plus the AlphaPay fee. Your wallet is credited ' + money(a.amount) + ' once it lands — do not pay twice.</p>' +
       '<p class="muted">Waiting for confirmation… your balance updates automatically once the payment lands.</p>' +
       '<button class="btn" data-apay-cancel>Cancel</button></div>';
   }
@@ -1563,7 +1563,7 @@ function apayPanelHTML() {
     '<label>MoMo number <input type="tel" id="apayPhone" value="' + esc(phone) + '" required></label>' +
     '<label>Network <select id="apayNet">' + netOpts + '</select></label>' +
     '<button class="btn gold big" type="submit">Continue to Payment</button></form>' +
-    '<p class="muted">Minimum deposit is ' + sym + floor.toLocaleString('en-GB') + '. Approve the prompt on your phone with your MoMo PIN — your wallet is credited exactly the amount you pay once it lands.</p></div>';
+    '<p class="muted">Minimum deposit is ' + sym + floor.toLocaleString('en-GB') + '. Approve the prompt on your phone with your MoMo PIN — AlphaPay adds a small fee on top, so the prompt total is a little more than your deposit. Your wallet is credited the full deposit once it lands.</p></div>';
 }
 
 function walletHTML() {

@@ -1425,7 +1425,14 @@ async function settleAlphaPayAttempt(attempt) {
   // Accept the amount in minor units (30000) or major (300) — the
   // verify shape does not say which it returns.
   const amt = Number(d.amount);
-  const verified = (amt === Number(attempt.amount_minor) || amt === Number(attempt.amount_ghs))
+  // Accept the amount in minor units (30000) or major (300) — and
+  // accept MORE than the request: AlphaPay adds its fee on top
+  // (ADD_ON), so verify can report the CHARGED total (31950 for a
+  // 30000 request on Telecel, 2026-11-24). The merchant received at
+  // least what was asked, so it settles; the wallet is always
+  // credited exactly the requested amount, never the charged total.
+  // Below the request is still a mismatch.
+  const verified = (amt >= Number(attempt.amount_minor) || amt === Number(attempt.amount_ghs))
     && String(d.currency || currency) === currency
     && String(d.reference || attempt.reference) === String(attempt.reference);
   if (!verified) {
