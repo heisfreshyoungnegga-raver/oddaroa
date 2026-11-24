@@ -80,25 +80,13 @@ module.exports = guard(async (req, res) => {
   const lastName = nameParts.slice(1).join(' ') || firstName;
 
   await ensurePaymentTables();
-  // Anti-storm guard, scoped to AlphaPay attempts for this number
-  // (same rule as the other instant flows, Prince 2026-11-09): refuse
-  // early, WITHOUT poking the provider, when an AlphaPay payment is
-  // already in flight or this number was blocked within the last
-  // 30 minutes.
-  const lastTry = await sql(
-    `select status, fail_reason, created_at from payment_attempts
-     where phone = $1 and provider = 'alphapay' order by created_at desc limit 1`,
-    [intl]
-  );
-  if (lastTry.length) {
-    const ageMin = (Date.now() - new Date(lastTry[0].created_at).getTime()) / 60000;
-    if ((lastTry[0].status === 'awaiting' || lastTry[0].status === 'created') && ageMin < 10) {
-      return send(res, 409, { error: 'payment_in_progress', detail: 'A payment is already waiting for this number — approve it on the phone, or wait a few minutes for it to expire before trying again.' });
-    }
-    if (lastTry[0].fail_reason === 'number_blocked' && ageMin < 30) {
-      return send(res, 429, { error: 'number_blocked', detail: 'This phone number is temporarily blocked by the payment provider. Please wait about 30 minutes before trying again — repeated tries can extend the block.' });
-    }
-  }
+  // NO anti-storm guard here by Prince's order (2026-11-24): users
+  // may retry as many times as they want, even while another payment
+  // for this number is still awaiting. The old 10-minute in-flight
+  // 409 and the 30-minute number_blocked 429 were removed — Kilo hit
+  // the 409 on 2026-11-24 and Prince ordered the block off. Each try
+  // still gets its own attempt row + unique reference, and approving
+  // more than one live prompt charges each one separately.
   // One attempt row per try. Its reference is unique per merchant account.
   const reference = 'apay-' + crypto.randomUUID().replace(/-/g, '');
   const attemptRows = await sql(
