@@ -106,7 +106,12 @@ module.exports = guard(async (req, res) => {
       body: {
         amount: amountMinor,
         currency,
+        // The official AlphaPay SDK sends country + a customer object
+        // on every payin (its /payments/softpay/ docs page omits them,
+        // and the live API 400s without them — Kilo 2026-11-24).
+        country: currency === 'NGN' ? 'NG' : 'GH',
         phone: '+' + intl,
+        customer: { phone: '+' + intl },
         network: netCode,
         reference,
         description: 'Oddaroa wallet deposit',
@@ -142,11 +147,19 @@ module.exports = guard(async (req, res) => {
   let code = errObj.code || d.code || 'payment_failed';
   const message = (typeof d.message === 'string' && d.message)
     || (typeof errObj.message === 'string' && errObj.message)
+    || (typeof d.detail === 'string' && d.detail)
+    || (typeof errObj.detail === 'string' && errObj.detail)
     || 'The payment could not be started.';
   // A 403 means live payments are paused for this AlphaPay account —
   // a configuration problem, not a customer problem.
   if (created.status === 403) code = 'live_paused';
-  await sql(`update payment_attempts set status = 'failed', fail_reason = $2 where id = $1`, [attemptId, code]);
+  // Store the provider's raw error body (truncated) so a 400 can be
+  // diagnosed from the DB instead of guessed — the body is the only
+  // place AlphaPay says what it rejected. The plain 'number_blocked'
+  // value is kept so the anti-storm guard still matches it.
+  const rawBody = JSON.stringify(d || {}).slice(0, 400);
+  const failReason = code === 'number_blocked' ? 'number_blocked' : created.status + ':' + rawBody;
+  await sql(`update payment_attempts set status = 'failed', fail_reason = $2 where id = $1`, [attemptId, failReason]);
   if (created.status === 403) {
     return send(res, 502, { error: 'provider_config_error', detail: 'AlphaPay live payments are paused for this account. Please try again later.', reference });
   }
