@@ -29,7 +29,8 @@ module.exports = guard(async (req, res) => {
     return send(res, 202, { status: 'unknown', detail: 'Could not confirm the code. If the payment completes, your wallet is credited automatically.' });
   }
   const d = out.data || {};
-  const st = String((d.payment && d.payment.status) || d.status || '').toUpperCase();
+  const inner = (d.data && typeof d.data === 'object') ? d.data : {};
+  const st = String((d.payment && d.payment.status) || inner.status || d.status || '').toUpperCase();
   if (out.status === 200 && st) {
     if (st === 'SUCCESS') {
       const result = await settleAlphaPayAttempt(attempt);
@@ -41,7 +42,7 @@ module.exports = guard(async (req, res) => {
     }
     return send(res, 200, { reference: String(reference), status: 'awaiting' });
   }
-  const code = (d.error && d.error.code) || d.code || 'otp_failed';
-  const detail = (d.error && d.error.message) || d.message || 'That code was not accepted.';
+  const code = (d.error && d.error.code) || (inner.error && inner.error.code) || d.code || inner.code || 'otp_failed';
+  const detail = (d.error && d.error.message) || (inner.error && inner.error.message) || d.message || inner.message || 'That code was not accepted.';
   return send(res, out.status >= 400 && out.status < 500 ? out.status : 402, { error: code, detail });
 });

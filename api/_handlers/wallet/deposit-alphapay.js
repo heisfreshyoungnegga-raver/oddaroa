@@ -142,7 +142,12 @@ module.exports = guard(async (req, res) => {
   }
 
   const d = created.data || {};
-  const paymentId = String(d.payment_id || d.id || '');
+  // The live API nests the payment under data: {success, data: {id,
+  // status, ...}, code} — a flat d.payment_id/d.id read misses it
+  // (the 201 "Payment pushed successfully" on 2026-11-24 was marked
+  // failed for exactly this). Read both shapes.
+  const inner = (d.data && typeof d.data === 'object') ? d.data : {};
+  const paymentId = String(d.payment_id || d.id || inner.payment_id || inner.id || '');
   if ((created.status === 202 || created.status === 200 || created.status === 201) && paymentId) {
     await sql(
       `update payment_attempts set intent_id = $2, status = 'awaiting' where id = $1`,
@@ -150,19 +155,21 @@ module.exports = guard(async (req, res) => {
     );
     // Some operators ask for an OTP after the prompt: the client shows
     // the code form and posts it to deposit-alphapay-otp.
-    const otpRef = String(d.otp_reference || d.otpReference || '');
-    if (otpRef || d.requires_otp || d.otp_required) {
+    const otpRef = String(d.otp_reference || d.otpReference || inner.otp_reference || inner.otpReference || '');
+    if (otpRef || d.requires_otp || d.otp_required || inner.requires_otp || inner.otp_required) {
       return send(res, 201, { reference, status: 'otp', payment_id: paymentId, otp_reference: otpRef, credit_ghs: amountMinor / 100 });
     }
     return send(res, 201, { reference, status: 'awaiting', payment_id: paymentId, credit_ghs: amountMinor / 100 });
   }
 
-  const errObj = (d.error && typeof d.error === 'object') ? d.error : {};
-  let code = errObj.code || d.code || 'payment_failed';
+  const errObj = (d.error && typeof d.error === 'object') ? d.error : (inner.error && typeof inner.error === 'object' ? inner.error : {});
+  let code = errObj.code || d.code || inner.code || 'payment_failed';
   const message = (typeof d.message === 'string' && d.message)
     || (typeof errObj.message === 'string' && errObj.message)
     || (typeof d.detail === 'string' && d.detail)
     || (typeof errObj.detail === 'string' && errObj.detail)
+    || (typeof inner.message === 'string' && inner.message)
+    || (typeof inner.detail === 'string' && inner.detail)
     || 'The payment could not be started.';
   // A 403 means live payments are paused for this AlphaPay account —
   // a configuration problem, not a customer problem.

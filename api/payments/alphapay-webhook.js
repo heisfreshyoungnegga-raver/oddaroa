@@ -61,11 +61,13 @@ module.exports = async (req, res) => {
     }
     const event = JSON.parse(raw || '{}');
     const data = (event.data && typeof event.data === 'object') ? event.data : event;
+    // Some payloads nest the payment one level deeper (data.payment).
+    const pay = (data.payment && typeof data.payment === 'object') ? data.payment : {};
     await ensurePaymentTables();
 
     // Idempotency: a second delivery of the same event is a no-op.
-    const reference = String(data.reference || event.reference || '');
-    const paidAt = String(event.event_id || event.eventId || data.payment_id || data.paymentId || data.transaction_id || data.transactionId || '');
+    const reference = String(data.reference || pay.reference || event.reference || '');
+    const paidAt = String(event.event_id || event.eventId || data.payment_id || data.paymentId || pay.id || pay.payment_id || data.transaction_id || data.transactionId || '');
     eventId = 'alphapay:' + reference + ':' + paidAt;
     const seen = await sql(
       `insert into webhook_events (event_id) values ($1) on conflict (event_id) do nothing returning event_id`,
@@ -81,9 +83,11 @@ module.exports = async (req, res) => {
     if (!rows.length || rows[0].provider !== 'alphapay') return send(res, 200, { ok: true, unmatched: true });
     const attempt = rows[0];
 
-    const type = String(event.event || event.type || '');
-    const status = String(data.status || '').toUpperCase();
-    const succeeded = type === 'payment.success' || type === 'payment.completed' || (!type && status === 'SUCCESS');
+    const type = String(event.event || event.type || event.event_type || '');
+    const status = String(data.status || pay.status || '').toUpperCase();
+    // The docs name payment.* events; the official SDK names
+    // transaction.* events (transaction.success/.completed). Accept both.
+    const succeeded = type === 'payment.success' || type === 'payment.completed' || type === 'transaction.success' || type === 'transaction.completed' || (!type && status === 'SUCCESS');
     if (succeeded) {
       // Re-verify and credit through the shared settler (exactly the
       // attempt's amount, exactly once).
@@ -91,7 +95,7 @@ module.exports = async (req, res) => {
       return send(res, 200, { ok: true, credited: result === 'credited', unverified: result === 'unverified' });
     }
 
-    if (type === 'payment.failed' || type === 'payment.cancelled' || (!type && (status === 'FAILED' || status === 'CANCELLED'))) {
+    if (type === 'payment.failed' || type === 'payment.cancelled' || type === 'transaction.failed' || type === 'transaction.cancelled' || (!type && (status === 'FAILED' || status === 'CANCELLED'))) {
       await sql(`update payment_attempts set status = 'failed' where id = $1 and status <> 'succeeded'`, [attempt.id]);
       return send(res, 200, { ok: true });
     }

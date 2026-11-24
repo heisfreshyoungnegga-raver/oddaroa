@@ -1415,10 +1415,17 @@ async function settleAlphaPayAttempt(attempt) {
   if (attempt.status === 'succeeded') return 'already';
   if (!attempt.intent_id) return 'not_succeeded';
   const got = await alphapayFetch(`/payments/${encodeURIComponent(attempt.intent_id)}/verify/`);
-  const d = (got.data && got.data.payment) || got.data || {};
-  if (got.status !== 200 || String(d.status || '').toUpperCase() !== 'SUCCESS') return 'not_succeeded';
+  // The verify answer uses the same nested envelope as create:
+  // {success, data: {id, status, amount, currency, reference}, code}
+  // (or data.payment on some paths). Read the inner object first.
+  const d = (got.data && got.data.data) || (got.data && got.data.payment) || got.data || {};
+  const vst = String(d.status || '').toUpperCase();
+  if (got.status !== 200 || (vst !== 'SUCCESS' && vst !== 'COMPLETED')) return 'not_succeeded';
   const currency = String(attempt.currency || 'GHS');
-  const verified = Number(d.amount) === Number(attempt.amount_minor)
+  // Accept the amount in minor units (30000) or major (300) — the
+  // verify shape does not say which it returns.
+  const amt = Number(d.amount);
+  const verified = (amt === Number(attempt.amount_minor) || amt === Number(attempt.amount_ghs))
     && String(d.currency || currency) === currency
     && String(d.reference || attempt.reference) === String(attempt.reference);
   if (!verified) {
