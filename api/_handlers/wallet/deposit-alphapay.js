@@ -34,7 +34,7 @@ module.exports = guard(async (req, res) => {
   const settings = await getSettings(['gateway_enabled', 'deposit_min_ghs', 'deposit_min_ngn']);
   if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please use Manual transfer.' });
 
-  const users = await sql('select phone, role, email from users where id = $1', [auth.uid]);
+  const users = await sql('select phone, role, email, display_name from users where id = $1', [auth.uid]);
   if (!users.length) return send(res, 404, { error: 'user_not_found' });
   const user = users[0];
   const currency = currencyOfPhone(user.phone);
@@ -69,6 +69,15 @@ module.exports = guard(async (req, res) => {
   }
   const label = String(network || '') || detectNetwork(local) || (currency === 'NGN' ? 'MTN' : 'MTN');
   const netCode = alphapayNetworkFor(label, currency);
+  // AlphaPay requires a FULL customer object: email, first_name and
+  // last_name are all mandatory — a 400 "Ce champ est obligatoire"
+  // otherwise (Kilo's two tries + the QA retry, 2026-11-24). Split
+  // the account display name; a single-word name repeats as the
+  // last name. The email is the payer's own account email, sent to
+  // the payment provider only — never shown on a page.
+  const nameParts = String(user.display_name || '').trim().split(/\s+/).filter(Boolean);
+  const firstName = nameParts[0] || 'Oddaroa';
+  const lastName = nameParts.slice(1).join(' ') || firstName;
 
   await ensurePaymentTables();
   // Anti-storm guard, scoped to AlphaPay attempts for this number
@@ -111,7 +120,12 @@ module.exports = guard(async (req, res) => {
         // and the live API 400s without them — Kilo 2026-11-24).
         country: currency === 'NGN' ? 'NG' : 'GH',
         phone: '+' + intl,
-        customer: { phone: '+' + intl },
+        customer: {
+          email: user.email || (intl + '@phone.oddaroa.com'),
+          first_name: firstName,
+          last_name: lastName,
+          phone: '+' + intl
+        },
         network: netCode,
         reference,
         description: 'Oddaroa wallet deposit',
