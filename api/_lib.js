@@ -1368,6 +1368,109 @@ async function settleOpusTackAttempt(attempt) {
   return 'already';
 }
 
+// AlphaPay (Prince, 2026-11-23 — Softpay direct MoMo push, the second
+// instant gateway on Oddaroa next to OpusTack). Docs at
+// https://docs.alphapay.me/ (French). One secret key per merchant
+// (ALPHAPAY_SECRET_KEY, Bearer); live base https://api.alphapay.me/api/v1,
+// sandbox https://sandbox-api.alphapay.me/api/v1 — the key prefix alone
+// does NOT pick the environment, the base URL does, and a test key
+// against the live base 401s. Amounts are integer SMALLEST units
+// (pesewas / kobo); references are letters, digits and hyphens only
+// (no underscores). Network codes come from the docs catalogue:
+// GH mtn_gh / tigo_gh (AirtelTigo) / vodafone_gh (Telecel);
+// NG mtn_ng / airtel_ng.
+function alphapayConfig() {
+  return {
+    apiBase: (process.env.ALPHAPAY_API_BASE || 'https://api.alphapay.me/api/v1').replace(/\/$/, ''),
+    secretKey: process.env.ALPHAPAY_SECRET_KEY || '',
+    webhookSecret: process.env.ALPHAPAY_WEBHOOK_SECRET || ''
+  };
+}
+async function alphapayFetch(path, { method = 'GET', body } = {}) {
+  const { apiBase, secretKey } = alphapayConfig();
+  const res = await fetch(apiBase + path, {
+    method,
+    headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, data };
+}
+// Map the engine's network labels to AlphaPay's catalogue codes.
+function alphapayNetworkFor(label, currency) {
+  if (currency === 'NGN') return label === 'AIRTEL' ? 'airtel_ng' : 'mtn_ng';
+  if (label === 'TELECEL') return 'vodafone_gh';
+  if (label === 'AIRTELTIGO') return 'tigo_gh';
+  return 'mtn_gh';
+}
+
+// AlphaPay twin of settleOpusTackAttempt: re-verify the payment with
+// AlphaPay (GET /payments/{payment_id}/verify/) and credit exactly
+// once, for exactly the attempt amount, only when the verify says
+// SUCCESS and the amount (SMALLEST units), currency and reference all
+// match the attempt. The verify is keyed by payment_id (pay_…), which
+// the initiate handler stores on the attempt as intent_id. Driven by
+// the webhook first and by the deposit-alphapay-status reconciler.
+async function settleAlphaPayAttempt(attempt) {
+  if (attempt.status === 'succeeded') return 'already';
+  if (!attempt.intent_id) return 'not_succeeded';
+  const got = await alphapayFetch(`/payments/${encodeURIComponent(attempt.intent_id)}/verify/`);
+  const d = (got.data && got.data.payment) || got.data || {};
+  if (got.status !== 200 || String(d.status || '').toUpperCase() !== 'SUCCESS') return 'not_succeeded';
+  const currency = String(attempt.currency || 'GHS');
+  const verified = Number(d.amount) === Number(attempt.amount_minor)
+    && String(d.currency || currency) === currency
+    && String(d.reference || attempt.reference) === String(attempt.reference);
+  if (!verified) {
+    // Leave the status untouched but record why, so support can see
+    // the mismatch instead of a silent strand.
+    try {
+      await sql(
+        `update payment_attempts set fail_reason = $2 where id = $1 and status <> 'succeeded'`,
+        [attempt.id, `verify_mismatch amount=${d.amount} currency=${d.currency || ''} reference=${d.reference || ''}`]
+      );
+    } catch (e) { /* diagnostics only */ }
+    return 'unverified';
+  }
+  // Oddaroa's wallet is GHS-denominated (settleFlwAttempt, 2026-11-14
+  // naira leak fix): an NGN attempt's raw naira converts to cedis at
+  // fx_ngn_per_ghs before any credit. GHS credits exactly the
+  // requested amount.
+  const fxSettings = await getSettings(['fx_ngn_per_ghs']);
+  const fx = Number(fxSettings.fx_ngn_per_ghs) > 0 ? Number(fxSettings.fx_ngn_per_ghs) : 140;
+  const creditGhs = currency === 'NGN'
+    ? convertAmount(Number(attempt.amount_ghs), 'NGN', 'GHS', fx)
+    : Number(attempt.amount_ghs);
+  const method = 'MoMo (AlphaPay)';
+  const depNote = currency === 'NGN'
+    ? `AlphaPay deposit (NGN ${Number(attempt.amount_ghs).toLocaleString('en-GB')} @ ${fx} -> GHS ${creditGhs.toFixed(2)})`
+    : 'AlphaPay Softpay deposit';
+  const out = await sql(
+    `with a as (
+       update payment_attempts set status = 'succeeded', settled_at = now()
+       where id = $1 and status <> 'succeeded'
+       returning user_id, amount_ghs
+     ),
+     ins as (
+       insert into wallet_transactions (user_id, kind, method, amount_ghs, status, external_ref, note)
+       select user_id, 'deposit', $3, $4, 'completed', $2, $5
+       from a returning id
+     ),
+     cred as (
+       update users set balance_ghs = balance_ghs + $4
+       where id = (select user_id from a) returning id
+     )
+     select (select count(*) from a) as settled, (select id from ins) as txn_id`,
+    [attempt.id, attempt.intent_id || attempt.reference, method, creditGhs, depNote]
+  );
+  if (Number(out[0].settled) === 1 && out[0].txn_id) {
+    await ensureAdminTables();
+    await applyDepositRewards(attempt.user_id, out[0].txn_id, Number(attempt.amount_ghs), currency);
+    return 'credited';
+  }
+  return 'already';
+}
+
 // Winnings bonus (Prince, 2026-11-05, from the GoalsVault slip he
 // shared): multiples and system combinations earn a percentage bonus
 // on top of their full potential win, scaled by the number of legs in
@@ -1822,4 +1925,4 @@ function teamBadgeFor(map, team) {
 }
 function bustTeamBadges() { teamBadgeState.map = null; teamBadgeState.at = 0; }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, settleOpusTackAttempt, opustackConfig, opustackFetch, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges, maintenanceBlocked, MAINTENANCE_DEFAULT_MESSAGE };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, settleOpusTackAttempt, opustackConfig, opustackFetch, alphapayConfig, alphapayFetch, alphapayNetworkFor, settleAlphaPayAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges, maintenanceBlocked, MAINTENANCE_DEFAULT_MESSAGE };

@@ -1,0 +1,106 @@
+// AlphaPay webhook — the settlement signal for AlphaPay Softpay
+// deposits (Prince, 2026-11-23). POST only (Softpay has no redirect
+// landing; the client polls deposit-alphapay-status instead).
+//   Events: payment.success / payment.failed / payment.pending
+//   (+ payment.completed / payment.refunded / payment.cancelled).
+//   Signature: X-AlphaPay-Signature = HMAC-SHA256 of the raw body,
+//   keyed with the webhook signing secret (shown once when the
+//   endpoint is created in the AlphaPay dashboard). The header value
+//   is "sha256=<hex>" in the guide; raw hex is accepted too. The API
+//   reference names the same header X-Alpha-Signature and the payload
+//   fields in camelCase — both spellings are accepted here.
+// Trust rules (mirroring the OpusTack callback):
+//  1. Verify the HMAC against the RAW request bytes before trusting
+//     anything. Re-serialised JSON never matches.
+//  2. Idempotent on a namespaced event id — the AlphaPay payload
+//     carries event_id; reference + payment/transaction id is the
+//     fallback (never reused raw).
+//  3. On payment.success, RE-VERIFY with a GET to AlphaPay and credit
+//     only if it still says SUCCESS and the amount, currency and
+//     reference match the attempt. Credit happens exactly once, in one
+//     statement, for exactly the requested amount (NGN converts to
+//     cedis at fx_ngn_per_ghs — see settleAlphaPayAttempt).
+//  4. A transient failure is answered 500 so a retrying sender can
+//     redeliver (idempotency dedupes); the deposit-alphapay-status
+//     reconciler heals it either way.
+//  5. If the secret is not configured yet, answer 503 so nothing is
+//     processed unverified.
+const crypto = require('crypto');
+const { sql, send, alphapayConfig, ensurePaymentTables, settleAlphaPayAttempt } = require('../_lib');
+
+// Vercel: keep the raw body stream intact for signature verification.
+module.exports.config = { api: { bodyParser: false } };
+
+function verifySignature(rawBody, header, secret) {
+  const sig = String(header || '').trim().replace(/^sha256=/i, '');
+  if (!sig || !secret) return false;
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const a = Buffer.from(expected);
+  const b = Buffer.from(sig);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+async function readRawBody(req) {
+  if (typeof req.body === 'string') return req.body;
+  if (Buffer.isBuffer(req.body)) return req.body.toString('utf8');
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
+  const { webhookSecret } = alphapayConfig();
+  if (!process.env.DATABASE_URL || !webhookSecret) return send(res, 503, { error: 'webhook_not_configured' });
+  let eventId = '';
+  try {
+    const raw = await readRawBody(req);
+    const sigHeader = req.headers['x-alphapay-signature'] || req.headers['x-alpha-signature'];
+    if (!verifySignature(raw, sigHeader, webhookSecret)) {
+      return send(res, 401, { error: 'invalid_signature' });
+    }
+    const event = JSON.parse(raw || '{}');
+    const data = (event.data && typeof event.data === 'object') ? event.data : event;
+    await ensurePaymentTables();
+
+    // Idempotency: a second delivery of the same event is a no-op.
+    const reference = String(data.reference || event.reference || '');
+    const paidAt = String(event.event_id || event.eventId || data.payment_id || data.paymentId || data.transaction_id || data.transactionId || '');
+    eventId = 'alphapay:' + reference + ':' + paidAt;
+    const seen = await sql(
+      `insert into webhook_events (event_id) values ($1) on conflict (event_id) do nothing returning event_id`,
+      [eventId]
+    );
+    if (!seen.length) return send(res, 200, { ok: true, duplicate: true });
+
+    const rows = await sql(
+      `select id, user_id, reference, intent_id, amount_ghs, amount_minor, currency, network, status, provider
+       from payment_attempts where reference = $1`,
+      [reference]
+    );
+    if (!rows.length || rows[0].provider !== 'alphapay') return send(res, 200, { ok: true, unmatched: true });
+    const attempt = rows[0];
+
+    const type = String(event.event || event.type || '');
+    const status = String(data.status || '').toUpperCase();
+    const succeeded = type === 'payment.success' || type === 'payment.completed' || (!type && status === 'SUCCESS');
+    if (succeeded) {
+      // Re-verify and credit through the shared settler (exactly the
+      // attempt's amount, exactly once).
+      const result = await settleAlphaPayAttempt(attempt);
+      return send(res, 200, { ok: true, credited: result === 'credited', unverified: result === 'unverified' });
+    }
+
+    if (type === 'payment.failed' || type === 'payment.cancelled' || (!type && (status === 'FAILED' || status === 'CANCELLED'))) {
+      await sql(`update payment_attempts set status = 'failed' where id = $1 and status <> 'succeeded'`, [attempt.id]);
+      return send(res, 200, { ok: true });
+    }
+
+    return send(res, 200, { ok: true, ignored: type || null });
+  } catch (e) {
+    if (!res.writableEnded) send(res, 500, { error: 'webhook_error' });
+  }
+};
+
+// Exported for the local signature unit test only.
+module.exports.verifySignature = verifySignature;

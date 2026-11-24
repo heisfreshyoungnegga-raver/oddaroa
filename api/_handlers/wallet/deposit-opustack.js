@@ -2,6 +2,9 @@ const crypto = require('crypto');
 const { sql, readBody, send, guard, requireAuth, opustackConfig, opustackFetch, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, currencyOfPhone, moneyRules, depositFloorFor, maintenanceBlocked } = require('../../_lib');
 
 // Instant deposit (OpusTack hosted checkout, Prince 2026-11-22) —
+// CLOSED 2026-11-24 (Prince: AlphaPay only). New initiations are
+// refused below with 410; the status handler + callback stay
+// registered so attempts already in flight can still settle.
 // the instant gateway for BOTH currencies, replacing ShinobiPay for
 // GHS (its provider side is failing with gateway_unavailable) and
 // Flutterwave for NGN:
@@ -31,6 +34,10 @@ module.exports = guard(async (req, res) => {
   const maint = await maintenanceBlocked(auth);
   if (maint) return send(res, 503, { error: 'maintenance_mode', detail: maint });
   if (!opustackConfig().secretKey) return send(res, 503, { error: 'provider_not_configured' });
+  // OpusTack is closed for NEW deposits (Prince, 2026-11-24 — AlphaPay
+  // only). In-flight attempts still settle through
+  // deposit-opustack-status and the callback, which stay registered.
+  return send(res, 410, { error: 'gateway_replaced', detail: 'OpusTack deposits are closed — please use AlphaPay.' });
   await ensureAdminTables();
   const settings = await getSettings(['gateway_enabled', 'deposit_min_ghs', 'deposit_min_ngn']);
   if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please use Manual transfer.' });

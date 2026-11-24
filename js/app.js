@@ -34,10 +34,8 @@ const state = {
   walletTab: 'instant',
   walletSection: 'deposit',
   referrals: null,
-  momo: null,
-  momoOff: false,
-  flw: null,
-  flwOff: false,
+  apay: null,
+  apayOff: false,
   banks: null,
   wdAcctName: '',
   verifyResult: '',
@@ -900,20 +898,23 @@ function showPayoutSms(p) {
   // ApexBet renders the receipt with the currency CODE (GHS 2,500.00),
   // not the symbol — match that, per the viewer's currency.
   const fmt = v => (curCode() || 'GHS') + ' ' + Number(v || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // ApexBet's Transaction ID is 88 + 9 digits.
+  const tx = p.txn_ref || ('88' + Math.floor(100000000 + Math.random() * 900000000));
   const el = document.createElement('div');
   el.className = 'sms-alert';
   el.id = 'smsAlert';
-  el.innerHTML = '<div class="sms-card ' + smsPlatform() + '">' +
+  el.innerHTML = '<div class="sms-card sms-apex">' +
     '<div class="sms-ic">' + SMS_APP_ICON + '</div>' +
     '<div class="sms-body">' +
-      '<div class="sms-head"><b>MobileMoney</b><span>now</span></div>' +
-      '<p>Payment received for <b>' + fmt(p.amount_ghs) + '</b> from Oddaroa. Current Balance: <b>' + fmt(p.balance_ghs) + '</b>. Available Balance: <b>' + fmt(p.balance_ghs) + '</b>.</p>' +
+      '<div class="sms-head"><b>Mobile Money</b><span>now</span></div>' +
+      '<p>Payment received for ' + fmt(p.amount_ghs) + ' from Oddaroa. Current Balance: ' + fmt(p.balance_ghs) + ' . Available Balance: ' + fmt(p.balance_ghs) + '. Transaction ID: ' + esc(tx) + '. TRANSACTION FEE: 0.00</p>' +
     '</div>' +
     '<button class="sms-x" aria-label="Dismiss">&times;</button>' +
   '</div>';
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
   smsDing();
+  try { if (navigator.vibrate) navigator.vibrate([15, 60, 20]); } catch (e) {}
   const dismiss = () => { el.classList.remove('show'); setTimeout(() => el.remove(), 450); };
   el.querySelector('.sms-x').addEventListener('click', dismiss);
   el.querySelector('.sms-card').addEventListener('click', dismiss);
@@ -1052,13 +1053,13 @@ function closeWinCelebration() {
 function showPayoutSuccess(p) {
   if (document.querySelector('#paySuccess')) return;
   const el = document.createElement('div');
-  el.className = 'pay-overlay';
+  el.className = 'pay-overlay pay-apex';
   el.id = 'paySuccess';
   // ApexBet layout (Prince, 2026-11-22): title, green check, Done —
   // no amount or Transactions button; the amount is in the SMS above.
   el.innerHTML = '<div class="pay-card">' +
     '<div class="pay-title">WITHDRAWAL SUCCESSFUL</div>' +
-    '<div class="pay-check" style="margin-top:18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
+    '<div class="pay-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
     '<div class="pay-actions"><button type="button" data-pay-done>Done</button></div>' +
   '</div>';
   document.body.appendChild(el);
@@ -1484,7 +1485,7 @@ async function showFeeModal(kind, reference) {
   state.feeCtx = { kind, reference: ref };
 }
 
-/* ----- Instant MoMo deposit (ShinobiPay direct push) ----- */
+// Network guess shared by the AlphaPay panel.
 function detectNetworkJS(raw) {
   const digits = String(raw || '').replace(/[\s+]/g, '');
   const local = digits.startsWith('233') ? '0' + digits.slice(3) : digits;
@@ -1494,162 +1495,75 @@ function detectNetworkJS(raw) {
   if (['026', '027', '056', '057'].includes(p)) return 'AIRTELTIGO';
   return null;
 }
-function syncMomoFee() {
-  const line = $('#mmFeeLine');
-  if (!line) return;
-  const amt = parseFloat(($('#mmAmt') || {}).value) || 0;
-  line.textContent = amt > 0
-    ? 'You will pay exactly GHS ' + amt.toFixed(2) + ' — no extra fee. Your wallet is credited exactly GHS ' + amt.toFixed(2) + '.'
-    : '';
-}
-let momoTimer = null;
-function stopMomoPoll() { if (momoTimer) { clearInterval(momoTimer); momoTimer = null; } }
-function startMomoPoll() {
-  stopMomoPoll();
+/* ----- Instant deposit via AlphaPay Softpay (direct MoMo push, Prince 2026-11-23) ----- */
+let apayTimer = null;
+function stopApayPoll() { if (apayTimer) { clearInterval(apayTimer); apayTimer = null; } }
+function startApayPoll() {
+  stopApayPoll();
   let tries = 0;
-  momoTimer = setInterval(async () => {
+  apayTimer = setInterval(async () => {
     tries++;
-    if (!state.momo || state.momo.phase !== 'wait' || state.view !== 'wallet' || tries > 45) { stopMomoPoll(); return; }
+    if (!state.apay || state.apay.phase !== 'wait' || state.view !== 'wallet' || tries > 45) { stopApayPoll(); return; }
     try {
-      const d = await api('/wallet/deposit-status?reference=' + encodeURIComponent(state.momo.reference));
+      const d = await api('/wallet/deposit-alphapay-status?reference=' + encodeURIComponent(state.apay.reference));
       if (d.status === 'succeeded') {
-        stopMomoPoll();
-        state.momo = null;
+        stopApayPoll();
+        state.apay = null;
         toast('Deposit confirmed — your wallet has been credited.');
         loadWallet();
       } else if (d.status === 'failed') {
-        stopMomoPoll();
-        state.momo = { phase: 'failed', message: 'The payment did not go through. Nothing was charged.' };
+        stopApayPoll();
+        state.apay = { phase: 'failed', message: 'The payment did not go through. Nothing was charged.' };
         render();
       }
     } catch (e) { /* keep waiting — the webhook is the real signal */ }
   }, 4000);
 }
-function momoPanelHTML() {
-  const m = state.momo;
-  if (state.momoOff) {
-    return '<div class="card"><h3>Mobile Money</h3>' +
-      '<p class="muted">Instant mobile money deposits are being switched on. Please check back shortly.</p></div>';
+function apayPanelHTML() {
+  const a = state.apay;
+  if (state.apayOff) {
+    return '<div class="card"><h3>AlphaPay</h3>' +
+      '<p class="muted">AlphaPay deposits are being switched on. Please check back shortly.</p></div>';
   }
-  if (m && m.phase === 'wait') {
+  if (a && a.phase === 'wait') {
     return '<div class="card"><h3>Complete your payment</h3>' +
-      '<p>Finish the payment of <b>' + money(m.amount) + '</b> on the secure checkout page. Your wallet is credited automatically once it lands — do not pay twice.</p>' +
+      '<p>Approve the payment of <b>' + money(a.amount) + '</b> on your phone with your MoMo PIN. Your wallet is credited automatically once it lands — do not pay twice.</p>' +
       '<p class="muted">Waiting for confirmation… your balance updates automatically once the payment lands.</p>' +
-      '<button class="btn" data-momo-cancel>Cancel</button></div>';
+      '<button class="btn" data-apay-cancel>Cancel</button></div>';
   }
-  if (m && m.phase === 'otp') {
+  if (a && a.phase === 'otp') {
     return '<div class="card"><h3>Enter the code</h3>' +
-      '<p class="muted">Your network sent a one-time code for the deposit of <b>' + money(m.amount) + '</b>. Enter it to finish.</p>' +
-      '<form id="momoOtpForm" class="stack"><label>One-time code <input type="text" id="mmOtp" inputmode="numeric" autocomplete="one-time-code" required></label>' +
+      '<p class="muted">Your network sent a one-time code for the deposit of <b>' + money(a.amount) + '</b>. Enter it to finish.</p>' +
+      '<form id="apayOtpForm" class="stack"><label>One-time code <input type="text" id="apayOtp" inputmode="numeric" autocomplete="one-time-code" required></label>' +
       '<button class="btn gold big" type="submit">Confirm Code</button></form>' +
-      '<button class="btn" data-momo-cancel>Cancel</button></div>';
+      '<button class="btn" data-apay-cancel>Cancel</button></div>';
   }
-  if (m && m.phase === 'failed') {
+  if (a && a.phase === 'failed') {
     return '<div class="card"><h3>Payment not completed</h3>' +
-      '<p class="lock-note">' + esc(m.message || 'The payment did not go through. Nothing was charged.') + '</p>' +
-      '<button class="btn gold" data-momo-reset>Try Again</button></div>';
+      '<p class="lock-note">' + esc(a.message || 'The payment did not go through. Nothing was charged.') + '</p>' +
+      '<button class="btn gold" data-apay-reset>Try Again</button></div>';
   }
   const phone = state.user ? state.user.phone : '';
-  // Gateway deposits use Prince's preset amounts (2026-11-03): the chips
-  // fill the amount box; a custom amount can still be typed.
+  const isNgn = curCode() === 'NGN';
   const floor = depFloor();
-  const presets = [floor, 300, 500, 1000, 1500, 2000].filter((v, i, a) => v >= floor && a.indexOf(v) === i);
-  return '<div class="card"><h3>Mobile Money</h3>' +
-    '<form id="momoForm" class="stack">' +
-    '<div class="amtrow">' + presets.map(a =>
-      '<button type="button" class="amtchip' + (a === presets[0] ? ' on' : '') + '" data-amt="' + a + '">GHS ' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
-    '<label>Amount (GHS) <input type="number" id="mmAmt" min="' + floor + '" max="' + depMax() + '" step="0.01" value="' + floor + '" required></label>' +
-    '<label>MoMo number <input type="tel" id="mmPhone" value="' + esc(phone) + '" required></label>' +
-    '<label>Network <select id="mmNet"><option value="MTN">MTN Mobile Money</option><option value="TELECEL">Telecel Cash</option><option value="AIRTELTIGO">AT Money</option></select></label>' +
-    '<p class="muted" id="mmFeeLine"></p>' +
+  const presets = isNgn
+    ? (state.user && (state.user.role === 'admin' || state.user.role === 'super_admin')
+      ? [10, 100, 1000, 10000, 30000]
+      : [floor, 30000, 50000, 100000, 250000, 500000].filter((v, i, arr) => v >= floor && arr.indexOf(v) === i))
+    : [floor, 300, 500, 1000, 1500, 2000].filter((v, i, arr) => v >= floor && arr.indexOf(v) === i);
+  const sym = isNgn ? '₦' : 'GHS ';
+  const netOpts = isNgn
+    ? '<option value="MTN">MTN MoMo</option><option value="AIRTEL">Airtel Money</option>'
+    : '<option value="MTN">MTN Mobile Money</option><option value="TELECEL">Telecel Cash</option><option value="AIRTELTIGO">AT Money</option>';
+  return '<div class="card"><h3>AlphaPay</h3>' +
+    '<form id="apayForm" class="stack">' +
+    '<div class="amtrow">' + presets.map(x =>
+      '<button type="button" class="amtchip' + (x === presets[0] ? ' on' : '') + '" data-amt="' + x + '">' + sym + x.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
+    '<label>Amount (' + curCode() + ') <input type="number" id="apayAmt" min="' + floor + '" max="' + depMax() + '" step="0.01" value="' + floor + '" required></label>' +
+    '<label>MoMo number <input type="tel" id="apayPhone" value="' + esc(phone) + '" required></label>' +
+    '<label>Network <select id="apayNet">' + netOpts + '</select></label>' +
     '<button class="btn gold big" type="submit">Continue to Payment</button></form>' +
-    '<p class="muted">Minimum deposit is GHS ' + floor.toLocaleString('en-GB') + '. You will be taken to a secure page to approve the payment with your MoMo PIN — your wallet is credited automatically.</p></div>';
-}
-
-/* ----- Instant NGN deposit (legacy Flutterwave flow, superseded by OpusTack) ----- */
-let flwTimer = null;
-function stopFlwPoll() { if (flwTimer) { clearInterval(flwTimer); flwTimer = null; } }
-function startFlwPoll() {
-  stopFlwPoll();
-  let tries = 0;
-  flwTimer = setInterval(async () => {
-    tries++;
-    if (!state.flw || state.flw.phase !== 'wait' || tries > 45) { stopFlwPoll(); return; }
-    try {
-      const d = await api('/wallet/deposit-flw-status?reference=' + encodeURIComponent(state.flw.reference) +
-        (state.flw.transactionId ? '&transaction_id=' + encodeURIComponent(state.flw.transactionId) : ''));
-      if (d.status === 'succeeded') {
-        stopFlwPoll();
-        state.flw = null;
-        localStorage.removeItem('od_flw_ref'); localStorage.removeItem('od_flw_amt');
-        toast('Deposit confirmed — your wallet has been credited.');
-        loadWallet();
-        if (state.view !== 'wallet') { state.view = 'wallet'; state.walletSection = 'deposit'; render(); }
-      } else if (d.status === 'failed') {
-        stopFlwPoll();
-        state.flw = { phase: 'failed', message: 'The payment did not go through. Nothing was charged.' };
-        localStorage.removeItem('od_flw_ref'); localStorage.removeItem('od_flw_amt');
-        if (state.view === 'wallet') render();
-      }
-    } catch (e) { /* keep waiting — the webhook is the real signal */ }
-  }, 4000);
-}
-/* ----- OpusTack status poll (twin of startFlwPoll) ----- */
-let opuTimer = null;
-function stopOpuPoll() { if (opuTimer) { clearInterval(opuTimer); opuTimer = null; } }
-function startOpuPoll(kind) {
-  stopOpuPoll();
-  let tries = 0;
-  opuTimer = setInterval(async () => {
-    tries++;
-    const st = kind === 'flw' ? state.flw : state.momo;
-    if (!st || st.phase !== 'wait' || tries > 45) { stopOpuPoll(); return; }
-    try {
-      const d = await api('/wallet/deposit-opustack-status?reference=' + encodeURIComponent(st.reference));
-      if (d.status === 'succeeded') {
-        stopOpuPoll();
-        if (kind === 'flw') { state.flw = null; } else { state.momo = null; }
-        localStorage.removeItem('od_opu_ref'); localStorage.removeItem('od_opu_amt');
-        toast('Deposit confirmed — your wallet has been credited.');
-        loadWallet();
-        if (state.view !== 'wallet') { state.view = 'wallet'; state.walletSection = 'deposit'; render(); }
-      } else if (d.status === 'failed') {
-        stopOpuPoll();
-        const msg = 'The payment did not go through. Nothing was charged.';
-        if (kind === 'flw') { state.flw = { phase: 'failed', message: msg }; } else { state.momo = { phase: 'failed', message: msg }; }
-        localStorage.removeItem('od_opu_ref'); localStorage.removeItem('od_opu_amt');
-        if (state.view === 'wallet') render();
-      }
-    } catch (e) { /* keep waiting — the webhook is the real signal */ }
-  }, 4000);
-}
-function flwPanelHTML() {
-  const f = state.flw;
-  if (state.flwOff) {
-    return '<div class="card"><h3>OpusTack</h3>' +
-      '<p class="muted">Instant deposits are being switched on. Please check back shortly.</p></div>';
-  }
-  if (f && f.phase === 'wait') {
-    return '<div class="card"><h3>Complete your payment</h3>' +
-      '<p>Finish the payment of <b>' + money(f.amount) + '</b> on OpusTack\'s secure page. Your wallet is credited automatically once it lands — do not pay twice.</p>' +
-      '<p class="muted">Waiting for confirmation…</p>' +
-      '<button class="btn" data-flw-cancel>Cancel</button></div>';
-  }
-  if (f && f.phase === 'failed') {
-    return '<div class="card"><h3>Payment not completed</h3>' +
-      '<p class="lock-note">' + esc(f.message || 'The payment did not go through. Nothing was charged.') + '</p>' +
-      '<button class="btn gold" data-flw-reset>Try Again</button></div>';
-  }
-  const flwAdminTier = state.user && (state.user.role === 'admin' || state.user.role === 'super_admin');
-  const flwFloor = flwAdminTier ? 10 : depFloor();
-  const presets = flwAdminTier ? [10, 100, 1000, 10000, 30000] : [flwFloor, 30000, 50000, 100000, 250000, 500000].filter((v, i, a) => v >= flwFloor && a.indexOf(v) === i);
-  return '<div class="card"><h3>OpusTack</h3>' +
-    '<form id="flwForm" class="stack">' +
-    '<div class="amtrow">' + presets.map(a =>
-      '<button type="button" class="amtchip' + (a === presets[0] ? ' on' : '') + '" data-amt="' + a + '">₦' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
-    '<label>Amount (₦) <input type="number" id="flwAmt" min="' + flwFloor + '" max="2000000" step="0.01" value="' + flwFloor + '" required></label>' +
-    '<button class="btn gold big" type="submit">Deposit with OpusTack</button></form>' +
-    '<p class="muted">Pay by card on OpusTack\'s secure page. Minimum deposit is ₦' + flwFloor.toLocaleString('en-GB') + '. Your wallet is credited automatically once the payment lands.</p></div>';
+    '<p class="muted">Minimum deposit is ' + sym + floor.toLocaleString('en-GB') + '. Approve the prompt on your phone with your MoMo PIN — your wallet is credited exactly the amount you pay once it lands.</p></div>';
 }
 
 function walletHTML() {
@@ -1660,7 +1574,7 @@ function walletHTML() {
     '<div class="txrow"><div><b>' + esc(t.kind.replace('_', ' ')) + '</b><div class="muted">' + fmtDate(t.created_at) + ' · ' + esc(t.method || '') + '</div></div>' +
     '<div class="' + (t.amount_ghs >= 0 ? 'amt pos' : 'amt') + '">' + (t.amount_ghs >= 0 ? '+' : '−') + curSym() + Math.abs(t.amount_ghs).toFixed(2) + '</div>' +
     (t.kind === 'withdrawal' && t.status === 'pending' ? '<span class="st st-pending">WAITING FOR ADMIN APPROVAL</span>' : statusChip(t.status)) + '</div>').join('');
-  const depositPanel = curCode() === 'NGN' ? flwPanelHTML() : momoPanelHTML();
+  const depositPanel = apayPanelHTML();
   // Deposit, Withdraw and History are separate views inside the wallet.
   const sec = state.walletSection;
   const sectionTabs = '<div class="wtabs">' +
@@ -1831,7 +1745,6 @@ function render() {
     b.classList.toggle('active', b.dataset.nav === state.view));
   document.querySelectorAll('.bn-item').forEach(b =>
     b.classList.toggle('on', b.dataset.nav === state.view));
-  if ($('#mmFeeLine')) syncMomoFee();
   syncSiteCountry();
   if (window.OddaroaGames) OddaroaGames.afterRender();
 }
@@ -2389,8 +2302,8 @@ document.addEventListener('click', e => {
   if (rm) { state.slip.delete(rm.dataset.rm); delete singleStakes[rm.dataset.rm]; renderSlip(); syncOddSelection(); return; }
   const amtChip = e.target.closest('[data-amt]');
   if (amtChip) {
-    const inp = $('#mmAmt') || $('#flwAmt');
-    if (inp) { inp.value = amtChip.dataset.amt; syncMomoFee(); }
+    const inp = $('#apayAmt');
+    if (inp) { inp.value = amtChip.dataset.amt; }
     document.querySelectorAll('.amtchip').forEach(c => c.classList.toggle('on', c === amtChip));
     return;
   }
@@ -2440,12 +2353,6 @@ document.addEventListener('click', e => {
   }
   const wsec = e.target.closest('[data-wsec]');
   if (wsec) { state.walletSection = wsec.dataset.wsec; render(); return; }
-  if (e.target.closest('[data-momo-cancel]') || e.target.closest('[data-momo-reset]')) {
-    stopMomoPoll(); stopOpuPoll(); state.momo = null; localStorage.removeItem('od_opu_ref'); localStorage.removeItem('od_opu_amt'); render(); return;
-  }
-  if (e.target.closest('[data-flw-cancel]') || e.target.closest('[data-flw-reset]')) {
-    stopFlwPoll(); stopOpuPoll(); state.flw = null; localStorage.removeItem('od_flw_ref'); localStorage.removeItem('od_flw_amt'); localStorage.removeItem('od_opu_ref'); localStorage.removeItem('od_opu_amt'); render(); return;
-  }
   const cp = e.target.closest('[data-copy]');
   if (cp) {
     if (navigator.clipboard) navigator.clipboard.writeText(cp.dataset.copy).catch(() => {});
@@ -2469,82 +2376,69 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('input', e => {
-  if (e.target.id === 'mmAmt') {
-    syncMomoFee();
+  if (e.target.id === 'apayAmt') {
     document.querySelectorAll('.amtchip').forEach(c =>
       c.classList.toggle('on', Number(c.dataset.amt) === Number(e.target.value)));
   }
-  if (e.target.id === 'mmPhone') {
+  if (e.target.id === 'apayPhone') {
     const n = detectNetworkJS(e.target.value);
-    const sel = $('#mmNet');
+    const sel = $('#apayNet');
     if (n && sel) sel.value = n;
   }
 });
 
 document.addEventListener('submit', async e => {
   const id = e.target.id;
-  if (id === 'momoForm') {
+  if (id === 'apayForm') {
     e.preventDefault();
-    const amt = parseFloat($('#mmAmt').value) || 0;
-    const phone = $('#mmPhone').value.trim();
+    const amt = parseFloat($('#apayAmt').value) || 0;
+    const phone = $('#apayPhone').value.trim();
+    const network = $('#apayNet').value;
     try {
-      const d = await api('/wallet/deposit-opustack', {
-        method: 'POST',
-        body: { amount_ghs: amt, phone, network: $('#mmNet').value }
-      });
+      const d = await api('/wallet/deposit-alphapay', { method: 'POST', body: { amount_ghs: amt, phone, network } });
       if (d.status === 'unknown') {
-        state.momo = { phase: 'failed', message: d.detail || 'We could not confirm the payment request. If a prompt arrives, approve it once — do not pay twice.' };
+        state.apay = { phase: 'failed', message: d.detail || 'We could not confirm the payment request. If a prompt arrives, approve it once — do not pay twice.' };
         render();
-      } else if (d.link) {
-        localStorage.setItem('od_opu_ref', d.reference);
-        localStorage.setItem('od_opu_amt', String(amt));
-        state.momo = { phase: 'wait', reference: d.reference, phone, amount: amt };
+      } else if (d.status === 'otp') {
+        state.apay = { phase: 'otp', reference: d.reference, otp_reference: d.otp_reference || '', amount: amt };
         render();
-        location.href = d.link;
+      } else if (d.status === 'awaiting') {
+        state.apay = { phase: 'wait', reference: d.reference, phone, amount: amt };
+        startApayPoll();
+        render();
       } else {
-        state.momo = { phase: 'failed', message: 'The payment could not be started. Nothing was charged.' };
+        state.apay = { phase: 'failed', message: 'The payment could not be started. Nothing was charged.' };
         render();
       }
     } catch (err) {
       if (err.code === 'provider_not_configured' || err.code === 'gateway_disabled') {
-        state.momoOff = true;
+        state.apayOff = true;
         render();
-        toast('Instant deposits are switched off right now — please try again shortly.');
+        toast('AlphaPay deposits are switched off right now — please try again shortly.');
       } else {
-        state.momo = { phase: 'failed', message: err.detail || 'The payment could not be started. Nothing was charged.' };
+        state.apay = { phase: 'failed', message: err.detail || 'The payment could not be started. Nothing was charged.' };
         render();
       }
     }
-  } else if (id === 'flwForm') {
-    e.preventDefault();
-    const amt = parseFloat($('#flwAmt').value) || 0;
-    try {
-      const d = await api('/wallet/deposit-opustack', { method: 'POST', body: { amount_ghs: amt } });
-      localStorage.setItem('od_opu_ref', d.reference);
-      localStorage.setItem('od_opu_amt', String(amt));
-      state.flw = { phase: 'wait', reference: d.reference, amount: amt };
-      render();
-      location.href = d.link;
-    } catch (err) {
-      if (err.code === 'provider_not_configured' || err.code === 'gateway_disabled') {
-        state.flwOff = true;
-        render();
-        toast('Instant deposits are switched off right now — please try again shortly.');
-      } else {
-        state.flw = { phase: 'failed', message: err.detail || 'The payment could not be started. Nothing was charged.' };
-        render();
-      }
-    }
-  } else if (id === 'momoOtpForm') {
+  } else if (id === 'apayOtpForm') {
     e.preventDefault();
     try {
-      await api('/wallet/deposit-otp', {
+      const d = await api('/wallet/deposit-alphapay-otp', {
         method: 'POST',
-        body: { reference: state.momo.reference, otp: $('#mmOtp').value.trim() }
+        body: { reference: state.apay.reference, otp: $('#apayOtp').value.trim(), otp_reference: state.apay.otp_reference || '' }
       });
-      state.momo.phase = 'wait';
-      startMomoPoll();
-      render();
+      if (d.status === 'succeeded') {
+        state.apay = null;
+        toast('Deposit confirmed — your wallet has been credited.');
+        loadWallet();
+      } else if (d.status === 'failed') {
+        state.apay = { phase: 'failed', message: 'The payment did not go through. Nothing was charged.' };
+        render();
+      } else {
+        state.apay.phase = 'wait';
+        startApayPoll();
+        render();
+      }
     } catch (err) { toast(err.detail || 'That code was not accepted — check it and try again.'); }
   } else if (id === 'joinForm') {
     e.preventDefault();
@@ -2587,7 +2481,7 @@ document.addEventListener('submit', async e => {
       // waits for super-admin approval — this is the request going in.
       let wh = 0; const wraw = String((wdData.transaction && wdData.transaction.id) || '');
       for (let i = 0; i < wraw.length; i++) wh = (wh * 31 + wraw.charCodeAt(i)) >>> 0;
-      const wp = { amount_ghs: wdAmount, phone: wu.phone || '', balance_ghs: Number(wu.balance_ghs || 0), txn_ref: String(10000000000 + (wh % 89999999999)).slice(0, 11) };
+      const wp = { amount_ghs: wdAmount, phone: wu.phone || '', balance_ghs: Number(wu.balance_ghs || 0), txn_ref: '88' + String(100000000 + (wh % 900000000)) };
       showPayoutSms(wp);
       showPayoutSuccess(wp);
     } catch (err) {
@@ -2882,31 +2776,6 @@ setInterval(() => {
 const urlParams = new URLSearchParams(location.search);
 if (urlParams.get('ref')) localStorage.setItem('od_ref', urlParams.get('ref'));
 if (urlParams.get('admin_invite')) localStorage.setItem('od_admin_invite', urlParams.get('admin_invite'));
-// Returning from Flutterwave checkout: pick the attempt back up and
-// let the reconciler poll settle it — the webhook usually beats the
-// browser back, in which case the first poll already says succeeded.
-if (urlParams.get('flw_return')) {
-  const flwRef = localStorage.getItem('od_flw_ref');
-  if (flwRef) {
-    state.flw = { phase: 'wait', reference: flwRef, amount: Number(localStorage.getItem('od_flw_amt') || 0), transactionId: urlParams.get('transaction_id') || '' };
-    startFlwPoll();
-  }
-  history.replaceState(null, '', location.pathname);
-}
-// Returning from the OpusTack checkout: pick the attempt back up and
-// let the OpusTack reconciler poll settle it. The panel follows the
-// account currency (NGN → card panel, GHS → MoMo panel).
-if (urlParams.get('opu_return')) {
-  const opuRef = urlParams.get('reference') || localStorage.getItem('od_opu_ref');
-  if (opuRef) {
-    const kind = curCode() === 'NGN' ? 'flw' : 'momo';
-    const amt = Number(localStorage.getItem('od_opu_amt') || 0);
-    if (kind === 'flw') { state.flw = { phase: 'wait', reference: opuRef, amount: amt }; }
-    else { state.momo = { phase: 'wait', reference: opuRef, phone: (state.user && state.user.phone) || '', amount: amt }; }
-    startOpuPoll(kind);
-  }
-  history.replaceState(null, '', location.pathname);
-}
 loadHeroImages();
 loadTileImages();
 if (urlParams.get('admin_invite')) openAuth('register');
