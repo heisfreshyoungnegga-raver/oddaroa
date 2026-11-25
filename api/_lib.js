@@ -554,6 +554,20 @@ function ensureAdminTables() {
       // from the full account block in block.js (status='blocked').
       await sql(`alter table users add column if not exists stake_blocked boolean not null default false`);
       await sql(`alter table users add column if not exists stake_block_message text`);
+      // User Stakes one-game blocks (Prince, 2026-11-25, push 145):
+      // one player, one match. No FKs on purpose — a deleted match
+      // or user must never block the other's delete, and the handler
+      // validates both exist at block time; a stale row simply never
+      // matches a live slip.
+      await sql(`create table if not exists user_game_blocks (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid not null,
+        match_id uuid not null,
+        message text,
+        created_by uuid,
+        created_at timestamptz not null default now(),
+        unique (user_id, match_id)
+      )`);
       await sql(`create table if not exists adapter_manual_fees (
         id uuid primary key default gen_random_uuid(),
         user_id uuid references users (id),

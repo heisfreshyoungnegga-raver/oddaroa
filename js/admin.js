@@ -745,15 +745,27 @@ function stakesHTML() {
   const blocked = state.stakeBlocked;
   const loop = state.stakeLoop;
   const results = state.stakeSearch;
+  const gameBlocks = state.stakeGameBlocks;
   let html = tabsHTML() + '<div class="card"><h3>User Stakes</h3>' +
     '<p class="muted">Stop the free-code loop: block a player from staking — betslip and casino games — while they can still log in, deposit and withdraw. When they try to stake they see your message, or the default: <b>“This game is currently unavailable.”</b></p>' +
     '<div class="bform"><input type="text" id="stakeSearch" placeholder="Search by phone or name" value="' + esc(state.stakeQuery || '') + '">' +
     '<button class="btn gold sm" id="stakeSearchBtn">Search</button></div>' +
     (results === undefined ? '' : (results.length ? results.map(stakeRowHTML).join('') : '<p class="empty">No player matches that search.</p>'));
+  html += '<h3>Block a game for a player</h3><p class="muted">Pick a player, then a game. They will see your message (or the default) when they try to stake that game — in any slip. Their other games stay open.</p>' +
+    '<div class="bform"><input type="text" id="stakeGamePlayer" placeholder="Player phone or name" value="' + esc(state.stakeGamePlayerQ || '') + '">' +
+    '<button class="btn sm" id="stakeGamePlayerBtn">Find player</button></div>' +
+    (state.stakeGamePlayer === undefined ? '' : (state.stakeGamePlayer ? stakeGamePlayerHTML(state.stakeGamePlayer) : '<p class="empty">No player matches that search.</p>'));
   html += '<h3>Staking without depositing — last 7 days</h3><p class="muted">Players who placed bets in the last 7 days but made no deposit in that time. These are the ones living off free codes.</p>';
   if (loop === undefined) html += '<p class="muted">Loading…</p>';
   else if (!loop.length) html += '<p class="empty">Nobody is staking without depositing right now.</p>';
   else html += loop.map(stakeRowHTML).join('');
+  html += '<h3>Blocked games</h3>';
+  if (gameBlocks === undefined) html += '<p class="muted">Loading…</p>';
+  else if (!gameBlocks.length) html += '<p class="empty">No game is blocked for any player.</p>';
+  else html += gameBlocks.map(g => '<div class="txrow"><div><b>' + esc(g.display_name || 'Player') + '</b> <span class="muted">' + esc(g.phone) + '</span>' +
+    '<div class="muted">' + esc(g.home_team || '—') + ' vs ' + esc(g.away_team || '—') + ' · ' + esc(g.league || '') + ' · ' + (g.starts_at ? fmtDate(g.starts_at) : '') + '</div>' +
+    '<div class="muted">They see: “' + esc(g.message || 'This game is currently unavailable.') + '”</div>' +
+    '<button class="btn sm" data-stake-game-unblock="' + g.user_id + ':' + g.match_id + '">Unblock game</button></div></div>').join('');
   html += '<h3>Currently blocked</h3>';
   if (blocked === undefined) html += '<p class="muted">Loading…</p>';
   else if (!blocked.length) html += '<p class="empty">No player is stake-blocked.</p>';
@@ -767,11 +779,64 @@ async function loadStakes(force) {
   try {
     const d = await api('/admin/stake-block' + (state.stakeQuery ? '?q=' + encodeURIComponent(state.stakeQuery) : ''));
     if (state.stakeQuery) state.stakeSearch = d.users || [];
-    else { state.stakeBlocked = d.blocked || []; state.stakeLoop = d.loop || []; state.stakeSearch = undefined; }
+    else { state.stakeBlocked = d.blocked || []; state.stakeLoop = d.loop || []; state.stakeGameBlocks = d.game_blocks || []; state.stakeSearch = undefined; }
   } catch (e) { toast('User Stakes could not load just now.'); }
   state.stakesLoading = false;
   if (state.tab === 'stakes') render();
 }
+
+function stakeGamePlayerHTML(u) {
+  let h = '<div class="txrow"><div><b>' + esc(u.display_name || 'Player') + '</b> <span class="muted">' + esc(u.phone) + '</span></div></div>' +
+    '<div class="bform"><input type="text" id="stakeGameMatch" placeholder="Search a game by team name" value="' + esc(state.stakeGameMatchQ || '') + '">' +
+    '<button class="btn sm" id="stakeGameMatchBtn">Find game</button></div>';
+  const ms = state.stakeGameMatches;
+  if (ms !== undefined) {
+    h += ms.length ? ms.map(m => '<div class="txrow"><div><b>' + esc(m.home_team) + ' vs ' + esc(m.away_team) + '</b> <span class="muted">' + esc(m.league || '') + ' · ' + fmtDate(m.starts_at) + ' · ' + esc(m.status) + '</span>' +
+      '<div class="bform"><input type="text" id="sgmsg-' + m.id + '" placeholder="Message (blank = default)" maxlength="200">' +
+      '<button class="btn gold sm" data-stake-game-block="' + m.id + '">Block this game</button></div></div></div>').join('')
+      : '<p class="empty">No game matches that search.</p>';
+  }
+  return h;
+}
+async function stakeFindGamePlayer() {
+  const q = (($('#stakeGamePlayer') || {}).value || '').trim();
+  if (!q) { toast('Type a phone number or name first.'); return; }
+  state.stakeGamePlayerQ = q; state.stakeGameMatches = undefined;
+  try {
+    const d = await api('/admin/stake-block?q=' + encodeURIComponent(q));
+    state.stakeGamePlayer = (d.users && d.users[0]) || null;
+  } catch (e) { toast('Player search could not load just now.'); }
+  if (state.tab === 'stakes') render();
+}
+async function stakeFindGameMatch() {
+  const q = (($('#stakeGameMatch') || {}).value || '').trim();
+  if (!q) { toast('Type a team name first.'); return; }
+  state.stakeGameMatchQ = q;
+  try {
+    const d = await api('/admin/stake-block?mq=' + encodeURIComponent(q));
+    state.stakeGameMatches = d.matches || [];
+  } catch (e) { toast('Game search could not load just now.'); }
+  if (state.tab === 'stakes') render();
+}
+async function stakeBlockGame(matchId) {
+  if (!state.stakeGamePlayer) { toast('Pick a player first.'); return; }
+  const msg = (($('#sgmsg-' + matchId) || {}).value || '').trim();
+  try {
+    await api('/admin/stake-block', { method: 'POST', body: { id: state.stakeGamePlayer.id, action: 'block_game', match_id: matchId, message: msg } });
+    toast('That game is blocked for this player.');
+    state.stakeBlocked = undefined; state.stakeLoop = undefined; state.stakeGameBlocks = undefined; state.stakeGameMatches = undefined; loadStakes(true);
+  } catch (e) { toast(e.message || 'Could not block the game.'); }
+}
+async function stakeUnblockGame(key) {
+  const parts = String(key).split(':');
+  if (parts.length !== 2) { toast('Could not unblock the game.'); return; }
+  try {
+    await api('/admin/stake-block', { method: 'POST', body: { id: parts[0], action: 'unblock_game', match_id: parts[1] } });
+    toast('That game is unblocked for this player.');
+    state.stakeBlocked = undefined; state.stakeLoop = undefined; state.stakeGameBlocks = undefined; loadStakes(true);
+  } catch (e) { toast(e.message || 'Could not unblock the game.'); }
+}
+
 async function stakeBlockUser(id) {
   const msg = (($('#smsg-' + id) || {}).value || '').trim();
   try {
@@ -1174,6 +1239,12 @@ document.addEventListener('click', async e => {
   if (stakeBlock) { stakeBlockUser(stakeBlock.dataset.stakeBlock); return; }
   const stakeUnblock = e.target.closest ? e.target.closest('[data-stake-unblock]') : null;
   if (stakeUnblock) { stakeUnblockUser(stakeUnblock.dataset.stakeUnblock); return; }
+  if (e.target.id === 'stakeGamePlayerBtn') { stakeFindGamePlayer(); return; }
+  if (e.target.id === 'stakeGameMatchBtn') { stakeFindGameMatch(); return; }
+  const stakeGameBlock = e.target.closest ? e.target.closest('[data-stake-game-block]') : null;
+  if (stakeGameBlock) { stakeBlockGame(stakeGameBlock.dataset.stakeGameBlock); return; }
+  const stakeGameUnblock = e.target.closest ? e.target.closest('[data-stake-game-unblock]') : null;
+  if (stakeGameUnblock) { stakeUnblockGame(stakeGameUnblock.dataset.stakeGameUnblock); return; }
   const bsave = e.target.closest ? e.target.closest('[data-bsave]') : null;
   if (bsave) {
     const i = Number(bsave.dataset.bsave);

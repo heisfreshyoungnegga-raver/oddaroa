@@ -1,22 +1,27 @@
-const { sql, readBody, send, guard, requireSuperAdmin, ensureAdminTables } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireSuperAdmin, ensureAdminTables } = require('../../_lib');
 
 // Super admin only: the User Stakes tab (Prince, 2026-11-25).
 // The free-code loop: the super admin hands players winning booking
 // codes as compensation for losses, and some players stop depositing
 // altogether — they just wait for the next free code. This tab lets the
-// super admin deny a player's stakes (betslip AND casino games) while
-// the player can still log in, deposit and withdraw. When a blocked
-// player tries to stake, place.js / games/start.js answer 403
-// stake_blocked with the custom message, or the default
-// "This game is currently unavailable." when no message was set.
+// super admin deny a player's stakes while the player can still log
+// in, deposit and withdraw.
+//   (a) Whole-player block (push 144): stake_blocked on users — no
+//       staking at all (betslip AND casino games), with a custom
+//       message or the default "This game is currently unavailable."
+//   (b) One-game block (push 145, Prince's correction: "not block
+//       stake just block that staked game like that slip"): a row in
+//       user_game_blocks denies ONE player ONE match — any slip
+//       containing that game is refused in place.js with the block's
+//       message (or the default). Their other games stay open.
 //   GET  ?q=<phone or name> — search players (10 max).
-//   GET  (no q) — { blocked: [...], loop: [...] }; loop = players who
-//     placed bets in the last 7 days but made no completed deposit in
-//     that time, most bets first (20 max). Those are the free-code
-//     riders the tab exists to catch.
-//   POST { id, action: 'block'|'unblock', message? } — block stores
-//     the message (trimmed, 200 chars max; blank = default message);
-//     unblock clears both the flag and the message.
+//   GET  ?mq=<team name> — search upcoming/live matches (10 max).
+//   GET  (no q) — { blocked: [...], loop: [...], game_blocks: [...] };
+//     loop = players who placed bets in the last 7 days but made no
+//     completed deposit in that time, most bets first (20 max).
+//   POST { id, action: 'block'|'unblock', message? } — whole-player.
+//   POST { id, action: 'block_game'|'unblock_game', match_id, message? }
+//     — one-game block (upsert on re-block, so the message can change).
 const DEFAULT_MSG = 'This game is currently unavailable.';
 
 function row(u) {
@@ -49,6 +54,19 @@ module.exports = guard(async (req, res) => {
         [like]);
       return send(res, 200, { users: rows.map(row) });
     }
+    const mq = String((req.query && req.query.mq) || '').trim();
+    if (mq) {
+      const like = '%' + mq.replace(/[%_\\]/g, '\\$&') + '%';
+      const matches = await msql(
+        `select id, league, home_team, away_team, starts_at, status from matches
+         where status in ('upcoming', 'live') and (home_team ilike $1 or away_team ilike $1)
+         order by starts_at asc limit 10`,
+        [like]);
+      return send(res, 200, { matches: matches.map(m => ({
+        id: m.id, league: m.league, home_team: m.home_team, away_team: m.away_team,
+        starts_at: m.starts_at, status: m.status,
+      })) });
+    }
     const blocked = await sql(
       `select u.id, u.phone, u.display_name, u.balance_ghs, u.stake_blocked, u.stake_block_message,
          coalesce((select sum(amount_ghs) from wallet_transactions where user_id = u.id and kind = 'deposit' and status = 'completed'), 0) as lifetime_deposited
@@ -62,15 +80,47 @@ module.exports = guard(async (req, res) => {
        where u.role = 'player'
          and not exists (select 1 from wallet_transactions where user_id = u.id and kind = 'deposit' and status = 'completed' and created_at > now() - interval '7 days')
        group by u.id order by bets_7d desc limit 20`);
-    return send(res, 200, { blocked: blocked.map(row), loop: loop.map(row) });
+    const gameBlocks = await sql(
+      `select b.user_id, b.match_id, b.message, b.created_at,
+         u.display_name, u.phone, m.home_team, m.away_team, m.league, m.starts_at, m.status
+       from user_game_blocks b
+       join users u on u.id = b.user_id
+       left join matches m on m.id = b.match_id
+       order by b.created_at desc`);
+    return send(res, 200, {
+      blocked: blocked.map(row),
+      loop: loop.map(row),
+      game_blocks: gameBlocks.map(g => ({
+        user_id: g.user_id, match_id: g.match_id, message: g.message || null,
+        display_name: g.display_name, phone: g.phone,
+        home_team: g.home_team, away_team: g.away_team, league: g.league,
+        starts_at: g.starts_at, status: g.status,
+      })),
+    });
   }
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
-  const { id, action, message } = await readBody(req);
-  if (!id || !['block', 'unblock'].includes(action)) return send(res, 400, { error: 'invalid_request' });
+  const { id, action, message, match_id } = await readBody(req);
+  if (!id || !['block', 'unblock', 'block_game', 'unblock_game'].includes(action)) return send(res, 400, { error: 'invalid_request' });
   if (id === auth.uid) return send(res, 400, { error: 'cannot_block_self' });
   const target = await sql('select id, role, display_name, phone from users where id = $1', [id]);
   if (!target.length) return send(res, 404, { error: 'user_not_found' });
   if (target[0].role !== 'player') return send(res, 403, { error: 'players_only', detail: 'Only player accounts can be stake-blocked.' });
+  if (action === 'block_game' || action === 'unblock_game') {
+    if (!match_id) return send(res, 400, { error: 'invalid_request', detail: 'A game is required.' });
+    const m = await msql('select id from matches where id = $1', [match_id]);
+    if (!m.length) return send(res, 404, { error: 'match_not_found' });
+    if (action === 'block_game') {
+      const msg = String(message || '').trim().slice(0, 200) || null;
+      await sql(
+        `insert into user_game_blocks (user_id, match_id, message, created_by) values ($1, $2, $3, $4)
+         on conflict (user_id, match_id) do update set message = excluded.message, created_at = now()`,
+        [id, match_id, msg, auth.uid]);
+      return send(res, 200, { ok: true, default_message: DEFAULT_MSG });
+    }
+    const gone = await sql('delete from user_game_blocks where user_id = $1 and match_id = $2 returning id', [id, match_id]);
+    if (!gone.length) return send(res, 404, { error: 'no_block', detail: 'That game is not blocked for this player.' });
+    return send(res, 200, { ok: true });
+  }
   if (action === 'block') {
     const msg = String(message || '').trim().slice(0, 200) || null;
     const rows = await sql(

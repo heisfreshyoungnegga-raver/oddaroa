@@ -75,6 +75,16 @@ module.exports = guard(async (req, res) => {
     clean.push({ match_id: m.id, market: s.market, pick: s.pick, odds });
   }
 
+  // User Stakes one-game block (Prince, 2026-11-25, push 145): the
+  // super admin can deny one player one game — any slip containing
+  // that game is refused with the block's message (or the default).
+  // Their other games stay open. Checked after the matches are
+  // validated, before any ticket is built.
+  const gb = await sql(
+    `select message from user_game_blocks where user_id = $1 and match_id = any($2::uuid[]) order by created_at limit 1`,
+    [auth.uid, clean.map(s => s.match_id)]);
+  if (gb.length) return send(res, 403, { error: 'stake_blocked', detail: gb[0].message || STAKE_BLOCKED_DEFAULT_MESSAGE });
+
   // Build the tickets for the requested mode.
   let tickets = [];
   if (mode === 'single') {
