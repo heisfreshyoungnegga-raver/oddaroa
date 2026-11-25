@@ -152,9 +152,13 @@ function currencyOfPhone(phone) {
 // Per-currency money rules: deposit floors/ceilings, the verification
 // deposit ask, game stake bounds and where the referral bonus setting
 // lives. NGN figures are the platform equivalents of the GHS ones.
+// minWithdraw = minimum withdrawal request (Prince, 2026-11-25: GHS 2,000
+// / NGN 232,000, on top of the Stage 1+2+3 gates). minBetStake = minimum
+// sportsbook stake per ticket (Prince, 2026-11-25: GHS 300 / NGN 34,800).
+// The casino games keep minStake (GHS 1 / NGN 100).
 const CURRENCY_RULES = {
-  GHS: { symbol: 'GHS ', minDeposit: 210, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000, bonusKey: 'referral_deposit_bonus_ghs', bonusDefault: 0 },
-  NGN: { symbol: '\u20a6', minDeposit: 25000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000, bonusKey: 'referral_deposit_bonus_ngn', bonusDefault: 5000 }
+  GHS: { symbol: 'GHS ', minDeposit: 210, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000, minWithdraw: 2000, minBetStake: 300, bonusKey: 'referral_deposit_bonus_ghs', bonusDefault: 0 },
+  NGN: { symbol: '\u20a6', minDeposit: 25000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000, minWithdraw: 232000, minBetStake: 34800, bonusKey: 'referral_deposit_bonus_ngn', bonusDefault: 5000 }
 };
 function moneyRules(currency) { return CURRENCY_RULES[currency] || CURRENCY_RULES.GHS; }
 

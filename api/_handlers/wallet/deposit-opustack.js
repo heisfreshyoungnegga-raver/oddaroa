@@ -17,10 +17,9 @@ const { sql, readBody, send, guard, requireAuth, opustackConfig, opustackFetch, 
 //        cards are the Nigeria route. No Ghana phone is required.
 //        2026-11-25 PROVEN WRONG: the live NGN checkout is MoMo-only
 //        (MTN/Telecel/AirtelTigo, no card option even with a Nigerian
-//        number typed in). EXPERIMENT (Prince's order 2026-11-25):
-//        send channels: ['card'] for NGN only (Paystack-style param);
-//        GHS sends no channels key and stays MoMo. If OpusTack ignores
-//        it, the checkout stays MoMo and this line is dead code.
+//        number typed in). A channels: ['card'] parameter was tried
+//        (push 142, Prince's order) and OpusTack ignored it — live test
+//        2026-11-25 15:39 still MoMo-only — so no channels key is sent.
 // This handler NEVER credits the wallet — settlement happens through
 // the shared settleOpusTackAttempt in _lib.js, driven by the callback
 // first and by the deposit-opustack-status reconciler as the safety
@@ -125,9 +124,6 @@ module.exports = guard(async (req, res) => {
         currency,
         reference,
         callback_url: opustackConfig().callbackUrl,
-        // NGN only: ask OpusTack for the card channel (experiment,
-        // Prince 2026-11-25). undefined drops the key for GHS.
-        channels: currency === 'NGN' ? ['card'] : undefined,
         metadata: { user_id: auth.uid, attempt_id: attemptId }
       }
     });

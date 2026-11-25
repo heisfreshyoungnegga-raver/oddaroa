@@ -1,4 +1,4 @@
-const { sql, msql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns, ensureBookingCode, maintenanceBlocked } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns, ensureBookingCode, maintenanceBlocked, moneyRules, currencyOfPhone } = require('../../_lib');
 
 // Place bet(s) from the slip: Single (one ticket per selection, each
 // with its own stake), Multiple (one accumulator ticket) or System
@@ -22,6 +22,12 @@ module.exports = guard(async (req, res) => {
   const mode = ['single', 'system'].includes(body.mode) ? body.mode : 'multiple';
   if (!Array.isArray(selections) || !selections.length) return send(res, 400, { error: 'no_selections' });
   if (selections.length > 20) return send(res, 400, { error: 'too_many_selections' });
+  // Minimum stake per ticket (Prince, 2026-11-25): GHS 300 / NGN 34,800,
+  // sportsbook only — the casino games keep minStake.
+  const urows = await sql('select phone from users where id = $1', [auth.uid]);
+  const betRules = moneyRules(currencyOfPhone(urows.length ? urows[0].phone : ''));
+  const minBet = betRules.minBetStake;
+  const minBetDetail = 'Minimum stake is ' + betRules.symbol + minBet.toLocaleString('en-GB') + '.';
 
   const ids = [...new Set(selections.map(s => String(s.match_id)))];
   // A malformed id must be a clean 400, not a Postgres uuid error.
@@ -72,11 +78,13 @@ module.exports = guard(async (req, res) => {
     for (let i = 0; i < clean.length; i++) {
       const st = Number((selections[i] && selections[i].stake_ghs) != null ? selections[i].stake_ghs : body.stake_ghs);
       if (!(st > 0)) return send(res, 400, { error: 'invalid_stake' });
+      if (st < minBet) return send(res, 400, { error: 'stake_below_minimum', detail: minBetDetail });
       tickets.push({ sels: [clean[i]], stake: Math.round(st * 100) / 100, kind: 'single', label: null });
     }
   } else if (mode === 'system') {
     const stakePer = Number(body.stake_ghs);
     if (!(stakePer > 0)) return send(res, 400, { error: 'invalid_stake' });
+    if (stakePer < minBet) return send(res, 400, { error: 'stake_below_minimum', detail: minBetDetail });
     const k = Math.trunc(Number(body.system_k));
     if (!(k >= 2) || k > clean.length) return send(res, 400, { error: 'invalid_system' });
     const combos = combinations(clean, k);
@@ -85,6 +93,7 @@ module.exports = guard(async (req, res) => {
   } else {
     const stake = Number(body.stake_ghs);
     if (!(stake > 0)) return send(res, 400, { error: 'invalid_stake' });
+    if (stake < minBet) return send(res, 400, { error: 'stake_below_minimum', detail: minBetDetail });
     tickets = [{ sels: clean, stake: Math.round(stake * 100) / 100, kind: clean.length === 1 ? 'single' : 'multiple', label: null }];
   }
 

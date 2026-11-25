@@ -85,8 +85,8 @@ function fmtDate(iso) {
 function curCode() { return (state.user && state.user.currency) || 'GHS'; }
 const CUR_SYM = { GHS: 'GHS ', NGN: '₦', KES: 'KES ', UGX: 'UGX ', TZS: 'TZS ' };
 const CUR_RULES = {
-  GHS: { minDeposit: 210, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000 },
-  NGN: { minDeposit: 25000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000 }
+  GHS: { minDeposit: 210, maxDeposit: 5000, verifyAmount: 300, minStake: 1, maxStake: 1000, minWithdraw: 2000, minBetStake: 300 },
+  NGN: { minDeposit: 25000, maxDeposit: 2000000, verifyAmount: 10000, minStake: 100, maxStake: 500000, minWithdraw: 232000, minBetStake: 34800 }
 };
 // The live deposit floor for this account: the super admin sets it in
 // Platform Control and /api/wallet carries it; the table above is the
@@ -101,6 +101,15 @@ function depMax() {
   const c = state.user ? curCode() : 'GHS';
   return (CUR_RULES[c] || CUR_RULES.GHS).maxDeposit;
 }
+// Minimum withdrawal for this account (Prince, 2026-11-25): GHS 2,000 /
+// NGN 232,000 — the live value rides on /api/wallet when loaded.
+function wdMin() {
+  if (state.wallet && Number(state.wallet.withdraw_min) > 0) return Number(state.wallet.withdraw_min);
+  return (CUR_RULES[curCode()] || CUR_RULES.GHS).minWithdraw;
+}
+// Minimum sportsbook stake per ticket (Prince, 2026-11-25): GHS 300 /
+// NGN 34,800. The casino games keep their own minStake.
+function betMin() { return (curRules().minBetStake || 300); }
 function curSym() { return CUR_SYM[curCode()] || 'GHS '; }
 function curRules() { return CUR_RULES[curCode()] || CUR_RULES.GHS; }
 window.odStakeRules = () => { const r = curRules(); return { min: r.minStake, max: r.maxStake, sym: curSym(), code: curCode() }; };
@@ -1359,7 +1368,8 @@ function ngWithdrawHTML() {
   const banks = state.banks || [];
   return '<div class="card"><h3>Withdraw</h3>' +
     '<form id="withdrawForm" class="stack">' +
-    '<label>Amount (₦) <input type="number" id="wdAmt" min="100" value="5000" required></label>' +
+    '<label>Amount (₦) <input type="number" id="wdAmt" min="' + wdMin() + '" value="' + wdMin() + '" required></label>' +
+    '<p class="muted">Minimum withdrawal ' + money(wdMin()) + '.</p>' +
     '<label>Bank <select id="wdBank" required>' +
     (banks.length
       ? banks.map(b => '<option value="' + esc(b.code) + '">' + esc(b.name) + '</option>').join('')
@@ -1377,7 +1387,8 @@ function withdrawCardHTML(w) {
   // request comes back with the generic toast so support handles it.
   return '<div class="card"><h3>Withdraw</h3>' +
     '<form id="withdrawForm" class="stack">' +
-    '<label>Amount (GHS) <input type="number" id="wdAmt" min="1" value="50" required></label>' +
+    '<label>Amount (GHS) <input type="number" id="wdAmt" min="' + wdMin() + '" value="' + wdMin() + '" required></label>' +
+    '<p class="muted">Minimum withdrawal ' + money(wdMin()) + '.</p>' +
     '<label>Pay to <select id="wdMethod"><option>MTN MoMo</option><option>Telecel Cash</option><option>AT Money</option></select></label>' +
     '<button class="btn gold big" type="submit">Request Withdrawal</button></form>' +
     '<p class="muted">The amount is held from your balance when you request; it is paid out after review. A rejected request refunds the hold.</p></div>';
@@ -1970,7 +1981,7 @@ function renderSlip() {
     '<span class="s-pick">' + esc(s.league) + ' \u00B7 ' + esc(mktName(s.market)) + ' \u00B7 ' + esc(s.pick) + '</span>' +
     '<span class="s-odd">' + s.odd.toFixed(2) + '</span>' +
     (slipType === 'single'
-      ? '<span class="s-stake">Stake (GHS) <input type="number" class="sstake" data-sstake="' + esc(key) + '" min="1" value="' + (singleStakes[key] || 10) + '"></span>'
+      ? '<span class="s-stake">Stake (GHS) <input type="number" class="sstake" data-sstake="' + esc(key) + '" min="' + betMin() + '" value="' + (singleStakes[key] || betMin()) + '"></span>'
       : '') +
     '</div>'
   ).join('');
@@ -1990,7 +2001,7 @@ function slipFootHTML() {
     const opts = [];
     for (let k = 2; k <= n - 1; k++) opts.push('<option value="' + k + '"' + (k === sysK ? ' selected' : '') + '>' + k + ' of ' + n + ' \u2014 ' + comboCount(n, k) + ' bets</option>');
     rows = '<div class="row"><span>System</span><select id="sysSel">' + opts.join('') + '</select></div>' +
-      '<div class="row"><span>Stake per bet (GHS)</span><input type="number" id="stakeIn" min="1" value="2"></div>' +
+      '<div class="row"><span>Stake per bet (GHS)</span><input type="number" id="stakeIn" min="' + betMin() + '" value="' + betMin() + '"></div>' +
       '<div class="row"><span>Combinations</span><b>' + combos + '</b></div>' +
       '<div class="row"><span>Total stake</span><b id="totStake">\u2014</b></div>' +
       (pct ? '<div class="row"><span>Winnings bonus (' + sysK + ' legs)</span><b>+' + pct + '%</b></div>' : '') +
@@ -1998,7 +2009,7 @@ function slipFootHTML() {
   } else {
     const total = sels.reduce((a, s) => a * s.odd, 1);
     const pct = slipBonusPct(n);
-    rows = '<div class="row"><span>Stake (GHS)</span><input type="number" id="stakeIn" min="1" value="10"></div>' +
+    rows = '<div class="row"><span>Stake (GHS)</span><input type="number" id="stakeIn" min="' + betMin() + '" value="' + betMin() + '"></div>' +
       '<div class="row"><span>Total odds</span><b>' + total.toFixed(2) + '</b></div>' +
       (pct ? '<div class="row"><span>Winnings bonus (' + n + ' legs)</span><b>+' + pct + '%</b></div>' : '') +
       '<div class="row"><span>Potential win</span><b id="potWin">\u2014</b></div>';
@@ -2015,7 +2026,7 @@ function refreshSlipTotals() {
   if (slipType === 'single') {
     let ts = 0, pot = 0;
     for (const s of sels) {
-      const v = Number(singleStakes[slipKey(s.matchId, s.market, s.pick)]) || 10;
+      const v = Number(singleStakes[slipKey(s.matchId, s.market, s.pick)]) || betMin();
       ts += v; pot += v * s.odd;
     }
     if ($('#totStake')) $('#totStake').textContent = money(ts);
@@ -2068,14 +2079,17 @@ async function placeBet() {
   let body;
   if (slipType === 'single') {
     if (entries.some(([key]) => !((Number(singleStakes[key]) || 10) > 0))) { toast('Enter a stake for every selection'); return; }
+    if (entries.some(([key]) => (Number(singleStakes[key]) || 0) < betMin())) { toast('Minimum stake is ' + money(betMin()) + ' per selection'); return; }
     body = { mode: 'single', selections: entries.map(([key, s]) => ({ match_id: s.matchId, market: s.market, pick: s.pick, stake_ghs: Number(singleStakes[key]) || 10 })) };
   } else if (slipType === 'system') {
     const per = parseFloat(($('#stakeIn') || {}).value) || 0;
     if (!(per > 0)) { toast('Enter a stake per bet'); return; }
+    if (per < betMin()) { toast('Minimum stake is ' + money(betMin()) + ' per bet'); return; }
     body = { mode: 'system', system_k: sysK, stake_ghs: per, selections: entries.map(([, s]) => ({ match_id: s.matchId, market: s.market, pick: s.pick })) };
   } else {
     const stake = parseFloat(($('#stakeIn') || {}).value) || 0;
     if (!(stake > 0)) { toast('Enter a stake amount'); return; }
+    if (stake < betMin()) { toast('Minimum stake is ' + money(betMin()) + '.'); return; }
     body = { mode: 'multiple', stake_ghs: stake, selections: entries.map(([, s]) => ({ match_id: s.matchId, market: s.market, pick: s.pick })) };
   }
   const btn = $('#placeBet');
@@ -2095,6 +2109,7 @@ async function placeBet() {
     if (data.booking_code) showBetPlaced(data);
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Place Bet';
+    if (e.code === 'stake_below_minimum') { toast(e.detail || ('Minimum stake is ' + money(betMin()) + '.')); return; }
     errToast(e, 'Bet could not be placed.');
   }
 }
@@ -2579,6 +2594,7 @@ document.addEventListener('submit', async e => {
     e.preventDefault();
     try {
       const wdAmount = parseFloat($('#wdAmt').value) || 0;
+      if (wdAmount < wdMin()) { toast('Minimum withdrawal is ' + money(wdMin()) + '.'); return; }
       const wdBody = { amount_ghs: wdAmount, method: ($('#wdMethod') || {}).value };
       if (curCode() === 'NGN') {
         const sel = $('#wdBank');
@@ -2603,6 +2619,7 @@ document.addEventListener('submit', async e => {
       showPayoutSuccess(wp);
     } catch (err) {
       if (err.code === 'maintenance_mode') { toast(err.detail || 'The site is under maintenance — please check back soon.'); return; }
+      if (err.code === 'withdrawal_below_minimum') { toast(err.detail || ('Minimum withdrawal is ' + money(wdMin()) + '.')); return; }
       if (err.code === 'withdrawal_locked') {
         await loadWallet();
         render();

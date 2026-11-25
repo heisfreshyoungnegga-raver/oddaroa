@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth, ensureAdminTables, ensurePaymentTables, getSettings, currencyOfPhone, maintenanceBlocked } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, ensureAdminTables, ensurePaymentTables, getSettings, currencyOfPhone, moneyRules, maintenanceBlocked } = require('../../_lib');
 
 // Withdrawal request: the balance is held immediately, and the database
 // trigger refuses the insert until the user reaches the required number
@@ -25,6 +25,10 @@ module.exports = guard(async (req, res) => {
   await ensurePaymentTables();
   const urows = await sql('select phone from users where id = $1', [auth.uid]);
   const isNgn = urows.length && currencyOfPhone(urows[0].phone) === 'NGN';
+  // Minimum withdrawal (Prince, 2026-11-25): GHS 2,000 / NGN 232,000,
+  // on top of the Stage 1+2+3 gates (those still run at insert time).
+  const wdRules = moneyRules(currencyOfPhone(urows.length ? urows[0].phone : ''));
+  if (amount < wdRules.minWithdraw) return send(res, 400, { error: 'withdrawal_below_minimum', detail: 'Minimum withdrawal is ' + wdRules.symbol + wdRules.minWithdraw.toLocaleString('en-GB') + '.' });
   let payoutMeta = null;
   let methodLabel = method ? String(method).slice(0, 40) : 'MTN MoMo';
   if (isNgn) {

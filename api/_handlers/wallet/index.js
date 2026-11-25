@@ -55,6 +55,7 @@ module.exports = guard(async (req, res) => {
     withdrawals_unlocked: privileged || (lifetime >= minTotal && feePaid && verified),
     deposit_min: depMin,
     deposit_max: depMax,
+    withdraw_min: moneyRules(ucur).minWithdraw,
     manual_deposit: {
       network: settings.manual_deposit_network || '',
       number: settings.manual_deposit_number || '',
