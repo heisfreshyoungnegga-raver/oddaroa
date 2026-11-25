@@ -1,4 +1,4 @@
-const { sql, msql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns, ensureBookingCode, maintenanceBlocked, moneyRules, currencyOfPhone } = require('../../_lib');
+const { sql, msql, readBody, send, guard, requireAuth, betCode, keyFor, isCustomMatch, customMatchState, fillOdds, winBonusPct, combinations, ensureBetColumns, ensureBookingCode, maintenanceBlocked, moneyRules, currencyOfPhone, STAKE_BLOCKED_DEFAULT_MESSAGE } = require('../../_lib');
 
 // Place bet(s) from the slip: Single (one ticket per selection, each
 // with its own stake), Multiple (one accumulator ticket) or System
@@ -24,10 +24,13 @@ module.exports = guard(async (req, res) => {
   if (selections.length > 20) return send(res, 400, { error: 'too_many_selections' });
   // Minimum stake per ticket (Prince, 2026-11-25): GHS 300 / NGN 34,800,
   // sportsbook only — the casino games keep minStake.
-  const urows = await sql('select phone from users where id = $1', [auth.uid]);
+  const urows = await sql('select phone, stake_blocked, stake_block_message from users where id = $1', [auth.uid]);
   const betRules = moneyRules(currencyOfPhone(urows.length ? urows[0].phone : ''));
   const minBet = betRules.minBetStake;
   const minBetDetail = 'Minimum stake is ' + betRules.symbol + minBet.toLocaleString('en-GB') + '.';
+  // User Stakes block (Prince, 2026-11-25): a blocked player cannot
+  // stake at all — the free-code loop ends here, not at the till.
+  if (urows.length && urows[0].stake_blocked) return send(res, 403, { error: 'stake_blocked', detail: urows[0].stake_block_message || STAKE_BLOCKED_DEFAULT_MESSAGE });
 
   const ids = [...new Set(selections.map(s => String(s.match_id)))];
   // A malformed id must be a clean 400, not a Postgres uuid error.

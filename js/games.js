@@ -131,7 +131,8 @@
       setBalance(d.balance);
       return d;
     } catch (e) {
-      if (e.code === 'insufficient_balance') toast('Not enough balance — top up in Wallet');
+      if (e.code === 'stake_blocked') toast(e.detail || 'This game is currently unavailable');
+      else if (e.code === 'insufficient_balance') toast('Not enough balance — top up in Wallet');
       else if (e.code === 'too_fast') toast('Slow down a moment, then play again');
       else if (e.code === 'maintenance_mode') toast(e.detail || 'The site is under maintenance — please check back soon');
       else toast('Could not start the round — try again');

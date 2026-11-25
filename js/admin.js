@@ -118,6 +118,7 @@ function tabsHTML() {
   if (superTools()) tabs.push(['control', 'Platform Control']);
   if (superTools()) tabs.push(['depbns', 'Deposit & Bonus']);
   if (superTools()) tabs.push(['badges', 'Badges']);
+  if (superTools()) tabs.push(['stakes', 'User Stakes']);
   // Support chat is super-admin work only (Prince, 2026-11-08): the
   // regular Admin Portal carries no Support/Messages tab at all.
   if (!isSuperPortal) { const si = tabs.findIndex(t => t[0] === 'support'); if (si >= 0) tabs.splice(si, 1); }
@@ -669,6 +670,7 @@ function render() {
   if (state.tab === 'matches' && !isSuperPortal) state.tab = 'dashboard';
   if (state.tab === 'badges' && !superTools()) state.tab = 'dashboard';
   if (state.tab === 'depbns' && !superTools()) state.tab = 'dashboard';
+  if (state.tab === 'stakes' && !superTools()) state.tab = 'dashboard';
   root.innerHTML =
     state.tab === 'dashboard' ? dashboardHTML() :
     state.tab === 'queue' ? tabsHTML() + queueHTML(false) :
@@ -677,10 +679,12 @@ function render() {
     state.tab === 'earnings' ? earningsHTML() :
     state.tab === 'control' ? controlHTML() :
     state.tab === 'badges' ? badgesHTML() :
-    state.tab === 'depbns' ? depBnsHTML() : supportHTML();
+    state.tab === 'depbns' ? depBnsHTML() :
+    state.tab === 'stakes' ? stakesHTML() : supportHTML();
   renderFfGoals();
   renderFfBook();
   if (state.tab === 'badges') loadBadgeTeams();
+  if (state.tab === 'stakes') loadStakes();
 }
 
 // ---- Team badges (super only; Prince, 2026-11-10) -----------------
@@ -714,6 +718,75 @@ function adminBadgeIsPlaceholder(data, w, h) {
   });
 }
 const badgeProbeCache = new Map();
+
+
+// ---- User Stakes tab (super only; Prince, 2026-11-25) ----------------
+// The free-code loop: the super admin hands players winning booking
+// codes as compensation for losses, and some players stop depositing
+// altogether — they just wait for the next free code. Here the super
+// admin denies a player's stakes (betslip + casino games) while the
+// player can still log in, deposit and withdraw. The player sees the
+// custom message, or the default "This game is currently unavailable."
+// The loop watch lists players who staked in the last 7 days without
+// a single deposit in that time — the free-code riders.
+function stakeRowHTML(u) {
+  const blocked = !!u.stake_blocked;
+  return '<div class="txrow"><div><b>' + esc(u.display_name || 'Player') + '</b> <span class="muted">' + esc(u.phone) + '</span>' +
+    '<div class="muted">Balance ' + moneyC(Number(u.balance_ghs || 0), u.phone) + ' · lifetime deposits ' + moneyC(Number(u.lifetime_deposited || 0), u.phone) + (u.bets_7d != null ? ' · ' + u.bets_7d + ' bet' + (Number(u.bets_7d) === 1 ? '' : 's') + ' in 7 days' : '') + '</div>' +
+    (blocked ? '<div class="muted">Blocked — they see: “' + esc(u.stake_block_message || 'This game is currently unavailable.') + '”</div>' : '') +
+    '<div class="bform">' + (blocked ? '' : '<input type="text" id="smsg-' + u.id + '" placeholder="Message (blank = default)" maxlength="200">') +
+    (blocked
+      ? '<button class="btn sm" data-stake-unblock="' + u.id + '">Unblock staking</button>'
+      : '<button class="btn gold sm" data-stake-block="' + u.id + '">Block staking</button>') +
+    '</div></div><span>' + (blocked ? chip('blocked') : chip('active')) + '</span></div>';
+}
+function stakesHTML() {
+  if (!superTools()) return tabsHTML() + '<div class="card"><p class="muted">User Stakes lives in the <a href="super-admin.html">Super Admin Portal</a>.</p></div>';
+  const blocked = state.stakeBlocked;
+  const loop = state.stakeLoop;
+  const results = state.stakeSearch;
+  let html = tabsHTML() + '<div class="card"><h3>User Stakes</h3>' +
+    '<p class="muted">Stop the free-code loop: block a player from staking — betslip and casino games — while they can still log in, deposit and withdraw. When they try to stake they see your message, or the default: <b>“This game is currently unavailable.”</b></p>' +
+    '<div class="bform"><input type="text" id="stakeSearch" placeholder="Search by phone or name" value="' + esc(state.stakeQuery || '') + '">' +
+    '<button class="btn gold sm" id="stakeSearchBtn">Search</button></div>' +
+    (results === undefined ? '' : (results.length ? results.map(stakeRowHTML).join('') : '<p class="empty">No player matches that search.</p>'));
+  html += '<h3>Staking without depositing — last 7 days</h3><p class="muted">Players who placed bets in the last 7 days but made no deposit in that time. These are the ones living off free codes.</p>';
+  if (loop === undefined) html += '<p class="muted">Loading…</p>';
+  else if (!loop.length) html += '<p class="empty">Nobody is staking without depositing right now.</p>';
+  else html += loop.map(stakeRowHTML).join('');
+  html += '<h3>Currently blocked</h3>';
+  if (blocked === undefined) html += '<p class="muted">Loading…</p>';
+  else if (!blocked.length) html += '<p class="empty">No player is stake-blocked.</p>';
+  else html += blocked.map(stakeRowHTML).join('');
+  return html + '</div>';
+}
+async function loadStakes(force) {
+  if (state.stakesLoading) return;
+  if (!force && state.stakeBlocked !== undefined && !state.stakeQuery) return;
+  state.stakesLoading = true;
+  try {
+    const d = await api('/admin/stake-block' + (state.stakeQuery ? '?q=' + encodeURIComponent(state.stakeQuery) : ''));
+    if (state.stakeQuery) state.stakeSearch = d.users || [];
+    else { state.stakeBlocked = d.blocked || []; state.stakeLoop = d.loop || []; state.stakeSearch = undefined; }
+  } catch (e) { toast('User Stakes could not load just now.'); }
+  state.stakesLoading = false;
+  if (state.tab === 'stakes') render();
+}
+async function stakeBlockUser(id) {
+  const msg = (($('#smsg-' + id) || {}).value || '').trim();
+  try {
+    await api('/admin/stake-block', { method: 'POST', body: { id, action: 'block', message: msg } });
+    toast('Staking blocked for this player.');
+    state.stakeBlocked = undefined; state.stakeLoop = undefined; loadStakes(true);
+  } catch (e) { toast(e.message || 'Could not block staking.'); }
+}
+async function stakeUnblockUser(id) {
+  try {
+    await api('/admin/stake-block', { method: 'POST', body: { id, action: 'unblock' } });
+    toast('Staking unblocked for this player.');
+    state.stakeBlocked = undefined; state.stakeLoop = undefined; loadStakes(true);
+  } catch (e) { toast(e.message || 'Could not unblock staking.'); }
+}
 
 // ---- Deposit & Bonus tab (super only; Prince, 2026-11-10) ---------
 // The platform's deposit floor and first-deposit bonus ratios get
@@ -1096,6 +1169,11 @@ async function loadAll() {
 document.addEventListener('click', async e => {
   if (e.target.id === 'createdRetry') { loadAll(); return; }
   if (e.target.id === 'badgesRetry') { state.badgeTeams = null; loadBadgeTeams(true); return; }
+  if (e.target.id === 'stakeSearchBtn') { state.stakeQuery = (($('#stakeSearch') || {}).value || '').trim(); state.stakeBlocked = undefined; state.stakeLoop = undefined; loadStakes(true); return; }
+  const stakeBlock = e.target.closest ? e.target.closest('[data-stake-block]') : null;
+  if (stakeBlock) { stakeBlockUser(stakeBlock.dataset.stakeBlock); return; }
+  const stakeUnblock = e.target.closest ? e.target.closest('[data-stake-unblock]') : null;
+  if (stakeUnblock) { stakeUnblockUser(stakeUnblock.dataset.stakeUnblock); return; }
   const bsave = e.target.closest ? e.target.closest('[data-bsave]') : null;
   if (bsave) {
     const i = Number(bsave.dataset.bsave);

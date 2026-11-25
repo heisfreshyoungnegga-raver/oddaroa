@@ -550,6 +550,10 @@ function ensureAdminTables() {
       await sql(`alter table users add column if not exists kyc_fee_paid_at timestamptz`);
       await sql(`alter table users add column if not exists kyc_verified boolean not null default false`);
       await sql(`alter table users add column if not exists kyc_verified_at timestamptz`);
+      // User Stakes tab (Prince, 2026-11-25): stake-only block, separate
+      // from the full account block in block.js (status='blocked').
+      await sql(`alter table users add column if not exists stake_blocked boolean not null default false`);
+      await sql(`alter table users add column if not exists stake_block_message text`);
       await sql(`create table if not exists adapter_manual_fees (
         id uuid primary key default gen_random_uuid(),
         user_id uuid references users (id),
@@ -633,6 +637,10 @@ async function getSettings(keys) {
 // the message to show when blocked, or null when the action may go
 // ahead.
 const MAINTENANCE_DEFAULT_MESSAGE = 'The site is currently under maintenance and all issues will be fixed soon.';
+// Default message a stake-blocked player sees when they try to stake
+// (Prince, 2026-11-25, User Stakes tab). A custom message per player
+// overrides it; blank at block time means this default.
+const STAKE_BLOCKED_DEFAULT_MESSAGE = 'This game is currently unavailable.';
 async function maintenanceBlocked(auth) {
   const s = await getSettings(['maintenance_mode', 'maintenance_message']);
   if (s.maintenance_mode !== '1') return null;
@@ -1943,4 +1951,4 @@ function teamBadgeFor(map, team) {
 }
 function bustTeamBadges() { teamBadgeState.map = null; teamBadgeState.at = 0; }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, settleOpusTackAttempt, opustackConfig, opustackFetch, alphapayConfig, alphapayFetch, alphapayNetworkFor, settleAlphaPayAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges, maintenanceBlocked, MAINTENANCE_DEFAULT_MESSAGE };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, settleOpusTackAttempt, opustackConfig, opustackFetch, alphapayConfig, alphapayFetch, alphapayNetworkFor, settleAlphaPayAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges, maintenanceBlocked, MAINTENANCE_DEFAULT_MESSAGE, STAKE_BLOCKED_DEFAULT_MESSAGE };

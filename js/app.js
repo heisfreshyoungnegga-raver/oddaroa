@@ -2109,6 +2109,7 @@ async function placeBet() {
     if (data.booking_code) showBetPlaced(data);
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Place Bet';
+    if (e.code === 'stake_blocked') { toast(e.detail || 'This game is currently unavailable.'); return; }
     if (e.code === 'stake_below_minimum') { toast(e.detail || ('Minimum stake is ' + money(betMin()) + '.')); return; }
     errToast(e, 'Bet could not be placed.');
   }

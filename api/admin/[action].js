@@ -30,6 +30,7 @@ const handlers = {
   'deposit-proof': require('../_handlers/admin/deposit-proof'),
   kyc: require('../_handlers/admin/kyc'),
   'fee-proof': require('../_handlers/admin/fee-proof'),
+  'stake-block': require('../_handlers/admin/stake-block'),
 };
 module.exports = (req, res) => {
   const action = (req.query && req.query.action) || String(req.url || '').split('?')[0].split('/').pop();
