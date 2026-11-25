@@ -1,8 +1,11 @@
 const crypto = require('crypto');
 const { sql, readBody, send, guard, requireAuth, alphapayConfig, alphapayFetch, alphapayNetworkFor, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, currencyOfPhone, moneyRules, depositFloorFor, maintenanceBlocked } = require('../../_lib');
 
-// Instant deposit (AlphaPay Softpay, Prince 2026-11-23) — the second
-// instant gateway on Oddaroa next to OpusTack. The customer stays on
+// Instant deposit (AlphaPay Softpay, Prince 2026-11-23) — CLOSED
+// 2026-11-25 (Prince: OpusTack only). New initiations are refused
+// below with 410; the status handler + OTP handler + webhook stay
+// registered so attempts already in flight can still settle.
+// The customer stays on the site: AlphaPay sends a USSD/push prompt
 // the site: AlphaPay sends a USSD/push prompt to their phone and they
 // approve it with their MoMo PIN. No redirect, no checkout page.
 //   GHS: MTN (mtn_gh) / Telecel (vodafone_gh) / AirtelTigo (tigo_gh).
@@ -30,6 +33,11 @@ module.exports = guard(async (req, res) => {
   const maint = await maintenanceBlocked(auth);
   if (maint) return send(res, 503, { error: 'maintenance_mode', detail: maint });
   if (!alphapayConfig().secretKey) return send(res, 503, { error: 'provider_not_configured' });
+  // AlphaPay is closed for NEW deposits (Prince, 2026-11-25 — OpusTack
+  // only). In-flight attempts still settle through
+  // deposit-alphapay-status / deposit-alphapay-otp and the webhook,
+  // which stay registered.
+  return send(res, 410, { error: 'gateway_replaced', detail: 'AlphaPay deposits are closed — please use OpusTack.' });
   await ensureAdminTables();
   const settings = await getSettings(['gateway_enabled', 'deposit_min_ghs', 'deposit_min_ngn']);
   if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please use Manual transfer.' });
