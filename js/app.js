@@ -507,9 +507,27 @@ function matchDetailsHTML() {
   const lkDis = locked ? ' disabled' : '';
   if (locked) html += '<div class="md-lock">' + LOCK_ICON + (m.status === 'live' ? ' Live betting is locked on this match' : ' Betting is locked on this match') + '</div>';
   const lkPrice = (odd) => locked ? '' + LOCK_ICON + '' : Number(odd).toFixed(2);
+  // A partial book (a live match whose bookmaker only offers a few
+  // markets in play — Kilo, 2026-11-25: only Over/Under 3.5, Over/
+  // Under 4.5 and Both Teams To Score showed) must still show the
+  // FULL classic layout: priced markets carry their prices, the
+  // rest show a lock, exactly like the no-prices fallback below.
+  // Skipping the empty sections made the page look like the options
+  // did not exist at all. A match with no priced market at all
+  // keeps the old path: every section is skipped here and the
+  // fallback below renders them all locked with its banner.
+  const hasAnyClassic = MARKET_LIST.some(mk => marketsForMarket(m, mk).length > 0);
   for (const market of MARKET_LIST) {
     const opts = marketsForMarket(m, market);
-    if (!opts.length) continue;
+    if (!opts.length) {
+      if (!hasAnyClassic) continue;
+      const labels = (MARKET_KEYS[market] || []).map(([label]) => label);
+      if (!labels.length) continue;
+      html += '<div class="card md-sec"><h3>' + esc(market) + '</h3><div class="md-odds">' + labels.map(label =>
+        '<button class="odd locked" disabled aria-label="' + esc(market + ' ' + label) + ' locked"><small>' + esc(label) + '</small>' + LOCK_ICON + '</button>'
+      ).join('') + '</div></div>';
+      continue;
+    }
     html += '<div class="card md-sec"><h3>' + esc(market) + '</h3><div class="md-odds">' + opts.map(o => {
       const sel = state.slip.has(slipKey(m.id, market, o.label)) ? ' sel' : '';
       return '<button class="odd' + sel + lkCls + '" data-odd="' + m.id + '" data-market="' + esc(market) + '" data-pick="' + esc(o.label) + '"' + lkDis + '><small>' + esc(o.label) + '</small>' + lkPrice(o.odd) + '</button>';
