@@ -714,6 +714,14 @@ function splitCommission(earnPot, earnCur, fxNgnPerGhs) {
   return { admin: Math.round(admin * 100) / 100, super: Math.round((pot - admin) * 100) / 100 };
 }
 async function applyDepositRewards(userId, txnId, amountGhs, currency) {
+  // FEE RULE (Prince, 2026-11-26): rewards are ALWAYS computed on the
+  // REQUESTED deposit amount only — never on a gateway-charged total.
+  // A gateway may charge the customer more than the deposit (AlphaPay
+  // ADD_ON: 31,950 charged for a 30,000 request on Telecel, 2026-11-24);
+  // that surplus belongs to the gateway and must never enter a
+  // commission, bonus or cashback basis. Every settler passes
+  // attempt.amount_ghs here for exactly that reason — see
+  // test-fee-basis.js, which fails if a charged total ever leaks in.
   // `amountGhs` arrives in the DEPOSIT currency (Flutterwave attempts
   // hold raw naira in the amount_ghs column). Normalize once to the
   // wallet currency (GHS) so cashback, bonus and commission all
@@ -1457,6 +1465,10 @@ async function settleAlphaPayAttempt(attempt) {
   // 30000 request on Telecel, 2026-11-24). The merchant received at
   // least what was asked, so it settles; the wallet is always
   // credited exactly the requested amount, never the charged total.
+  // FEE RULE (Prince, 2026-11-26): rewards follow the same line —
+  // applyDepositRewards below receives attempt.amount_ghs (the
+  // deposit), never the verified charged total, so no admin ever
+  // earns on a gateway charge; the surplus stays with the gateway.
   // Below the request is still a mismatch.
   const verified = (amt >= Number(attempt.amount_minor) || amt === Number(attempt.amount_ghs))
     && String(d.currency || currency) === currency
