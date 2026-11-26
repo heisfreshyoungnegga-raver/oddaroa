@@ -1598,7 +1598,7 @@ function momoPanelHTML() {
     '<p class="muted">Minimum deposit is GHS ' + floor.toLocaleString('en-GB') + '. You will be taken to a secure page to approve the payment with your MoMo PIN — your wallet is credited automatically.</p></div>';
 }
 
-/* ----- Instant NGN deposit (legacy Flutterwave flow, superseded by OpusTack) ----- */
+/* ----- Instant NGN deposit (Flutterwave hosted checkout, restored 2026-11-26; OpusTack's live NGN checkout is MoMo-only, no card) ----- */
 let flwTimer = null;
 function stopFlwPoll() { if (flwTimer) { clearInterval(flwTimer); flwTimer = null; } }
 function startFlwPoll() {
@@ -1658,12 +1658,12 @@ function startOpuPoll(kind) {
 function flwPanelHTML() {
   const f = state.flw;
   if (state.flwOff) {
-    return '<div class="card"><h3>OpusTack</h3>' +
+    return '<div class="card"><h3>Flutterwave</h3>' +
       '<p class="muted">Instant deposits are being switched on. Please check back shortly.</p></div>';
   }
   if (f && f.phase === 'wait') {
     return '<div class="card"><h3>Complete your payment</h3>' +
-      '<p>Finish the payment of <b>' + money(f.amount) + '</b> on OpusTack\'s secure page. Your wallet is credited automatically once it lands — do not pay twice.</p>' +
+      '<p>Finish the payment of <b>' + money(f.amount) + '</b> on Flutterwave\'s secure page. Your wallet is credited automatically once it lands — do not pay twice.</p>' +
       '<p class="muted">Waiting for confirmation…</p>' +
       '<button class="btn" data-flw-cancel>Cancel</button></div>';
   }
@@ -1675,13 +1675,13 @@ function flwPanelHTML() {
   const flwAdminTier = state.user && (state.user.role === 'admin' || state.user.role === 'super_admin');
   const flwFloor = flwAdminTier ? 10 : depFloor();
   const presets = flwAdminTier ? [10, 100, 1000, 10000, 30000] : [flwFloor, 30000, 50000, 100000, 250000, 500000].filter((v, i, a) => v >= flwFloor && a.indexOf(v) === i);
-  return '<div class="card"><h3>OpusTack</h3>' +
+  return '<div class="card"><h3>Flutterwave</h3>' +
     '<form id="flwForm" class="stack">' +
     '<div class="amtrow">' + presets.map(a =>
       '<button type="button" class="amtchip' + (a === presets[0] ? ' on' : '') + '" data-amt="' + a + '">₦' + a.toLocaleString('en-GB') + '</button>').join('') + '</div>' +
     '<label>Amount (₦) <input type="number" id="flwAmt" min="' + flwFloor + '" max="2000000" step="0.01" value="' + flwFloor + '" required></label>' +
-    '<button class="btn gold big" type="submit">Deposit with OpusTack</button></form>' +
-    '<p class="muted">Pay by card on OpusTack\'s secure page. Minimum deposit is ₦' + flwFloor.toLocaleString('en-GB') + '. Your wallet is credited automatically once the payment lands.</p></div>';
+    '<button class="btn gold big" type="submit">Deposit with Flutterwave</button></form>' +
+    '<p class="muted">Pay by card, bank transfer or USSD on Flutterwave\'s secure page. Minimum deposit is ₦' + flwFloor.toLocaleString('en-GB') + '. Your wallet is credited automatically once the payment lands.</p></div>';
 }
 
 function walletHTML() {
@@ -2556,15 +2556,16 @@ document.addEventListener('submit', async e => {
     e.preventDefault();
     const amt = parseFloat($('#flwAmt').value) || 0;
     try {
-      const d = await api('/wallet/deposit-opustack', { method: 'POST', body: { amount_ghs: amt } });
-      if (d.status === 'unknown') {
-        state.flw = { phase: 'failed', message: d.detail || 'We could not confirm the payment request. If a prompt arrives, approve it once — do not pay twice.' };
-        render();
-      } else if (d.link) {
-        localStorage.setItem('od_opu_ref', d.reference);
-        localStorage.setItem('od_opu_amt', String(amt));
+      // NGN deposits go through Flutterwave (2026-11-26): OpusTack's
+      // live NGN checkout is MoMo-only, no card — Nigerian players
+      // cannot pay on it. GHS stays on OpusTack (momoForm above).
+      const d = await api('/wallet/deposit-flutterwave', { method: 'POST', body: { amount_ghs: amt } });
+      if (d.link) {
+        localStorage.setItem('od_flw_ref', d.reference);
+        localStorage.setItem('od_flw_amt', String(amt));
         state.flw = { phase: 'wait', reference: d.reference, amount: amt };
         render();
+        startFlwPoll();
         location.href = d.link;
       } else {
         state.flw = { phase: 'failed', message: 'The payment could not be started. Nothing was charged.' };
@@ -2929,6 +2930,18 @@ setInterval(() => {
 const urlParams = new URLSearchParams(location.search);
 if (urlParams.get('ref')) localStorage.setItem('od_ref', urlParams.get('ref'));
 if (urlParams.get('admin_invite')) localStorage.setItem('od_admin_invite', urlParams.get('admin_invite'));
+// Returning from the Flutterwave checkout: pick the attempt back up
+// and let the Flutterwave reconciler poll settle it. Flutterwave
+// appends status, tx_ref and transaction_id to the redirect URL.
+if (urlParams.get('flw_return')) {
+  const flwRef = urlParams.get('tx_ref') || localStorage.getItem('od_flw_ref');
+  if (flwRef) {
+    const amt = Number(localStorage.getItem('od_flw_amt') || 0);
+    state.flw = { phase: 'wait', reference: flwRef, transactionId: urlParams.get('transaction_id') || '', amount: amt };
+    startFlwPoll();
+  }
+  history.replaceState(null, '', location.pathname);
+}
 // Returning from the OpusTack checkout: pick the attempt back up and
 // let the OpusTack reconciler poll settle it. The panel follows the
 // account currency (NGN → card panel, GHS → MoMo panel).

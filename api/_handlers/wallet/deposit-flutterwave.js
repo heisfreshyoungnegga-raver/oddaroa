@@ -16,7 +16,7 @@ module.exports = guard(async (req, res) => {
   if (!flwConfig().secretKey) return send(res, 503, { error: 'provider_not_configured' });
   await ensureAdminTables();
   const settings = await getSettings(['gateway_enabled', 'deposit_min_ngn']);
-  if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please use Manual transfer.' });
+  if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please try again shortly.' });
 
   const users = await sql('select phone, email, display_name, role from users where id = $1', [auth.uid]);
   if (!users.length) return send(res, 404, { error: 'user_not_found' });

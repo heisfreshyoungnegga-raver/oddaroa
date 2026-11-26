@@ -2,9 +2,13 @@ const crypto = require('crypto');
 const { sql, readBody, send, guard, requireAuth, opustackConfig, opustackFetch, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, currencyOfPhone, moneyRules, depositFloorFor, maintenanceBlocked } = require('../../_lib');
 
 // Instant deposit (OpusTack hosted checkout, Prince 2026-11-22) —
-// REOPENED 2026-11-25 (Prince: OpusTack only, AlphaPay closed for
-// new deposits). The status handler + callback settle in-flight
-// attempts; AlphaPay's initiate now 410s the same way this one did.
+// GHS ONLY since 2026-11-26: NGN initiate now 410s (Nigeria moved
+// back to Flutterwave — OpusTack's live NGN checkout is MoMo-only,
+// no card). In-flight OpusTack NGN attempts still settle via the
+// callback + status reconciler. REOPENED 2026-11-25 (Prince: OpusTack
+// only, AlphaPay closed for new deposits). The status handler +
+// callback settle in-flight attempts; AlphaPay's initiate now 410s
+// the same way this one does for NGN.
 // the instant gateway for BOTH currencies, replacing ShinobiPay for
 // GHS (its provider side is failing with gateway_unavailable) and
 // Flutterwave for NGN:
@@ -41,13 +45,20 @@ module.exports = guard(async (req, res) => {
   if (!opustackConfig().secretKey) return send(res, 503, { error: 'provider_not_configured' });
   await ensureAdminTables();
   const settings = await getSettings(['gateway_enabled', 'deposit_min_ghs', 'deposit_min_ngn']);
-  if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please use Manual transfer.' });
+  if (settings.gateway_enabled === '0') return send(res, 503, { error: 'gateway_disabled', detail: 'Instant deposits are switched off right now. Please try again shortly.' });
 
   const users = await sql('select phone, role, email from users where id = $1', [auth.uid]);
   if (!users.length) return send(res, 404, { error: 'user_not_found' });
   const user = users[0];
   const currency = currencyOfPhone(user.phone);
-  if (currency !== 'GHS' && currency !== 'NGN') return send(res, 400, { error: 'wrong_currency', detail: 'OpusTack deposits are for Ghana and Nigeria accounts.' });
+  // NGN initiate closed 2026-11-26 (Prince): Nigeria deposits go
+  // through Flutterwave — OpusTack's live NGN checkout is MoMo-only
+  // (no card, push 142 proved it), so Nigerian players cannot pay
+  // on it. In-flight OpusTack NGN attempts still settle through the
+  // callback + deposit-opustack-status reconciler; only NEW initiates
+  // are refused, mirroring AlphaPay's 410 after push 141.
+  if (currency === 'NGN') return send(res, 410, { error: 'gateway_replaced', detail: 'Nigeria deposits now go through Flutterwave. Please use the Flutterwave deposit form.' });
+  if (currency !== 'GHS') return send(res, 400, { error: 'wrong_currency', detail: 'OpusTack deposits are for Ghana accounts.' });
 
   const rules = moneyRules(currency);
   const { amount_ghs, phone } = await readBody(req);
