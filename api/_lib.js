@@ -584,12 +584,16 @@ function ensureAdminTables() {
           select coalesce(sum(amount_ghs), 0) from wallet_transactions
           where user_id = p_user and kind = 'deposit' and status = 'completed'
         $$`);
+      await sql(`create or replace function completed_deposit_count(p_user uuid)
+        returns integer language sql stable as $$
+          select count(*)::int from wallet_transactions
+          where user_id = p_user and kind = 'deposit' and status = 'completed'
+        $$`);
       await sql(`create or replace function enforce_withdrawal_rule()
         returns trigger language plpgsql as $fn$
         declare
           actor_role text;
-          min_total numeric;
-          lifetime numeric;
+          deposits int;
           fee_ok boolean;
           verified_ok boolean;
         begin
@@ -598,13 +602,13 @@ function ensureAdminTables() {
             if actor_role in ('admin', 'super_admin') then
               return new;
             end if;
-            select coalesce((select value::numeric from operator_settings
-                             where key = 'withdraw_min_cumulative_ghs'), 600)
-              into min_total;
-            lifetime := completed_deposit_total(new.user_id);
-            if lifetime < min_total then
-              raise exception 'withdrawal locked: GHS % of GHS % deposited',
-                lifetime, min_total;
+            -- Stage 1 (Prince, 2026-11-27): SIX completed deposits
+            -- unlock withdrawals — reverted from the GHS 600 cumulative
+            -- total (push 128). The count, not the amount, is the gate.
+            deposits := completed_deposit_count(new.user_id);
+            if deposits < 6 then
+              raise exception 'withdrawal locked: % of 6 deposits made',
+                deposits;
             end if;
             select coalesce(kyc_fee_paid, false), coalesce(kyc_verified, false)
               into fee_ok, verified_ok from users where id = new.user_id;

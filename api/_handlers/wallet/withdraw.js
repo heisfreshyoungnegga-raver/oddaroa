@@ -68,23 +68,35 @@ module.exports = guard(async (req, res) => {
   } catch (e) {
     if (String(e.dbMessage || '').includes('withdrawal locked')) {
       // The trigger reports one of three stages (Prince, 2026-11-11):
-      // Stage 1 "GHS X of GHS Y deposited", Stage 2a "verification
-      // fee not paid", Stage 2b "account not verified". The client
-      // now SHOWS the GHS 600 progress on the Withdraw page (his
-      // order, superseding the 2026-11-04 conceal-the-total rule).
+      // Stage 1 "N of 6 deposits made", Stage 2a "verification fee
+      // not paid", Stage 2b "account not verified". The client shows
+      // the 6-deposit progress only after the player's first deposit
+      // (Prince, 2026-11-27 — the old GHS 600 total is gone).
       const msg = String(e.dbMessage || '');
-      const cm = /GHS ([\d.]+) of GHS ([\d.]+) deposited/.exec(msg);
+      // Count form from the current trigger, or the old GHS form from
+      // a stale pre-push instance still running the GHS 600 trigger —
+      // both map to min_deposit.
+      const cm = /(\d+) of (\d+) deposits made/.exec(msg);
+      const gm = /GHS ([\d.]+) of GHS ([\d.]+) deposited/.exec(msg);
       if (msg.includes('verification fee not paid')) {
         return send(res, 403, { error: 'withdrawal_locked', reason: 'kyc_fee' });
       }
       if (msg.includes('account not verified')) {
         return send(res, 403, { error: 'withdrawal_locked', reason: 'kyc_verify' });
       }
+      if (cm) {
+        return send(res, 403, {
+          error: 'withdrawal_locked',
+          reason: 'min_deposit',
+          deposits_made: Number(cm[1]),
+          deposits_required: Number(cm[2]),
+        });
+      }
       return send(res, 403, {
         error: 'withdrawal_locked',
         reason: 'min_deposit',
-        lifetime_deposited: cm ? Number(cm[1]) : 0,
-        min_required: cm ? Number(cm[2]) : 600,
+        lifetime_deposited: gm ? Number(gm[1]) : 0,
+        min_required: gm ? Number(gm[2]) : 600,
       });
     }
     throw e;

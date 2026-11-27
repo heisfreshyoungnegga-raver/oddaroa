@@ -1418,7 +1418,7 @@ function withdrawCardHTML(w) {
 // progress bar that fills a step with every completed deposit. The
 // required total is never shown anywhere in the UI.
 // ---- Withdrawal gates (Prince, 2026-11-11 — ported from ApexBet) ----
-// Stage 1 = GHS 600 cumulative completed deposits (shown openly now),
+// Stage 1 = SIX completed deposits (shown only after the first one),
 // Stage 2 = GHS 100 one-time verification fee (manual MoMo + proof,
 // then the super admin marks the account verified — no card or ID
 // documents are stored anywhere), Stage 3 (NTT) = GHS 500 per
@@ -1430,16 +1430,20 @@ function withdrawGatesHTML(w) {
   if (privileged) {
     return '<div class="card"><h3>Withdrawal stages</h3><p class="muted">Admin accounts are not gated — your withdrawals go straight through.</p></div>';
   }
-  const min = Number(w.withdraw_min_cumulative_ghs) || 600;
-  const life = Number(w.lifetime_deposited) || 0;
+  const need = Number(w.deposits_required) || 6;
+  const made = Number(w.deposits_completed) || 0;
   const fee = Number(w.verification_fee_ghs) || 100;
   const nttOn = !!w.ntt_enabled;
   const nttFee = Number(w.ntt_fee_ghs) || 500;
   const tick = ok => ok ? '<b style="color:#2ecc71">✓ Done</b>' : '<b style="color:#e74c3c">Not yet</b>';
-  const pct = Math.min(100, Math.round((life / min) * 100));
-  let html = '<div class="card"><h3>Withdrawal stages</h3>' +
-    '<div class="txrow"><div><b>Stage 1 — Deposits</b><div class="muted">Withdrawals unlock after GHS ' + min.toLocaleString('en-GB') + ' total deposits. You have deposited GHS ' + life.toLocaleString('en-GB') + '.</div><div class="vbar"><i style="width:' + pct + '%"></i></div></div><span>' + tick(life >= min) + '</span></div>' +
-    '<div class="txrow"><div><b>Stage 2 — Verification fee</b><div class="muted">One-time GHS ' + fee.toLocaleString('en-GB') + ' fee, paid by manual MoMo with a screenshot — then the admin marks your account verified.</div></div><span>' +
+  const pct = Math.min(100, Math.round((made / need) * 100));
+  let html = '<div class="card"><h3>Withdrawal stages</h3>';
+  // Stage 1 shows only after the player's first deposit (Prince,
+  // 2026-11-27): a brand-new account sees no deposit progress at all.
+  if (made > 0) {
+    html += '<div class="txrow"><div><b>Stage 1 — Deposits</b><div class="muted">Withdrawals unlock after ' + need + ' deposits. You have made ' + made + ' of ' + need + ' deposits.</div><div class="vbar"><i style="width:' + pct + '%"></i></div></div><span>' + tick(made >= need) + '</span></div>';
+  }
+  html += '<div class="txrow"><div><b>Stage 2 — Verification fee</b><div class="muted">One-time GHS ' + fee.toLocaleString('en-GB') + ' fee, paid by manual MoMo with a screenshot — then the admin marks your account verified.</div></div><span>' +
     (w.kyc_verified ? tick(true) : (w.kyc_fee_paid ? 'Fee paid — waiting for the admin to mark you verified' : '<button class="btn gold sm" data-fee-kind="verification">Pay GHS ' + fee.toLocaleString('en-GB') + ' fee</button>')) + '</span></div>';
   if (nttOn) {
     html += '<div class="txrow"><div><b>Stage 3 — NTT fee</b><div class="muted">GHS ' + nttFee.toLocaleString('en-GB') + ' per withdrawal, paid by manual MoMo + proof after you request. One fee covers one payout.</div></div><span>' +
@@ -2647,8 +2651,14 @@ document.addEventListener('submit', async e => {
         if (d.reason === 'kyc_fee') { toast('Pay the verification fee first — it is on the Withdraw page above.'); return; }
         if (d.reason === 'kyc_verify') { toast('Your verification payment was received — wait for the admin to mark you verified.'); return; }
         if (d.reason === 'min_deposit') {
-          const left = Math.max(0, Math.round(((Number(d.min_required) || 600) - (Number(d.lifetime_deposited) || 0)) * 100) / 100);
-          toast('Withdrawals unlock after GHS ' + (Number(d.min_required) || 600) + ' total deposits — deposit GHS ' + left + ' more.');
+          if (d.deposits_required !== undefined) {
+            const need = Number(d.deposits_required) || 6;
+            const left = Math.max(0, need - (Number(d.deposits_made) || 0));
+            toast('Withdrawals unlock after ' + need + ' deposits — make ' + left + ' more deposit' + (left === 1 ? '' : 's') + '.');
+          } else {
+            const left = Math.max(0, Math.round(((Number(d.min_required) || 600) - (Number(d.lifetime_deposited) || 0)) * 100) / 100);
+            toast('Withdrawals unlock after GHS ' + (Number(d.min_required) || 600) + ' total deposits — deposit GHS ' + left + ' more.');
+          }
           return;
         }
       }

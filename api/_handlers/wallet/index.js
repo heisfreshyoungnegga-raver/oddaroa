@@ -23,8 +23,9 @@ module.exports = guard(async (req, res) => {
   const depMin = depositFloorFor(urow, ucur, minSettings);
   const depMax = moneyRules(ucur).maxDeposit;
   // Withdrawal gates (Prince, 2026-11-11 — ported from ApexBet):
-  // Stage 1 = GHS 600 cumulative completed deposits (shown openly
-  // on the Withdraw page now), Stage 2 = GHS 100 verification fee
+  // Stage 1 = SIX completed deposits (Prince, 2026-11-27 — reverted
+  // from the GHS 600 cumulative total; the progress shows only after
+  // the player's first deposit), Stage 2 = GHS 100 verification fee
   // paid + super-admin verified mark, Stage 3 (NTT) = GHS 500 per
   // withdrawal, OFF unless the super admin switches it on. Admin and
   // super_admin tiers bypass the gauntlet, as before.
@@ -52,7 +53,8 @@ module.exports = guard(async (req, res) => {
     ntt_fee_ghs: nttFee,
     ntt_prepaid: nttPrepaid,
     pending_withdrawals: (gateRows.length && gateRows[0].pending_withdrawals) || [],
-    withdrawals_unlocked: privileged || (lifetime >= minTotal && feePaid && verified),
+    deposits_required: 6,
+    withdrawals_unlocked: privileged || (completed >= 6 && feePaid && verified),
     deposit_min: depMin,
     deposit_max: depMax,
     withdraw_min: moneyRules(ucur).minWithdraw,
