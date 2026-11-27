@@ -240,7 +240,27 @@ async function refreshAfLive() {
       const final = await afFetch('/fixtures?ids=' + missing.slice(i, i + 20).join('-'));
       for (const fx of final) {
         const m = mapFixture(fx, true);
-        if (m) await upsertMatch(m);
+        if (m) { await upsertMatch(m); continue; }
+        // A stale live row whose feed status flipped to a terminal
+        // non-result code (PST/CANC/ABD/AWD/WO) used to fall through
+        // mapFixture's null and sit at "live" forever with a locked,
+        // priceless book (2026-11-27: CR Belouizdad vs CS Constantine,
+        // postponed Nov 25, stuck live at 54' 1-1 with no odds at all).
+        // Retire it as postponed instead: a postponed fixture never
+        // played, so its crossed score is zeroed; other codes keep the
+        // score at abandonment.
+        const short = fx.fixture && fx.fixture.status && fx.fixture.status.short;
+        if (SKIP_CODES.includes(short)) {
+          await sql(
+            `update matches set status = 'postponed', minute = null,
+               score_home = case when $2 = 'PST' then 0 else score_home end,
+               score_away = case when $2 = 'PST' then 0 else score_away end,
+               score_home_ht = case when $2 = 'PST' then null else score_home_ht end,
+               score_away_ht = case when $2 = 'PST' then null else score_away_ht end
+             where external_ref = $1`,
+            ['af:' + fx.fixture.id, short]
+          ).catch(() => {});
+        }
       }
     }
   } catch (e) { /* live sweep is best-effort; the date sweep already ran */ }
