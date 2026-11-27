@@ -1418,7 +1418,8 @@ function withdrawCardHTML(w) {
 // progress bar that fills a step with every completed deposit. The
 // required total is never shown anywhere in the UI.
 // ---- Withdrawal gates (Prince, 2026-11-11 — ported from ApexBet) ----
-// Stage 1 = SIX completed deposits (shown only after the first one),
+// Stage 1 = SIX completed deposits; the whole card stays hidden until
+// the player's first deposit (Prince, 2026-11-27),
 // Stage 2 = GHS 100 one-time verification fee (manual MoMo + proof,
 // then the super admin marks the account verified — no card or ID
 // documents are stored anywhere), Stage 3 (NTT) = GHS 500 per
@@ -1432,6 +1433,10 @@ function withdrawGatesHTML(w) {
   }
   const need = Number(w.deposits_required) || 6;
   const made = Number(w.deposits_completed) || 0;
+  // Nothing shows until the first deposit (Prince, 2026-11-27): a
+  // brand-new account sees no withdrawal stages at all — no Stage 1
+  // progress, no fee buttons, nothing.
+  if (made === 0) return '';
   const fee = Number(w.verification_fee_ghs) || 100;
   const nttOn = !!w.ntt_enabled;
   const nttFee = Number(w.ntt_fee_ghs) || 500;
