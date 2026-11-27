@@ -175,6 +175,17 @@ function depositFloorFor(user, currency, settings) {
   return moneyRules(currency).minDeposit;
 }
 
+// Withdrawal floor for an account: the super admin sets the minimum
+// per currency in Platform Control (operator_settings withdraw_min_ghs /
+// withdraw_min_ngn); the CURRENCY_RULES values (GHS 2,000 / NGN 232,000)
+// are only the fallback defaults. Same pattern as depositFloorFor.
+function withdrawFloorFor(currency, settings) {
+  const key = currency === 'NGN' ? 'withdraw_min_ngn' : 'withdraw_min_ghs';
+  const v = settings ? Number(settings[key]) : NaN;
+  if (v > 0) return v;
+  return moneyRules(currency).minWithdraw;
+}
+
 function publicUser(u) {
   return { id: u.id, phone: u.phone, email: u.email || null, display_name: u.display_name, role: u.role, status: u.status, balance_ghs: Number(u.balance_ghs), bonus_ghs: Number(u.bonus_ghs || 0), currency: currencyOfPhone(u.phone) };
 }
@@ -1981,4 +1992,4 @@ function teamBadgeFor(map, team) {
 }
 function bustTeamBadges() { teamBadgeState.map = null; teamBadgeState.at = 0; }
 
-module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, settleOpusTackAttempt, opustackConfig, opustackFetch, alphapayConfig, alphapayFetch, alphapayNetworkFor, settleAlphaPayAttempt, currencyOfPhone, moneyRules, depositFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges, maintenanceBlocked, MAINTENANCE_DEFAULT_MESSAGE, STAKE_BLOCKED_DEFAULT_MESSAGE };
+module.exports = { sql, msql, matchesById, hashPassword, verifyPassword, verifyToken, issueToken, readBody, send, requireAuth, requireAdmin, requireSuperAdmin, guard, publicUser, betCode, MARKETS, keyFor, pickWon, afPickWon, shinobiConfig, shinobiFetch, mapIntentStatus, detectNetwork, ensurePaymentTables, ensureAdminTables, getSettings, applyDepositRewards, settleAttempt, settleFlwAttempt, settleOpusTackAttempt, opustackConfig, opustackFetch, alphapayConfig, alphapayFetch, alphapayNetworkFor, settleAlphaPayAttempt, currencyOfPhone, moneyRules, depositFloorFor, withdrawFloorFor, flwConfig, flwFetch, settleMatch, maybeAutoSettle, isCustomMatch, customMatchState, expandOdds, fillOdds, inviteCode, ensureInviteCode, WIN_BONUS, winBonusPct, combinations, ensureBetColumns, ensureMatchColumns, ensureSupportColumns, cleanGoalSchedule, cleanCrestUrl, fullBookFromOdds, cashoutQuoteFor, ensureBookingCode, genBookingCode, livePriceFor, currentPickOdds, convertAmount, firstDepositBonus, splitCommission, findCreatedDuplicate, ensureTeamBadges, teamBadgeMap, teamBadgeFor, bustTeamBadges, maintenanceBlocked, MAINTENANCE_DEFAULT_MESSAGE, STAKE_BLOCKED_DEFAULT_MESSAGE };

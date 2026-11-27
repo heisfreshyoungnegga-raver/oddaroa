@@ -487,6 +487,8 @@ function controlHTML() {
     '<label>Cashout margin % (the house keeps this much of a ticket\'s fair cashout value) <input type="number" id="rateCashout" step="0.1" min="0" max="50" value="' + esc(s.cashout_margin_pct || '10') + '"></label>' +
     '<button class="btn gold big" type="submit">Save Rates</button></form></div>' +
     '<div class="card"><h3>Withdrawal gates</h3><form id="gatesForm" class="stack">' +
+    '<label>Minimum withdrawal per request (GHS) <input type="number" id="gateMinWithdrawGhs" step="1" min="1" max="100000" value="' + esc(s.withdraw_min_ghs === undefined ? '2000' : s.withdraw_min_ghs) + '"></label>' +
+    '<label>Minimum withdrawal per request (NGN) <input type="number" id="gateMinWithdrawNgn" step="1" min="10" max="2000000" value="' + esc(s.withdraw_min_ngn === undefined ? '232000' : s.withdraw_min_ngn) + '"></label>' +
     '<label>Stage 1 — minimum cumulative deposits to unlock withdrawals (GHS) <input type="number" id="gateMinCumulative" step="1" min="0" max="100000" value="' + esc(s.withdraw_min_cumulative_ghs === undefined ? '600' : s.withdraw_min_cumulative_ghs) + '"></label>' +
     '<label>Stage 2 — one-time verification fee (GHS, paid by manual MoMo + proof, then you mark the account verified) <input type="number" id="gateVerifyFee" step="1" min="0" max="1000" value="' + esc(s.verification_fee_ghs === undefined ? '100' : s.verification_fee_ghs) + '"></label>' +
     '<label>Stage 3 — NTT fee per withdrawal (GHS, paid by manual MoMo + proof on the Withdraw page after the request) <input type="number" id="gateNttFee" step="1" min="0" max="1000" value="' + esc(s.ntt_fee_ghs === undefined ? '500' : s.ntt_fee_ghs) + '"></label>' +
@@ -1794,7 +1796,7 @@ document.addEventListener('submit', async e => {
     try {
       const data = await api('/admin/settings', {
         method: 'POST',
-        body: { withdraw_min_cumulative_ghs: Number($('#gateMinCumulative').value), verification_fee_ghs: Number($('#gateVerifyFee').value), ntt_fee_ghs: Number($('#gateNttFee').value), ntt_enabled: $('#gateNttEnabled').checked }
+        body: { withdraw_min_ghs: Number($('#gateMinWithdrawGhs').value), withdraw_min_ngn: Number($('#gateMinWithdrawNgn').value), withdraw_min_cumulative_ghs: Number($('#gateMinCumulative').value), verification_fee_ghs: Number($('#gateVerifyFee').value), ntt_fee_ghs: Number($('#gateNttFee').value), ntt_enabled: $('#gateNttEnabled').checked }
       });
       state.settings = data.settings;
       toast('Withdrawal gates saved.');

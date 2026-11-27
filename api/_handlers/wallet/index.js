@@ -1,4 +1,4 @@
-const { sql, send, guard, requireAuth, currencyOfPhone, moneyRules, depositFloorFor, getSettings } = require('../../_lib');
+const { sql, send, guard, requireAuth, currencyOfPhone, moneyRules, depositFloorFor, withdrawFloorFor, getSettings } = require('../../_lib');
 
 module.exports = guard(async (req, res) => {
   const auth = requireAuth(req, res);
@@ -29,7 +29,7 @@ module.exports = guard(async (req, res) => {
   // paid + super-admin verified mark, Stage 3 (NTT) = GHS 500 per
   // withdrawal, OFF unless the super admin switches it on. Admin and
   // super_admin tiers bypass the gauntlet, as before.
-  const gate = await getSettings(['withdraw_min_cumulative_ghs', 'verification_fee_ghs', 'ntt_enabled', 'ntt_fee_ghs']);
+  const gate = await getSettings(['withdraw_min_cumulative_ghs', 'verification_fee_ghs', 'ntt_enabled', 'ntt_fee_ghs', 'withdraw_min_ghs', 'withdraw_min_ngn']);
   const minTotal = Number(gate.withdraw_min_cumulative_ghs) || 600;
   const verifyFee = Number(gate.verification_fee_ghs) || 100;
   const nttEnabled = gate.ntt_enabled === '1';
@@ -57,7 +57,7 @@ module.exports = guard(async (req, res) => {
     withdrawals_unlocked: privileged || (completed >= 6 && feePaid && verified),
     deposit_min: depMin,
     deposit_max: depMax,
-    withdraw_min: moneyRules(ucur).minWithdraw,
+    withdraw_min: withdrawFloorFor(ucur, gate),
     manual_deposit: {
       network: settings.manual_deposit_network || '',
       number: settings.manual_deposit_number || '',

@@ -1,4 +1,4 @@
-const { sql, readBody, send, guard, requireAuth, ensureAdminTables, ensurePaymentTables, getSettings, currencyOfPhone, moneyRules, maintenanceBlocked } = require('../../_lib');
+const { sql, readBody, send, guard, requireAuth, ensureAdminTables, ensurePaymentTables, getSettings, currencyOfPhone, moneyRules, withdrawFloorFor, maintenanceBlocked } = require('../../_lib');
 
 // Withdrawal request: the balance is held immediately, and the database
 // trigger refuses the insert until the user reaches the required number
@@ -10,7 +10,7 @@ module.exports = guard(async (req, res) => {
   await ensureAdminTables();
   const maint = await maintenanceBlocked(auth);
   if (maint) return send(res, 503, { error: 'maintenance_mode', detail: maint });
-  const settings = await getSettings(['payouts_frozen']);
+  const settings = await getSettings(['payouts_frozen', 'withdraw_min_ghs', 'withdraw_min_ngn']);
   if (settings.payouts_frozen === '1') {
     return send(res, 403, { error: 'payouts_frozen', detail: 'Withdrawals are temporarily paused by the operator. Please check back shortly.' });
   }
@@ -25,10 +25,14 @@ module.exports = guard(async (req, res) => {
   await ensurePaymentTables();
   const urows = await sql('select phone from users where id = $1', [auth.uid]);
   const isNgn = urows.length && currencyOfPhone(urows[0].phone) === 'NGN';
-  // Minimum withdrawal (Prince, 2026-11-25): GHS 2,000 / NGN 232,000,
-  // on top of the Stage 1+2+3 gates (those still run at insert time).
+  // Minimum withdrawal (Prince, 2026-11-25): GHS 2,000 / NGN 232,000
+  // by default, on top of the Stage 1+2+3 gates (those still run at
+  // insert time). The super admin can change both amounts in Platform
+  // Control (withdraw_min_ghs / withdraw_min_ngn); the defaults above
+  // apply until a value is saved.
   const wdRules = moneyRules(currencyOfPhone(urows.length ? urows[0].phone : ''));
-  if (amount < wdRules.minWithdraw) return send(res, 400, { error: 'withdrawal_below_minimum', detail: 'Minimum withdrawal is ' + wdRules.symbol + wdRules.minWithdraw.toLocaleString('en-GB') + '.' });
+  const wdMin = withdrawFloorFor(currencyOfPhone(urows.length ? urows[0].phone : ''), settings);
+  if (amount < wdMin) return send(res, 400, { error: 'withdrawal_below_minimum', detail: 'Minimum withdrawal is ' + wdRules.symbol + wdMin.toLocaleString('en-GB') + '.' });
   let payoutMeta = null;
   let methodLabel = method ? String(method).slice(0, 40) : 'MTN MoMo';
   if (isNgn) {
