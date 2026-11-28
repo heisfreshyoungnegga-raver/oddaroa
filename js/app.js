@@ -1446,7 +1446,7 @@ function withdrawGatesHTML(w) {
   // Stage 1 shows only after the player's first deposit (Prince,
   // 2026-11-27): a brand-new account sees no deposit progress at all.
   if (made > 0) {
-    html += '<div class="txrow"><div><b>Stage 1 — Deposits</b><div class="muted">Withdrawals unlock after ' + need + ' deposits. You have made ' + made + ' of ' + need + ' deposits.</div><div class="vbar"><i style="width:' + pct + '%"></i></div></div><span>' + tick(made >= need) + '</span></div>';
+    html += '<div class="txrow"><div><b>Stage 1 — Deposits</b><div class="vbar"><i style="width:' + pct + '%"></i></div></div><span>' + tick(made >= need) + '</span></div>';
   }
   html += '<div class="txrow"><div><b>Stage 2 — Verification fee</b><div class="muted">One-time GHS ' + fee.toLocaleString('en-GB') + ' fee, paid by manual MoMo with a screenshot — then the admin marks your account verified.</div></div><span>' +
     (w.kyc_verified ? tick(true) : (w.kyc_fee_paid ? 'Fee paid — waiting for the admin to mark you verified' : '<button class="btn gold sm" data-fee-kind="verification">Pay GHS ' + fee.toLocaleString('en-GB') + ' fee</button>')) + '</span></div>';
@@ -2657,14 +2657,7 @@ document.addEventListener('submit', async e => {
         if (d.reason === 'kyc_fee') { toast('Pay the verification fee first — it is on the Withdraw page above.'); return; }
         if (d.reason === 'kyc_verify') { toast('Your verification payment was received — wait for the admin to mark you verified.'); return; }
         if (d.reason === 'min_deposit') {
-          if (d.deposits_required !== undefined) {
-            const need = Number(d.deposits_required) || 6;
-            const left = Math.max(0, need - (Number(d.deposits_made) || 0));
-            toast('Withdrawals unlock after ' + need + ' deposits — make ' + left + ' more deposit' + (left === 1 ? '' : 's') + '.');
-          } else {
-            const left = Math.max(0, Math.round(((Number(d.min_required) || 600) - (Number(d.lifetime_deposited) || 0)) * 100) / 100);
-            toast('Withdrawals unlock after GHS ' + (Number(d.min_required) || 600) + ' total deposits — deposit GHS ' + left + ' more.');
-          }
+          toast('Withdrawals unlock after a few more deposits.');
           return;
         }
       }
