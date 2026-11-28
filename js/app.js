@@ -2649,6 +2649,7 @@ document.addEventListener('submit', async e => {
     } catch (err) {
       if (err.code === 'maintenance_mode') { toast(err.detail || 'The site is under maintenance — please check back soon.'); return; }
       if (err.code === 'withdrawal_below_minimum') { toast(err.detail || ('Minimum withdrawal is ' + money(wdMin()) + '.')); return; }
+      if (err.code === 'insufficient_balance') { toast('Insufficient balance for that withdrawal.'); return; }
       if (err.code === 'withdrawal_locked') {
         await loadWallet();
         render();
