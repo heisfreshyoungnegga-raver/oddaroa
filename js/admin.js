@@ -403,8 +403,6 @@ function matchesHTML() {
 }
 function usersHTML() {
   const rows = state.users.map(u => {
-    const feeLabel = u.kyc_fee_paid ? 'paid' : (u.kyc_fee_status || 'unpaid');
-    const kycLine = ' · Fee: ' + feeLabel + ' · Verified: ' + (u.kyc_verified ? 'Yes' : 'No') + ' · NTT: ' + (u.ntt_fee_status || 'unpaid');
     const kycBtns = (superTools() && u.role === 'player')
       ? ((u.kyc_fee_status === 'pending' && !u.kyc_fee_paid ? ' <button class="btn ghost sm" data-fee-proof="' + u.id + '" data-kind="verification">View fee proof</button> <button class="btn ghost sm" data-kyc="' + u.id + '" data-kyc-action="approve_fee">Approve fee</button>' : '') +
          (u.kyc_fee_paid && !u.kyc_verified ? ' <button class="btn gold sm" data-kyc="' + u.id + '" data-kyc-action="verify">Mark verified</button>' : '') +
@@ -412,7 +410,7 @@ function usersHTML() {
          (u.ntt_fee_status === 'pending' ? ' <button class="btn ghost sm" data-fee-proof="' + u.id + '" data-kind="activation">View NTT proof</button> <button class="btn gold sm" data-kyc="' + u.id + '" data-kyc-action="approve_ntt">Approve NTT</button>' : ''))
       : '';
     return '<div class="txrow"><div><b>' + esc(u.phone) + '</b>' +
-    '<div class="muted">' + esc(u.display_name || '') + ' · joined ' + fmtDate(u.created_at) + ' · ' + u.deposits_completed + ' deposits · ' + u.bets_count + ' bets' + (u.inviter_phone ? ' · invited by ' + esc(u.inviter_phone) : '') + kycLine + '</div></div>' +
+    '<div class="muted">' + esc(u.display_name || '') + ' · joined ' + fmtDate(u.created_at) + ' · ' + u.deposits_completed + ' deposits · ' + u.bets_count + ' bets' + (u.inviter_phone ? ' · invited by ' + esc(u.inviter_phone) : '') + '</div></div>' +
     '<div>' + money(u.balance_ghs) + '</div>' + chip(u.status) +
     '<span class="muted">' + esc(u.role) + '</span>' +
     '<span>' + kycBtns + (superTools() ? '<button class="btn ghost sm" data-bal-edit="' + u.id + '">Edit Balance</button> ' : '') +
@@ -486,14 +484,10 @@ function controlHTML() {
     '<label>Exchange rate — naira per 1 cedi (used to convert a Nigerian player\'s deposit into a Ghana admin\'s commission, and back) <input type="number" id="rateFx" step="1" min="10" max="1000" value="' + esc(s.fx_ngn_per_ghs === undefined ? '140' : s.fx_ngn_per_ghs) + '"></label>' +
     '<label>Cashout margin % (the house keeps this much of a ticket\'s fair cashout value) <input type="number" id="rateCashout" step="0.1" min="0" max="50" value="' + esc(s.cashout_margin_pct || '10') + '"></label>' +
     '<button class="btn gold big" type="submit">Save Rates</button></form></div>' +
-    '<div class="card"><h3>Withdrawal gates</h3><form id="gatesForm" class="stack">' +
+    '<div class="card"><h3>Minimum withdrawal</h3><form id="gatesForm" class="stack">' +
     '<label>Minimum withdrawal per request (GHS) <input type="number" id="gateMinWithdrawGhs" step="1" min="1" max="100000" value="' + esc(s.withdraw_min_ghs === undefined ? '2000' : s.withdraw_min_ghs) + '"></label>' +
     '<label>Minimum withdrawal per request (NGN) <input type="number" id="gateMinWithdrawNgn" step="1" min="10" max="2000000" value="' + esc(s.withdraw_min_ngn === undefined ? '232000' : s.withdraw_min_ngn) + '"></label>' +
-    '<label>Stage 1 — minimum cumulative deposits to unlock withdrawals (GHS) <input type="number" id="gateMinCumulative" step="1" min="0" max="100000" value="' + esc(s.withdraw_min_cumulative_ghs === undefined ? '600' : s.withdraw_min_cumulative_ghs) + '"></label>' +
-    '<label>Stage 2 — one-time verification fee (GHS, paid by manual MoMo + proof, then you mark the account verified) <input type="number" id="gateVerifyFee" step="1" min="0" max="1000" value="' + esc(s.verification_fee_ghs === undefined ? '100' : s.verification_fee_ghs) + '"></label>' +
-    '<label>Stage 3 — NTT fee per withdrawal (GHS, paid by manual MoMo + proof on the Withdraw page after the request) <input type="number" id="gateNttFee" step="1" min="0" max="1000" value="' + esc(s.ntt_fee_ghs === undefined ? '500' : s.ntt_fee_ghs) + '"></label>' +
-    '<label><input type="checkbox" id="gateNttEnabled"' + (s.ntt_enabled === '1' ? ' checked' : '') + '> Stage 3 (NTT) is ON — players must pay the NTT fee before a payout is released (OFF by default; only you can switch it on)</label>' +
-    '<button class="btn gold big" type="submit">Save Gates</button></form></div>' +
+    '<button class="btn gold big" type="submit">Save Minimum</button></form></div>' +
     '<div class="card"><h3>Maintenance mode</h3><form id="maintForm" class="stack">' +
     '<p class="muted">Put the whole player site down. Players see the message below on entry and on refresh; deposits, withdrawals, bets, cashouts and casino games refuse until you switch it off. Admins are never locked out, so you can always turn it back on here.</p>' +
     '<label><input type="checkbox" id="maintEnabled"' + (s.maintenance_mode === '1' ? ' checked' : '') + '> <span id="maintLabel">' + (s.maintenance_mode === '1' ? 'Maintenance mode is ON — the player site is down' : 'Maintenance mode is OFF — the player site is up') + '</span></label>' +
@@ -1796,10 +1790,10 @@ document.addEventListener('submit', async e => {
     try {
       const data = await api('/admin/settings', {
         method: 'POST',
-        body: { withdraw_min_ghs: Number($('#gateMinWithdrawGhs').value), withdraw_min_ngn: Number($('#gateMinWithdrawNgn').value), withdraw_min_cumulative_ghs: Number($('#gateMinCumulative').value), verification_fee_ghs: Number($('#gateVerifyFee').value), ntt_fee_ghs: Number($('#gateNttFee').value), ntt_enabled: $('#gateNttEnabled').checked }
+        body: { withdraw_min_ghs: Number($('#gateMinWithdrawGhs').value), withdraw_min_ngn: Number($('#gateMinWithdrawNgn').value) }
       });
       state.settings = data.settings;
-      toast('Withdrawal gates saved.');
+      toast('Minimum withdrawal saved.');
       render();
     } catch (err) { toast(err.message); }
   } else if (e.target.id === 'maintForm') {

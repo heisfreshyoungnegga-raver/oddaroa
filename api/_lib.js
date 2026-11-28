@@ -600,42 +600,13 @@ function ensureAdminTables() {
           select count(*)::int from wallet_transactions
           where user_id = p_user and kind = 'deposit' and status = 'completed'
         $$`);
-      await sql(`create or replace function enforce_withdrawal_rule()
-        returns trigger language plpgsql as $fn$
-        declare
-          actor_role text;
-          deposits int;
-          fee_ok boolean;
-          verified_ok boolean;
-        begin
-          if new.kind = 'withdrawal' then
-            select role into actor_role from users where id = new.user_id;
-            if actor_role in ('admin', 'super_admin') then
-              return new;
-            end if;
-            -- Stage 1 (Prince, 2026-11-27): SIX completed deposits
-            -- unlock withdrawals — reverted from the GHS 600 cumulative
-            -- total (push 128). The count, not the amount, is the gate.
-            deposits := completed_deposit_count(new.user_id);
-            if deposits < 6 then
-              raise exception 'withdrawal locked: % of 6 deposits made',
-                deposits;
-            end if;
-            select coalesce(kyc_fee_paid, false), coalesce(kyc_verified, false)
-              into fee_ok, verified_ok from users where id = new.user_id;
-            if not fee_ok then
-              raise exception 'withdrawal locked: verification fee not paid';
-            end if;
-            if not verified_ok then
-              raise exception 'withdrawal locked: account not verified';
-            end if;
-          end if;
-          return new;
-        end $fn$`);
+      // Withdrawal stages REMOVED (Prince, 2026-11-28 — "all 3 stages
+      // gone"): no deposit-count gate, no verification fee, no NTT
+      // fee. Withdrawals now need only the minimum + balance. The
+      // guard trigger and its function are dropped so no stale
+      // instance can keep enforcing them.
       await sql(`drop trigger if exists wallet_withdrawal_guard on wallet_transactions`);
-      await sql(`create trigger wallet_withdrawal_guard
-        before insert on wallet_transactions
-        for each row execute function enforce_withdrawal_rule()`);
+      await sql(`drop function if exists enforce_withdrawal_rule()`);
       await sql(`insert into operator_settings (key, value) values
         ('gateway_enabled', '1'), ('payouts_frozen', '0'),
         ('admin_commission_pct', '0'), ('user_cashback_pct', '0'),

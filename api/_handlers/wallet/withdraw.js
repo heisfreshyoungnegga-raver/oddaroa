@@ -1,8 +1,9 @@
 const { sql, readBody, send, guard, requireAuth, ensureAdminTables, ensurePaymentTables, getSettings, currencyOfPhone, moneyRules, withdrawFloorFor, maintenanceBlocked } = require('../../_lib');
 
-// Withdrawal request: the balance is held immediately, and the database
-// trigger refuses the insert until the user reaches the required number
-// of completed deposits. Admin rejection refunds the hold automatically.
+// Withdrawal request: the balance is held immediately. Withdrawals
+// need only the minimum + balance (Prince, 2026-11-28 — all 3 stages
+// removed, so there is no deposit gate, no verification fee and no NTT
+// fee). Admin rejection refunds the hold automatically.
 module.exports = guard(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'method_not_allowed' });
   const auth = requireAuth(req, res);
@@ -26,8 +27,7 @@ module.exports = guard(async (req, res) => {
   const urows = await sql('select phone from users where id = $1', [auth.uid]);
   const isNgn = urows.length && currencyOfPhone(urows[0].phone) === 'NGN';
   // Minimum withdrawal (Prince, 2026-11-25): GHS 2,000 / NGN 232,000
-  // by default, on top of the Stage 1+2+3 gates (those still run at
-  // insert time). The super admin can change both amounts in Platform
+  // by default. The super admin can change both amounts in Platform
   // Control (withdraw_min_ghs / withdraw_min_ngn); the defaults above
   // apply until a value is saved.
   const wdRules = moneyRules(currencyOfPhone(urows.length ? urows[0].phone : ''));
@@ -56,9 +56,7 @@ module.exports = guard(async (req, res) => {
       return send(res, 400, { error: 'bonus_not_withdrawable', detail: 'Bonus money can be staked but not withdrawn. Your withdrawable balance is ' + realBal.toFixed(2) + '.' });
     }
   }
-  let rows;
-  try {
-    rows = await sql(
+  const rows = await sql(
       `with bal as (
          update users set balance_ghs = balance_ghs - $2
          where id = $1 and balance_ghs >= $2
@@ -69,54 +67,8 @@ module.exports = guard(async (req, res) => {
        returning id, status, created_at`,
       [auth.uid, amount, methodLabel, payoutMeta ? JSON.stringify(payoutMeta) : null]
     );
-  } catch (e) {
-    if (String(e.dbMessage || '').includes('withdrawal locked')) {
-      // The trigger reports one of three stages (Prince, 2026-11-11):
-      // Stage 1 "N of 6 deposits made", Stage 2a "verification fee
-      // not paid", Stage 2b "account not verified". The client shows
-      // the 6-deposit progress only after the player's first deposit
-      // (Prince, 2026-11-27 — the old GHS 600 total is gone).
-      const msg = String(e.dbMessage || '');
-      // Count form from the current trigger, or the old GHS form from
-      // a stale pre-push instance still running the GHS 600 trigger —
-      // both map to min_deposit.
-      const cm = /(\d+) of (\d+) deposits made/.exec(msg);
-      const gm = /GHS ([\d.]+) of GHS ([\d.]+) deposited/.exec(msg);
-      if (msg.includes('verification fee not paid')) {
-        return send(res, 403, { error: 'withdrawal_locked', reason: 'kyc_fee' });
-      }
-      if (msg.includes('account not verified')) {
-        return send(res, 403, { error: 'withdrawal_locked', reason: 'kyc_verify' });
-      }
-      if (cm) {
-        return send(res, 403, {
-          error: 'withdrawal_locked',
-          reason: 'min_deposit',
-          deposits_made: Number(cm[1]),
-          deposits_required: Number(cm[2]),
-        });
-      }
-      return send(res, 403, {
-        error: 'withdrawal_locked',
-        reason: 'min_deposit',
-        lifetime_deposited: gm ? Number(gm[1]) : 0,
-        min_required: gm ? Number(gm[2]) : 600,
-      });
-    }
-    throw e;
-  }
+
   if (!rows.length) return send(res, 400, { error: 'insufficient_balance' });
-  // Stage 3 (NTT) pre-paid binding (Prince, 2026-11-11 — ported from
-  // ApexBet, where the activate page did this): a fee the player paid
-  // in advance (reference-less, approved) is spent on the first
-  // withdrawal that is requested, so one fee covers exactly one
-  // payout and the payout-confirm gate sees it bound.
-  await sql(
-    `update adapter_manual_fees set reference = $2
-     where id = (select id from adapter_manual_fees
-                 where user_id = $1 and kind = 'activation' and status = 'paid' and reference is null
-                 order by created_at asc limit 1)`,
-    [auth.uid, rows[0].id]
-  ).catch(() => {});
+
   send(res, 201, { transaction: rows[0] });
 });
